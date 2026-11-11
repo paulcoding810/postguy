@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { resolveTemplate, MASK, type RefResolution } from '@postguy/core';
-import { ResolvePreviewInput, SendInput, type ResolvedPreview } from '@postguy/shared';
+import { resolveTemplate, redactText, MASK, type RefResolution } from '@postguy/core';
+import { ResolvePreviewInput, SendInput, type ContextVariable, type ResolvedPreview } from '@postguy/shared';
+import { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { parse } from '../lib/errors.ts';
 import { buildContext } from '../services/context.ts';
@@ -18,6 +19,23 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
     return send(db, parse(SendInput, req.body), controller.signal);
   });
 
+  app.get('/context-variables', async (req): Promise<ContextVariable[]> => {
+    const q = parse(ContextQuery, req.query);
+    const saved = q.requestId ? getRequest(db, q.requestId) : null;
+    const { ctx } = buildContext(db, { collectionId: q.collectionId ?? saved?.collectionId ?? null, requestId: saved?.id ?? null });
+    return [...ctx.variables.entries()]
+      .map(([key, v]) => {
+        const r = resolveTemplate(v.value, ctx);
+        return {
+          key,
+          source: v.source,
+          secret: v.secret,
+          preview: v.secret ? MASK : truncatePreview(redactText(r.value, r.secrets)),
+        };
+      })
+      .sort((a, b) => a.key.localeCompare(b.key));
+  });
+
   app.post('/resolve-preview', async (req): Promise<ResolvedPreview[]> => {
     const input = parse(ResolvePreviewInput, req.body);
     const saved = input.requestId ? getRequest(db, input.requestId) : null;
@@ -31,7 +49,7 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
       const secretValues = r.secrets;
       return {
         template,
-        value: secretValues.reduce((v, s) => v.split(s).join(MASK), r.value),
+        value: redactText(r.value, secretValues),
         unresolved: r.unresolved,
         refs: r.refs.map((x) => toPreviewRef(x)),
       };
@@ -39,11 +57,17 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
   });
 }
 
+const ContextQuery = z.object({ collectionId: z.string().optional(), requestId: z.string().optional() });
+
+function truncatePreview(s: string): string {
+  return s.length > PREVIEW_MAX ? `${s.slice(0, PREVIEW_MAX)}…` : s;
+}
+
 function toPreviewRef(r: RefResolution): ResolvedPreview['refs'][number] {
   let preview: string | null = null;
   if (r.found) {
     const s = typeof r.value === 'string' ? r.value : JSON.stringify(r.value);
-    preview = r.secret ? MASK : s.length > PREVIEW_MAX ? `${s.slice(0, PREVIEW_MAX)}…` : s;
+    preview = r.secret ? MASK : truncatePreview(s);
   }
   return {
     ref: r.ref,

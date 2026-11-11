@@ -113,6 +113,13 @@ export interface OpenApiImportResult {
   warnings: string[];
 }
 
+export interface ContextVariable {
+  key: string;
+  source: string;
+  secret: boolean;
+  preview: string;
+}
+
 export interface ReferenceSource {
   requestId: string;
   name: string;
@@ -176,6 +183,7 @@ export interface ApiRoutes {
 
   'POST /send': { body: SendInput; response: SendResult };
   'POST /resolve-preview': { body: ResolvePreviewInput; response: ResolvedPreview[] };
+  'GET /context-variables': { query: { collectionId?: string; requestId?: string }; response: ContextVariable[] };
 
   'GET /history': { query: { requestId?: string; limit?: number }; response: HistorySummary[] };
   'GET /history/:id': { response: HistoryEntry };
