@@ -1,0 +1,360 @@
+openapi: 3.0.3
+info:
+  title: Postguy Mock Shop API
+  version: 1.0.0
+  description: Sample API used for Postguy development and tests.
+servers:
+  - url: http://localhost:4780
+    description: Local mock server
+tags:
+  - name: Auth
+    description: Authentication
+  - name: Users
+    description: User profiles
+  - name: Orders
+    description: Customer orders
+security:
+  - bearerAuth: []
+paths:
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: login
+      summary: Login
+      description: Exchange credentials for an access token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Logged in
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+  /users/{id}:
+    get:
+      tags: [Users]
+      operationId: getUser
+      summary: Get User Profile
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: The user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /users/{id}/orders:
+    get:
+      tags: [Orders]
+      operationId: listUserOrders
+      summary: Get User Orders
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pending, paid, shipped, cancelled]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Orders of the user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OrderSummary'
+                  meta:
+                    type: object
+                    properties:
+                      total:
+                        type: integer
+                      limit:
+                        type: integer
+  /orders:
+    post:
+      tags: [Orders]
+      operationId: createOrder
+      summary: Create Order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [sku, quantity]
+                    properties:
+                      sku:
+                        type: string
+                        example: MUG
+                      quantity:
+                        type: integer
+                        example: 1
+                notes:
+                  type: string
+                  nullable: true
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '422':
+          $ref: '#/components/responses/Error'
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      operationId: getOrder
+      summary: Get Order Details
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: integer
+            example: 5001
+      responses:
+        '200':
+          description: The order
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Order'
+        '404':
+          $ref: '#/components/responses/Error'
+  /health:
+    get:
+      operationId: health
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  time:
+                    type: string
+                    format: date-time
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        example: 1001
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: john
+        password:
+          type: string
+          format: password
+          example: secret
+    LoginResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [access_token, user]
+          properties:
+            access_token:
+              type: string
+            token_type:
+              type: string
+              example: Bearer
+            expires_in:
+              type: integer
+            user:
+              type: object
+              required: [id, name]
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+                role:
+                  type: string
+                  enum: [admin, customer]
+    Base:
+      type: object
+      required: [id, createdAt]
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+    User:
+      allOf:
+        - $ref: '#/components/schemas/Base'
+        - type: object
+          required: [name, email]
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+              format: email
+            role:
+              type: string
+              enum: [admin, customer]
+            address:
+              $ref: '#/components/schemas/Address'
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        zip:
+          type: string
+          nullable: true
+    OrderSummary:
+      allOf:
+        - $ref: '#/components/schemas/Base'
+        - type: object
+          required: [userId, status, total]
+          properties:
+            userId:
+              type: integer
+            status:
+              type: string
+              enum: [pending, paid, shipped, cancelled]
+            currency:
+              type: string
+            total:
+              type: number
+            notes:
+              type: string
+              nullable: true
+    Order:
+      allOf:
+        - $ref: '#/components/schemas/OrderSummary'
+        - type: object
+          required: [items, payment]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/OrderItem'
+            payment:
+              oneOf:
+                - $ref: '#/components/schemas/CardPayment'
+                - $ref: '#/components/schemas/PaypalPayment'
+              discriminator:
+                propertyName: type
+    OrderItem:
+      type: object
+      required: [sku, quantity, unitPrice]
+      properties:
+        sku:
+          type: string
+        name:
+          type: string
+        quantity:
+          type: integer
+        unitPrice:
+          type: number
+    CardPayment:
+      type: object
+      required: [type, brand, last4]
+      properties:
+        type:
+          type: string
+          enum: [card]
+        brand:
+          type: string
+        last4:
+          type: string
+    PaypalPayment:
+      type: object
+      required: [type, email]
+      properties:
+        type:
+          type: string
+          enum: [paypal]
+        email:
+          type: string
+          format: email
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
