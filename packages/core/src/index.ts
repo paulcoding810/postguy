@@ -15,3 +15,6 @@ export * from './openapi/export.ts';
 export * from './memory/infer.ts';
 export * from './memory/paths.ts';
 export * from './memory/validate.ts';
+export * from './flow/expression.ts';
+export * from './flow/executor.ts';
+export * from './flow/mapping.ts';

@@ -20,6 +20,16 @@ import {
   type SnapshotSummary,
   type Variable,
 } from './models.ts';
+import type {
+  Flow,
+  FlowDetail,
+  FlowExecution,
+  FlowExecutionDetail,
+  FlowSource,
+  MappingSuggestion,
+} from './flows.ts';
+import type { z as zt } from 'zod';
+import type { CreateFlowInput, UpdateFlowInput, FlowGraphInput } from './flows.ts';
 
 export const CreateCollectionInput = z.object({
   name: z.string().min(1),
@@ -79,6 +89,8 @@ export type SendInput = z.input<typeof SendInput>;
 
 export const ResolvePreviewInput = z.object({
   collectionId: z.string().nullable().optional(),
+  flowId: z.string().nullable().optional(),
+  stepId: z.string().nullable().optional(),
   requestId: z.string().nullable().optional(),
   environmentId: z.string().nullable().optional(),
   templates: z.array(z.string()).max(200),
@@ -204,6 +216,20 @@ export interface ApiRoutes {
   'GET /snapshots/:id': { response: ResponseSnapshot };
   'POST /requests/:id/pin-snapshot': { body: { snapshotId: string | null }; response: SavedRequest };
   'GET /requests/:id/schema': { response: EffectiveSchema };
+
+  'GET /flows': { response: Flow[] };
+  'POST /flows': { body: zt.input<typeof CreateFlowInput>; response: FlowDetail };
+  'GET /flows/:id': { response: FlowDetail };
+  'PATCH /flows/:id': { body: zt.input<typeof UpdateFlowInput>; response: FlowDetail };
+  'DELETE /flows/:id': { response: { ok: true } };
+  'PUT /flows/:id/graph': { body: zt.input<typeof FlowGraphInput>; response: FlowDetail };
+  'POST /flows/:id/run': { body: { environmentId?: string | null }; response: FlowExecution };
+  'GET /flows/:id/executions': { response: FlowExecution[] };
+  'GET /flows/:id/sources': { query: { stepId: string }; response: FlowSource[] };
+  'POST /flows/:id/suggest-mappings': { body: { stepId: string }; response: MappingSuggestion[] };
+  'GET /executions/:id': { response: FlowExecutionDetail };
+  'POST /executions/:id/stop': { body: Record<string, never>; response: { ok: true } };
+  'POST /executions/:id/steps/:stepId/rerun': { body: Record<string, never>; response: FlowExecution };
 }
 
 export type RouteKey = keyof ApiRoutes;
