@@ -1,0 +1,24 @@
+{
+  "name": "postguy",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.1",
+  "scripts": {
+    "dev": "concurrently -k -n mock,server,app -c yellow,cyan,magenta \"pnpm dev:mock\" \"pnpm dev:server\" \"pnpm --filter @postguy/desktop tauri dev\"",
+    "dev:web": "concurrently -k -n mock,server,web -c yellow,cyan,magenta \"pnpm dev:mock\" \"pnpm dev:server\" \"pnpm --filter @postguy/desktop dev\"",
+    "dev:mock": "pnpm --filter @postguy/mock-api dev",
+    "dev:server": "pnpm --filter @postguy/server dev",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "concurrently": "^10.0.7",
+    "prettier": "^3.6.2",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vitest": "^5.1.0"
+  }
+}
