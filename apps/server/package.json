@@ -1,0 +1,28 @@
+{
+  "name": "@postguy/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/app.ts",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/main.ts --port 4777 --token dev-token --data-dir ../../.data",
+    "start": "tsx src/main.ts",
+    "db:generate": "drizzle-kit generate",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.4.1",
+    "@postguy/core": "workspace:*",
+    "@postguy/shared": "workspace:*",
+    "axios": "^1.21.1",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.8",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@postguy/mock-api": "workspace:*",
+    "@types/better-sqlite3": "^9.6.0",
+    "drizzle-kit": "^0.31.11"
+  }
+}
