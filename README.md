@@ -44,7 +44,7 @@ Templates use double braces anywhere in a request: URL, params, path variables, 
 
 1. Runtime values set by scripts during a flow (planned)
 2. Request variables
-3. Flow variables (planned)
+3. Flow variables
 4. Collection variables, innermost folder first
 5. The active environment
 6. Globals
@@ -57,10 +57,19 @@ Every JSON response of a saved request is stored as a new snapshot; older snapsh
 
 Open the Smart Data panel (⌘J), pick a remembered response and double-click a value to insert its reference into the field you last focused.
 
+## Flows
+
+A flow chains saved requests on a canvas (Flows in the sidebar). Add a step and it is connected to the previous one; Postguy maps its inputs from earlier responses, such as `:id` from `Login.data.user.id` and a bearer token from `Login.data.access_token`. Use **Auto-map inputs** after a first run to map values that only exist then.
+
+- Step names are reference names: `{{Login.data.access_token}}` reads the Login step's response from the current run only, never a stale one. A step with an unresolved reference fails instead of sending.
+- Condition steps branch on expressions such as `{{$res.Login.status}} == 200 && {{Login.data.user.role}} != 'admin'`.
+- A request step's red output runs when it fails; otherwise **Stop on error** decides whether the flow continues.
+- The execution log streams each step's status, timing and logs; any step can be rerun with the responses of that run.
+
 ## Secrets
 
 Variables marked secret, and auth credentials, are masked in history, previews and logs. Collection exports and OpenAPI exports never contain secret values. The local server only accepts requests carrying its per-session token.
 
 ## Roadmap
 
-Phases 1–3 are implemented: API client, OpenAPI integration and smart response memory. Next are the flow builder, the sandboxed script engine, OpenAPI sync and diff, and production packaging of the Node server as a Tauri sidecar.
+Phases 1–4 are implemented: API client, OpenAPI integration, smart response memory and the flow builder. Next are the sandboxed script engine, OpenAPI sync and diff, and production packaging of the Node server as a Tauri sidecar.
