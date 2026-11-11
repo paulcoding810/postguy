@@ -35,7 +35,7 @@ import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useTabs } from '@/stores/tabs';
 import { useCollectionSettings } from './CollectionSettings';
-import { downloadJson } from './transfer';
+import { downloadJson, downloadText } from './transfer';
 
 const EXPANDED_KEY = 'postguy.tree.expanded';
 
@@ -101,6 +101,12 @@ export function useTreeActions() {
       run(async () => {
         const data = await api('GET /collections/:id/export', { params: { id: node.id } });
         await downloadJson(`${node.name}.postguy.json`, data);
+      }),
+    exportOpenApi: (node: CollectionTreeNode, format: 'json' | 'yaml') =>
+      run(async () => {
+        const data: unknown = await api('GET /collections/:id/export/openapi', { params: { id: node.id }, query: { format } });
+        const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        await downloadText(`${node.name}.openapi.${format}`, text, format === 'json' ? 'application/json' : 'application/yaml');
       }),
     renameRequest: (id: string, current: string) =>
       run(async () => {
@@ -205,9 +211,17 @@ function FolderNode({
         <PencilIcon /> Rename
       </Item>
       {node.kind === 'collection' && (
-        <Item onSelect={() => actions.exportCollection(node)}>
-          <DownloadIcon /> Export
-        </Item>
+        <>
+          <Item onSelect={() => actions.exportCollection(node)}>
+            <DownloadIcon /> Export collection
+          </Item>
+          <Item onSelect={() => actions.exportOpenApi(node, 'yaml')}>
+            <DownloadIcon /> Export as OpenAPI (YAML)
+          </Item>
+          <Item onSelect={() => actions.exportOpenApi(node, 'json')}>
+            <DownloadIcon /> Export as OpenAPI (JSON)
+          </Item>
+        </>
       )}
       <Sep />
       <Item variant="destructive" onSelect={() => actions.deleteCollection(node)}>
