@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { FileCode2Icon, FolderTreeIcon, HistoryIcon, LayersIcon, PlusIcon, SearchIcon, UploadIcon } from 'lucide-react';
+import { FileCode2Icon, FolderTreeIcon, HistoryIcon, LayersIcon, PlusIcon, SearchIcon, UploadIcon, WorkflowIcon } from 'lucide-react';
+import { FlowList, useCreateFlow } from '@/features/flows/FlowList';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import { useImportDialog } from '@/features/openapi/ImportDialog';
 
 const SECTIONS: { id: SidebarSection; label: string; icon: React.ElementType }[] = [
   { id: 'collections', label: 'Collections', icon: FolderTreeIcon },
+  { id: 'flows', label: 'Flows', icon: WorkflowIcon },
   { id: 'apis', label: 'OpenAPI', icon: FileCode2Icon },
   { id: 'environments', label: 'Environments', icon: LayersIcon },
   { id: 'history', label: 'History', icon: HistoryIcon },
@@ -57,6 +59,7 @@ export function SidebarPanel() {
   const [filter, setFilter] = React.useState('');
   const tree = useTree();
   const actions = useTreeActions();
+  const createFlow = useCreateFlow();
   const qc = useQueryClient();
   const label = SECTIONS.find((s) => s.id === sidebar)?.label;
 
@@ -96,14 +99,19 @@ export function SidebarPanel() {
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+        {sidebar === 'flows' && (
+          <Button variant="ghost" size="icon-xs" className="ml-auto" aria-label="New flow" onClick={createFlow}>
+            <PlusIcon />
+          </Button>
+        )}
       </div>
-      {(sidebar === 'collections' || sidebar === 'history') && (
+      {(sidebar === 'collections' || sidebar === 'history' || sidebar === 'flows') && (
         <div className="relative shrink-0 border-b p-2">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-4 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder={sidebar === 'history' ? 'Filter history' : 'Filter requests'}
+            placeholder={sidebar === 'history' ? 'Filter history' : sidebar === 'flows' ? 'Filter flows' : 'Filter requests'}
             aria-label="Filter"
             className="h-7 w-full rounded-md bg-muted/60 pr-2 pl-7 text-xs outline-none focus:ring-1 focus:ring-ring"
           />
@@ -122,6 +130,7 @@ export function SidebarPanel() {
               </Button>
             </EmptyState>
           ))}
+        {sidebar === 'flows' && <FlowList filter={filter} />}
         {sidebar === 'apis' && <ApiSpecList />}
         {sidebar === 'environments' && <EnvironmentList />}
         {sidebar === 'history' && <HistoryList filter={filter} />}

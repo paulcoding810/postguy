@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 export type Theme = 'light' | 'dark' | 'system';
-export type SidebarSection = 'collections' | 'apis' | 'environments' | 'history';
+export type SidebarSection = 'collections' | 'flows' | 'apis' | 'environments' | 'history';
 
 interface UiState {
   theme: Theme;

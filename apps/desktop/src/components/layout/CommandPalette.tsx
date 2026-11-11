@@ -1,4 +1,4 @@
-import { FilePlusIcon, LayersIcon, MoonIcon, SearchIcon, SendIcon, SettingsIcon } from 'lucide-react';
+import { FilePlusIcon, LayersIcon, MoonIcon, SearchIcon, SendIcon, SettingsIcon, WorkflowIcon } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { Dialog as DialogPrimitive } from 'radix-ui';
@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { useTabs } from '@/stores/tabs';
 import { useUi } from '@/stores/ui';
 import { allRequests } from '@/features/collections/treeUtils';
+import { useFlows } from '@/features/flows/queries';
 
 interface Item {
   id: string;
@@ -22,6 +23,7 @@ export function CommandPalette() {
   const { searchOpen, setSearchOpen, openEnvManager, setTheme, theme } = useUi();
   const tree = useTree();
   const envs = useEnvironments();
+  const flows = useFlows();
   const activate = useActivateEnvironment();
   const [q, setQ] = React.useState('');
   const [index, setIndex] = React.useState(0);
@@ -49,6 +51,13 @@ export function CommandPalette() {
         }
       },
     }));
+    const flowItems: Item[] = (flows.data ?? []).map((f) => ({
+      id: `flow:${f.id}`,
+      group: 'Flows',
+      label: f.name,
+      icon: <WorkflowIcon className="size-3.5 text-primary" />,
+      run: () => useTabs.getState().openFlow(f),
+    }));
     const envItems: Item[] = (envs.data ?? [])
       .filter((e) => e.kind === 'environment')
       .map((e) => ({
@@ -69,11 +78,11 @@ export function CommandPalette() {
         run: () => setTheme(theme === 'dark' ? 'light' : 'dark'),
       },
     ];
-    const all = [...reqs, ...envItems, ...actions];
+    const all = [...reqs, ...flowItems, ...envItems, ...actions];
     const needle = q.trim().toLowerCase();
     if (!needle) return all.slice(0, 60);
     return all.filter((i) => `${i.label} ${i.detail ?? ''}`.toLowerCase().includes(needle)).slice(0, 60);
-  }, [tree.data, envs.data, q, theme, activate, openEnvManager, setTheme]);
+  }, [tree.data, flows.data, envs.data, q, theme, activate, openEnvManager, setTheme]);
 
   const choose = (item: Item | undefined) => {
     if (!item) return;

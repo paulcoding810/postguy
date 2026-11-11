@@ -1,13 +1,13 @@
-import { PlusIcon, XIcon } from 'lucide-react';
+import { PlusIcon, WorkflowIcon, XIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/menu';
 import { Tooltip } from '@/components/ui/misc';
 import { confirm } from '@/components/dialogs';
 import { cn, modKey } from '@/lib/utils';
-import { isDirty, useTabs, type RequestTab } from '@/stores/tabs';
+import { isDirty, isRequestTab, useTabs, type Tab } from '@/stores/tabs';
 
-export async function closeTab(tab: RequestTab) {
-  if (isDirty(tab) && (tab.requestId || tab.draft.url)) {
+export async function closeTab(tab: Tab) {
+  if (isRequestTab(tab) && isDirty(tab) && (tab.requestId || tab.draft.url)) {
     const ok = await confirm({
       title: `Discard changes to "${tab.draft.name}"?`,
       description: 'Unsaved changes will be lost.',
@@ -26,6 +26,7 @@ export function TabBar() {
       <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none]">
         {tabs.map((t) => {
           const dirty = isDirty(t);
+          const req = isRequestTab(t) ? t : null;
           return (
             <ContextMenu key={t.id}>
               <ContextMenuTrigger asChild>
@@ -41,8 +42,12 @@ export function TabBar() {
                   )}
                 >
                   {t.id === activeId && <span className="absolute inset-x-0 top-0 h-0.5 bg-primary" />}
-                  <span className={cn('font-mono text-[10px] font-bold', `method-${t.draft.method}`)}>{t.draft.method}</span>
-                  <span className={cn('truncate', t.preview && 'italic')}>{t.draft.name}</span>
+                  {req ? (
+                    <span className={cn('font-mono text-[10px] font-bold', `method-${req.draft.method}`)}>{req.draft.method}</span>
+                  ) : (
+                    <WorkflowIcon className="size-3.5 shrink-0 text-primary" />
+                  )}
+                  <span className={cn('truncate', req?.preview && 'italic')}>{req ? req.draft.name : t.kind === 'flow' ? t.name : ''}</span>
                   <span className="ml-auto flex size-4 shrink-0 items-center justify-center">
                     {dirty && <span className="size-1.5 rounded-full bg-primary group-hover:hidden" />}
                     <button

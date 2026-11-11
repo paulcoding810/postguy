@@ -461,7 +461,7 @@ export async function waitForExecution(executionId: string): Promise<void> {
 export function flowSources(db: Db, flowId: string, stepId: string): FlowSource[] {
   getFlowRow(db, flowId);
   const graph = getGraph(db, flowId);
-  if (!graph.steps.some((s) => s.id === stepId)) throw notFound('Step');
+  if (!graph.steps.some((s) => s.id === stepId)) return [];
   const lastExec = db.select({ id: flowExecutions.id }).from(flowExecutions).where(eq(flowExecutions.flowId, flowId)).orderBy(desc(flowExecutions.startedAt)).limit(1).get();
   const attempts = lastExec ? latestAttempts(db, lastExec.id) : new Map<string, ExecutionStep>();
   return upstreamSteps(graph, stepId)
@@ -494,9 +494,8 @@ export function stepCollectionId(db: Db, flowId: string, stepId: string): string
 export function suggestStepMappings(db: Db, flowId: string, stepId: string): MappingSuggestion[] {
   const graph = getGraph(db, flowId);
   const step = graph.steps.find((s) => s.id === stepId);
-  if (!step) throw notFound('Step');
-  const saved = savedRequest(db, step.requestId);
-  if (step.kind !== 'request' || !saved) return [];
+  const saved = savedRequest(db, step?.requestId ?? null);
+  if (!step || step.kind !== 'request' || !saved) return [];
   const def = applyOverrides(toDefinition(saved), step.overrides);
   const sources = flowSources(db, flowId, stepId).filter((s) => s.origin !== 'none');
   const { ctx } = buildContext(db, { collectionId: saved.collectionId, flowId, responses: previewLookup(db, flowId, stepId) });

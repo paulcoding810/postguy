@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { newId, type RequestDefinition, type SavedRequest, type SendResult } from '@postguy/shared';
 
 export interface RequestTab {
+  kind?: 'request';
   id: string;
   requestId: string | null;
   collectionId: string | null;
@@ -11,6 +12,19 @@ export interface RequestTab {
   response: SendResult | null;
   sending: boolean;
   preview: boolean;
+}
+
+export interface FlowTab {
+  kind: 'flow';
+  id: string;
+  flowId: string;
+  name: string;
+}
+
+export type Tab = RequestTab | FlowTab;
+
+export function isRequestTab(t: Tab | null | undefined): t is RequestTab {
+  return !!t && t.kind !== 'flow';
 }
 
 export function blankRequest(name = 'New Request'): RequestDefinition {
@@ -41,13 +55,17 @@ export function toDefinition(r: SavedRequest | RequestDefinition): RequestDefini
   };
 }
 
-export function isDirty(tab: RequestTab): boolean {
+export function isDirty(tab: Tab): boolean {
+  if (!isRequestTab(tab)) return false;
   if (!tab.saved) return true;
   return JSON.stringify(tab.draft) !== JSON.stringify(tab.saved);
 }
 
 interface TabsState {
-  tabs: RequestTab[];
+  tabs: Tab[];
+  openFlow: (flow: { id: string; name: string }) => void;
+  onFlowRenamed: (flowId: string, name: string) => void;
+  onFlowDeleted: (flowId: string) => void;
   activeId: string | null;
   openRequest: (saved: SavedRequest, opts?: { pin?: boolean }) => void;
   newRequest: (collectionId?: string | null, def?: RequestDefinition) => string;
@@ -69,8 +87,21 @@ export const useTabs = create<TabsState>()(
       tabs: [],
       activeId: null,
 
+      openFlow: (flow) => {
+        const existing = get().tabs.find((t) => t.kind === 'flow' && t.flowId === flow.id);
+        if (existing) return set({ activeId: existing.id });
+        const tab: FlowTab = { kind: 'flow', id: newId(), flowId: flow.id, name: flow.name };
+        set((s) => ({ tabs: [...s.tabs, tab], activeId: tab.id }));
+      },
+      onFlowRenamed: (flowId, name) =>
+        set((s) => ({ tabs: s.tabs.map((t) => (t.kind === 'flow' && t.flowId === flowId ? { ...t, name } : t)) })),
+      onFlowDeleted: (flowId) => {
+        const tab = get().tabs.find((t) => t.kind === 'flow' && t.flowId === flowId);
+        if (tab) get().close(tab.id);
+      },
+
       openRequest: (saved, opts) => {
-        const existing = get().tabs.find((t) => t.requestId === saved.id);
+        const existing = get().tabs.find((t) => isRequestTab(t) && t.requestId === saved.id);
         if (existing) {
           set((s) => ({
             activeId: existing.id,
@@ -90,7 +121,7 @@ export const useTabs = create<TabsState>()(
           preview: !opts?.pin,
         };
         set((s) => {
-          const replaceable = s.tabs.find((t) => t.preview && !isDirty(t) && !t.response);
+          const replaceable = s.tabs.find((t) => isRequestTab(t) && t.preview && !isDirty(t) && !t.response);
           const tabs = replaceable ? s.tabs.map((t) => (t.id === replaceable.id ? tab : t)) : [...s.tabs, tab];
           return { tabs, activeId: tab.id };
         });
@@ -112,7 +143,7 @@ export const useTabs = create<TabsState>()(
       },
 
       activate: (id) => set({ activeId: id }),
-      pin: (id) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, preview: false } : t)) })),
+      pin: (id) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && isRequestTab(t) ? { ...t, preview: false } : t)) })),
 
       close: (id) =>
         set((s) => {
@@ -125,29 +156,29 @@ export const useTabs = create<TabsState>()(
       closeOthers: (id) => set((s) => ({ tabs: s.tabs.filter((t) => t.id === id), activeId: id })),
 
       updateDraft: (id, fn) =>
-        set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, draft: fn(t.draft), preview: false } : t)) })),
+        set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && isRequestTab(t) ? { ...t, draft: fn(t.draft), preview: false } : t)) })),
 
       markSaved: (id, saved) =>
         set((s) => ({
           tabs: s.tabs.map((t) =>
-            t.id === id
+            t.id === id && isRequestTab(t)
               ? { ...t, requestId: saved.id, collectionId: saved.collectionId, saved: toDefinition(saved), draft: toDefinition(saved) }
               : t,
           ),
         })),
 
-      setSending: (id, sending) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, sending } : t)) })),
-      setResponse: (id, response) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, response } : t)) })),
+      setSending: (id, sending) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && isRequestTab(t) ? { ...t, sending } : t)) })),
+      setResponse: (id, response) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && isRequestTab(t) ? { ...t, response } : t)) })),
 
       onRequestDeleted: (requestId) =>
         set((s) => ({
-          tabs: s.tabs.map((t) => (t.requestId === requestId ? { ...t, requestId: null, saved: null } : t)),
+          tabs: s.tabs.map((t) => (isRequestTab(t) && t.requestId === requestId ? { ...t, requestId: null, saved: null } : t)),
         })),
 
       onRequestRenamed: (requestId, name) =>
         set((s) => ({
           tabs: s.tabs.map((t) =>
-            t.requestId === requestId
+            isRequestTab(t) && t.requestId === requestId
               ? { ...t, draft: { ...t.draft, name }, saved: t.saved ? { ...t.saved, name } : t.saved }
               : t,
           ),
@@ -158,12 +189,19 @@ export const useTabs = create<TabsState>()(
       version: 1,
       partialize: (s) => ({
         activeId: s.activeId,
-        tabs: s.tabs.map((t) => ({ ...t, response: null, sending: false })),
+        tabs: s.tabs.map((t) => (isRequestTab(t) ? { ...t, response: null, sending: false } : t)),
       }),
     },
   ),
 );
 
-export function useActiveTab(): RequestTab | null {
+export function useActiveTab(): Tab | null {
   return useTabs((s) => s.tabs.find((t) => t.id === s.activeId) ?? null);
+}
+
+export function useActiveRequestTab(): RequestTab | null {
+  return useTabs((s) => {
+    const t = s.tabs.find((x) => x.id === s.activeId);
+    return isRequestTab(t) ? t : null;
+  });
 }

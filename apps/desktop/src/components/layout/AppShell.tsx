@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { EmptyState, Kbd } from '@/components/ui/misc';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { modKey } from '@/lib/utils';
-import { useActiveTab, useTabs } from '@/stores/tabs';
+import { isRequestTab, useActiveTab, useTabs } from '@/stores/tabs';
+import { FlowEditor } from '@/features/flows/FlowEditor';
 import { useUi } from '@/stores/ui';
 import { RequestEditor } from '@/features/request/RequestEditor';
 import { useSaveRequest, useSendRequest } from '@/features/request/actions';
@@ -21,7 +22,8 @@ function useShortcuts() {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
       const { tabs, activeId, newRequest } = useTabs.getState();
-      const tab = tabs.find((t) => t.id === activeId);
+      const any = tabs.find((t) => t.id === activeId);
+      const tab = isRequestTab(any) ? any : null;
       const ui = useUi.getState();
       const key = e.key.toLowerCase();
       if (key === 'enter' && tab) {
@@ -33,9 +35,9 @@ function useShortcuts() {
       } else if (key === 't') {
         e.preventDefault();
         newRequest();
-      } else if (key === 'w' && tab) {
+      } else if (key === 'w' && any) {
         e.preventDefault();
-        void closeTab(tab);
+        void closeTab(any);
       } else if (key === 'k') {
         e.preventDefault();
         ui.setSearchOpen(true);
@@ -65,6 +67,7 @@ function Workspace() {
       </EmptyState>
     );
   }
+  if (!isRequestTab(tab)) return <FlowEditor key={tab.id} flowId={tab.flowId} />;
   return <RequestEditor key={tab.id} tab={tab} />;
 }
 

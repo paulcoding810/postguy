@@ -1,9 +1,9 @@
 import * as React from 'react';
 import type { Auth, RequestDefinition } from '@postguy/shared';
-import { useContextVariables, useResolvePreview } from '@/hooks/queries';
+import { useContextVariables, useResolvePreview, type FlowRef } from '@/hooks/queries';
 import { refsIn } from './tokens';
 import { TemplateContext, type Suggestion, type TemplateCtx } from './TemplateContext';
-import { useResponseSuggestions } from './responseSuggestions';
+import { useFlowSuggestions, useResponseSuggestions } from './responseSuggestions';
 
 function authStrings(auth: Auth): string[] {
   switch (auth.type) {
@@ -38,8 +38,10 @@ export function TemplateProvider({
   collectionId,
   requestId,
   extraRefs = [],
+  flow = null,
   children,
 }: {
+  flow?: FlowRef | null;
   draft: RequestDefinition;
   collectionId: string | null;
   requestId: string | null;
@@ -48,9 +50,11 @@ export function TemplateProvider({
 }) {
   const refs = React.useMemo(() => [...new Set([...collectRefs(draft), ...extraRefs])], [draft, extraRefs]);
   const templates = React.useMemo(() => refs.map((r) => `{{${r}}}`), [refs]);
-  const preview = useResolvePreview(templates, collectionId, requestId);
-  const vars = useContextVariables(collectionId, requestId);
-  const responseSuggestions = useResponseSuggestions(collectionId);
+  const preview = useResolvePreview(templates, collectionId, requestId, flow);
+  const vars = useContextVariables(collectionId, requestId, flow?.flowId);
+  const fromSnapshots = useResponseSuggestions(flow ? '__none__' : collectionId);
+  const fromFlow = useFlowSuggestions(flow);
+  const responseSuggestions = flow ? fromFlow : fromSnapshots;
 
   const value = React.useMemo<TemplateCtx>(() => {
     const map = preview.data;

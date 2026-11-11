@@ -14,12 +14,12 @@ export const keys = {
   tree: ['tree'] as const,
   environments: ['environments'] as const,
   variables: (scope: VariableScope, ownerId: string) => ['variables', scope, ownerId] as const,
-  contextVars: (collectionId: string | null, requestId: string | null) => ['context-vars', collectionId, requestId] as const,
+  contextVars: (collectionId: string | null, requestId: string | null, flowId?: string | null) => ['context-vars', collectionId, requestId, flowId ?? null] as const,
   history: (requestId?: string) => ['history', requestId ?? 'all'] as const,
   historyEntry: (id: string) => ['history-entry', id] as const,
   request: (id: string) => ['request', id] as const,
-  preview: (templates: string[], collectionId: string | null, requestId: string | null) =>
-    ['preview', collectionId, requestId, templates] as const,
+  preview: (templates: string[], collectionId: string | null, requestId: string | null, flow?: FlowRef | null) =>
+    ['preview', collectionId, requestId, flow?.flowId ?? null, flow?.stepId ?? null, templates] as const,
 };
 
 export function useTree() {
@@ -38,11 +38,18 @@ export function useVariables(scope: VariableScope, ownerId: string | null | unde
   });
 }
 
-export function useContextVariables(collectionId: string | null, requestId: string | null) {
+export interface FlowRef {
+  flowId: string;
+  stepId: string;
+}
+
+export function useContextVariables(collectionId: string | null, requestId: string | null, flowId?: string | null) {
   return useQuery({
-    queryKey: keys.contextVars(collectionId, requestId),
+    queryKey: keys.contextVars(collectionId, requestId, flowId),
     queryFn: () =>
-      api('GET /context-variables', { query: { collectionId: collectionId ?? undefined, requestId: requestId ?? undefined } }),
+      api('GET /context-variables', {
+        query: { collectionId: collectionId ?? undefined, requestId: requestId ?? undefined, flowId: flowId ?? undefined },
+      }),
     placeholderData: keepPreviousData,
   });
 }
@@ -54,12 +61,12 @@ export function useHistory(requestId?: string) {
   });
 }
 
-export function useResolvePreview(templates: string[], collectionId: string | null, requestId: string | null) {
+export function useResolvePreview(templates: string[], collectionId: string | null, requestId: string | null, flow?: FlowRef | null) {
   const unique = [...new Set(templates.filter((t) => t.includes('{{')))].sort();
   return useQuery({
-    queryKey: keys.preview(unique, collectionId, requestId),
+    queryKey: keys.preview(unique, collectionId, requestId, flow),
     queryFn: () =>
-      api('POST /resolve-preview', { body: { templates: unique, collectionId, requestId } }).then(
+      api('POST /resolve-preview', { body: { templates: unique, collectionId, requestId, flowId: flow?.flowId, stepId: flow?.stepId } }).then(
         (list) => new Map(list.map((p) => [p.template, p])),
       ),
     enabled: unique.length > 0,

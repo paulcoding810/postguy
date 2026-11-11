@@ -9,14 +9,14 @@ import { EmptyState, Tooltip } from '@/components/ui/misc';
 import { SchemaView } from '@/components/SchemaView';
 import { api, errorMessage } from '@/lib/api';
 import { cn, statusTone, timeAgo } from '@/lib/utils';
-import { useActiveTab } from '@/stores/tabs';
+import { useActiveRequestTab } from '@/stores/tabs';
 import { useInsertTarget } from '@/features/template/TemplateContext';
 import { JsonTree } from './JsonTree';
 import { useEffectiveSchema, useReferenceSources, useSnapshot, useSnapshots } from './queries';
 import { refFor } from './refs';
 
 export function SmartPanel() {
-  const tab = useActiveTab();
+  const tab = useActiveRequestTab();
   const collectionId = tab?.collectionId ?? null;
   const sources = useReferenceSources(collectionId);
   const [selected, setSelected] = React.useState<string | null>(null);

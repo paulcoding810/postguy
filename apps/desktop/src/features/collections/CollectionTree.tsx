@@ -33,7 +33,7 @@ import { confirm, prompt } from '@/components/dialogs';
 import { keys } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useTabs } from '@/stores/tabs';
+import { isRequestTab, useTabs } from '@/stores/tabs';
 import { useCollectionSettings } from './CollectionSettings';
 import { downloadJson, downloadText } from './transfer';
 
@@ -311,7 +311,10 @@ function RequestRow({
   depth: number;
   actions: ReturnType<typeof useTreeActions>;
 }) {
-  const active = useTabs((s) => s.tabs.find((t) => t.id === s.activeId)?.requestId === request.id);
+  const active = useTabs((s) => {
+    const t = s.tabs.find((x) => x.id === s.activeId);
+    return isRequestTab(t) && t.requestId === request.id;
+  });
   const open = async (pin: boolean) => {
     try {
       const saved = await api('GET /requests/:id', { params: { id: request.id } });

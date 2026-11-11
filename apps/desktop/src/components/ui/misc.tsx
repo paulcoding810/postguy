@@ -14,19 +14,21 @@ export function Tooltip({
   children: React.ReactNode;
   side?: 'top' | 'bottom' | 'left' | 'right';
 }) {
-  if (!content) return <>{children}</>;
+  const [open, setOpen] = React.useState(false);
   return (
-    <TooltipPrimitive.Root>
+    <TooltipPrimitive.Root open={!!content && open} onOpenChange={setOpen}>
       <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-      <TooltipPrimitive.Portal>
-        <TooltipPrimitive.Content
-          side={side}
-          sideOffset={4}
-          className="z-50 max-w-sm rounded-md bg-foreground px-2 py-1 text-xs break-words text-background shadow-md animate-in fade-in-0"
-        >
-          {content}
-        </TooltipPrimitive.Content>
-      </TooltipPrimitive.Portal>
+      {content && (
+        <TooltipPrimitive.Portal>
+          <TooltipPrimitive.Content
+            side={side}
+            sideOffset={4}
+            className="z-50 max-w-sm rounded-md bg-foreground px-2 py-1 text-xs break-words text-background shadow-md animate-in fade-in-0"
+          >
+            {content}
+          </TooltipPrimitive.Content>
+        </TooltipPrimitive.Portal>
+      )}
     </TooltipPrimitive.Root>
   );
 }

@@ -143,7 +143,7 @@ export function TemplateInput({
             className={cn(
               inputClass,
               'pointer-events-none absolute inset-0 overflow-hidden border-transparent bg-transparent leading-[30px] whitespace-pre shadow-none dark:bg-transparent',
-              borderless && 'h-full rounded-none',
+              borderless && 'rounded-none',
               inputClassName,
             )}
           >
@@ -182,7 +182,7 @@ export function TemplateInput({
             className={cn(
               inputClass,
               'relative bg-transparent text-transparent caret-foreground selection:bg-primary/25 selection:text-transparent dark:bg-transparent',
-              borderless && 'h-full rounded-none border-transparent shadow-none focus-visible:ring-0',
+              borderless && 'rounded-none border-transparent shadow-none focus-visible:ring-0',
               inputClassName,
             )}
           />

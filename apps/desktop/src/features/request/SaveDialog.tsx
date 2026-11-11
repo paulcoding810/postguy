@@ -9,13 +9,16 @@ import { prompt } from '@/components/dialogs';
 import { keys, useTree } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useTabs } from '@/stores/tabs';
+import { isRequestTab, useTabs } from '@/stores/tabs';
 import { flattenFolders } from '@/features/collections/treeUtils';
 import { useSaveDialog } from './actions';
 
 export function SaveDialog() {
   const { tabId, close } = useSaveDialog();
-  const tab = useTabs((s) => s.tabs.find((t) => t.id === tabId));
+  const tab = useTabs((s) => {
+    const t = s.tabs.find((x) => x.id === tabId);
+    return isRequestTab(t) ? t : undefined;
+  });
   const tree = useTree();
   const qc = useQueryClient();
   const [name, setName] = React.useState('');
