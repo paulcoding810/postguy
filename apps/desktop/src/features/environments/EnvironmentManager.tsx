@@ -26,7 +26,6 @@ export function EnvironmentManager() {
   const global = list.find((e) => e.kind === 'global');
   React.useEffect(() => {
     if (envManagerOpen) setSelected(envManagerSelected ?? list.find((e) => e.isActive)?.id ?? global?.id ?? null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [envManagerOpen]);
   const current = list.find((e) => e.id === selected) ?? global;
 

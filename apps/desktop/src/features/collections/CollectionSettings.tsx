@@ -41,7 +41,6 @@ export function CollectionSettings() {
       setDescription(node.description ?? '');
       setAuth(node.auth);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node?.id]);
 
   const save = async () => {

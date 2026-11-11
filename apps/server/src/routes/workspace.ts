@@ -17,6 +17,7 @@ import { parse } from '../lib/errors.ts';
 import * as collections from '../services/collections.ts';
 import * as envs from '../services/environments.ts';
 import * as history from '../services/history.ts';
+import * as memory from '../services/memory.ts';
 import * as reqs from '../services/requests.ts';
 import * as transfer from '../services/transfer.ts';
 import * as vars from '../services/variables.ts';
@@ -75,6 +76,16 @@ export function workspaceRoutes(app: FastifyInstance, db: Db) {
     const p = parse(VariableOwnerParams, req.params);
     return vars.replaceVariables(db, p.scope, p.ownerId, parse(ReplaceVariablesInput, req.body).variables);
   });
+
+  app.get('/reference-sources', async (req) =>
+    memory.referenceSources(db, parse(z.object({ collectionId: z.string().optional() }), req.query).collectionId),
+  );
+  app.get('/requests/:id/snapshots', async (req) => memory.listSnapshots(db, id(req.params)));
+  app.get('/snapshots/:id', async (req) => memory.getSnapshot(db, id(req.params)));
+  app.post('/requests/:id/pin-snapshot', async (req) =>
+    memory.pinSnapshot(db, id(req.params), parse(z.object({ snapshotId: z.string().nullable() }), req.body).snapshotId),
+  );
+  app.get('/requests/:id/schema', async (req) => memory.effectiveSchema(db, id(req.params)));
 
   app.get('/history', async (req) => history.listHistory(db, parse(HistoryQuery, req.query)));
   app.get('/history/:id', async (req) => history.getHistoryEntry(db, id(req.params)));

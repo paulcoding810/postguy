@@ -13,6 +13,7 @@ import {
   type OpenApiOperation,
   type OpenApiSpec,
   type OpenApiSpecDetail,
+  type PathEntry,
   type ResponseSnapshot,
   type SavedRequest,
   type SendResult,
@@ -127,6 +128,9 @@ export interface ReferenceSource {
   collectionId: string;
   snapshot: SnapshotSummary | null;
   pinned: boolean;
+  /** Another request with the same name takes precedence for `{{name.…}}` references. */
+  shadowed: boolean;
+  paths: PathEntry[];
 }
 
 export interface EffectiveSchema {

@@ -2,6 +2,7 @@ import { createContext, type ResolutionContext, type ResponseRecord, type VarMap
 import type { Db } from '../db/client.ts';
 import { ancestry } from './collections.ts';
 import { activeEnvironment, globalEnvironment } from './environments.ts';
+import { snapshotLookup } from './memory.ts';
 import { variableMap } from './variables.ts';
 
 export interface ContextOptions {
@@ -11,6 +12,7 @@ export interface ContextOptions {
   environmentId?: string | null;
   flowId?: string | null;
   runtime?: VarMap;
+  /** Defaults to stored snapshots; a flow execution passes only its own responses. */
   responses?: (name: string) => ResponseRecord | undefined;
 }
 
@@ -30,7 +32,7 @@ export function buildContext(db: Db, opts: ContextOptions): BuiltContext {
       environment: environmentId ? variableMap(db, 'environment', environmentId) : undefined,
       global: variableMap(db, 'global', globalEnvironment(db).id),
     },
-    opts.responses ?? (() => undefined),
+    opts.responses ?? snapshotLookup(db, opts.collectionId),
   );
   return { ctx, environmentId };
 }

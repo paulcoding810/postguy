@@ -27,7 +27,6 @@ export function SaveDialog() {
       setName(tab.draft.name);
       setTarget(tab.collectionId ?? folders[0]?.id ?? null);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabId]);
 
   const newCollection = async () => {

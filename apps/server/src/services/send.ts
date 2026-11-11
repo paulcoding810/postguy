@@ -6,6 +6,7 @@ import { requestHistory } from '../db/schema.ts';
 import { effectiveAuth } from './collections.ts';
 import { buildContext } from './context.ts';
 import { executeHttp, isTextual } from './http.ts';
+import { recordSnapshot, validateResponse } from './memory.ts';
 import { getRequest } from './requests.ts';
 
 export const HISTORY_BODY_LIMIT = 5 * 1024 * 1024;
@@ -59,9 +60,16 @@ export async function send(db: Db, input: z.output<typeof SendInput>, signal?: A
     })
     .run();
 
+  let snapshotId: string | null = null;
+  let validation: SendResult['validation'] = null;
+  if (saved && raw.status !== null && textual) {
+    snapshotId = recordSnapshot(db, { requestId: saved.id, historyId, status: raw.status, contentType, body: bodyText });
+    validation = validateResponse(db, saved.id, raw.status, contentType, bodyText);
+  }
+
   return {
     historyId,
-    snapshotId: null,
+    snapshotId,
     request: redactedRequest,
     status: raw.status,
     statusText: raw.statusText,
@@ -75,7 +83,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, signal?: A
     timing: raw.timing,
     error: raw.error,
     unresolved: resolution.unresolved,
-    validation: null,
+    validation,
   };
 }
 
