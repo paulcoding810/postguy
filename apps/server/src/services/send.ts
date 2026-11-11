@@ -1,4 +1,4 @@
-import { parseSetCookies, redactHeaders, redactText, resolveRequest } from '@postguy/core';
+import { parseSetCookies, redactHeaders, redactText, resolveRequest, type ResponseRecord } from '@postguy/core';
 import { newId, SendInput, type SendResult } from '@postguy/shared';
 import type { z } from 'zod';
 import type { Db } from '../db/client.ts';
@@ -11,19 +11,54 @@ import { getRequest } from './requests.ts';
 
 export const HISTORY_BODY_LIMIT = 5 * 1024 * 1024;
 
-export async function send(db: Db, input: z.output<typeof SendInput>, signal?: AbortSignal): Promise<SendResult> {
+export interface SendOptions {
+  signal?: AbortSignal;
+  /** Response lookup for references; flows pass only their current run's responses. */
+  responses?: (name: string) => ResponseRecord | undefined;
+  flowId?: string | null;
+  /** Do not send when a reference cannot be resolved. */
+  failOnUnresolved?: boolean;
+}
+
+export async function send(db: Db, input: z.output<typeof SendInput>, opts: SendOptions = {}): Promise<SendResult> {
   const saved = input.requestId ? getRequest(db, input.requestId) : null;
   const collectionId = input.collectionId ?? saved?.collectionId ?? null;
   const { ctx, environmentId } = buildContext(db, {
     collectionId,
     requestId: saved?.id ?? null,
     environmentId: input.environmentId,
+    flowId: opts.flowId,
+    responses: opts.responses,
   });
   const def = input.request;
   const auth = effectiveAuth(db, collectionId, def.auth);
   const resolution = resolveRequest(def, ctx, auth);
   const secrets = resolution.secrets;
-  const raw = await executeHttp(resolution.request, def.settings, signal);
+  if (opts.failOnUnresolved && resolution.unresolved.length) {
+    return {
+      historyId: null,
+      snapshotId: null,
+      request: {
+        method: resolution.request.method,
+        url: redactText(resolution.request.url, secrets),
+        headers: redactHeaders(resolution.request.headers, secrets),
+      },
+      status: null,
+      statusText: null,
+      headers: {},
+      cookies: [],
+      body: '',
+      bodyEncoding: 'utf8',
+      truncated: false,
+      contentType: null,
+      size: 0,
+      timing: { totalMs: 0 },
+      error: { code: 'UNRESOLVED', message: `Unresolved: ${resolution.unresolved.map((u) => `{{${u}}}`).join(', ')}` },
+      unresolved: resolution.unresolved,
+      validation: null,
+    };
+  }
+  const raw = await executeHttp(resolution.request, def.settings, opts.signal);
 
   const contentType = headerValue(raw.headers, 'content-type');
   const textual = isTextual(contentType, raw.body);

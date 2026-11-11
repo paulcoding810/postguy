@@ -152,7 +152,7 @@ export interface ValidationResult {
 }
 
 export interface SendResult {
-  historyId: string;
+  historyId: string | null;
   snapshotId: string | null;
   request: { method: string; url: string; headers: Record<string, string> };
   status: number | null;

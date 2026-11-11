@@ -1,10 +1,20 @@
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type {
   Auth,
   Body,
   CollectionKind,
   EnvironmentKind,
+  ExecutionStatus,
+  ExecutionStep,
+  FlowHandle,
+  FlowSettings,
+  FlowStepKind,
+  StepLog,
+  StepOverrides,
+  StepResponse,
+  StepStatus,
+  ValidationResult,
   HttpMethod,
   JsonSchema,
   KeyValue,
@@ -178,4 +188,88 @@ export const responseSnapshots = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index('snapshots_request_idx').on(t.requestId, t.isSuccess, t.createdAt)],
+);
+
+export const flows = sqliteTable('flows', {
+  id: id(),
+  collectionId: text('collection_id').references(() => collections.id, { onDelete: 'set null' }),
+  name: text('name').notNull(),
+  description: text('description'),
+  settings: json<FlowSettings>('settings_json').notNull().default({ stopOnError: true }),
+  createdAt: createdAt(),
+  updatedAt: updatedAt(),
+});
+
+export const flowSteps = sqliteTable(
+  'flow_steps',
+  {
+    id: text('id').notNull(),
+    flowId: text('flow_id')
+      .notNull()
+      .references(() => flows.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    kind: text('kind').$type<FlowStepKind>().notNull(),
+    requestId: text('request_id').references(() => requests.id, { onDelete: 'set null' }),
+    overrides: json<StepOverrides>('overrides_json').notNull().default({}),
+    expression: text('expression').notNull().default(''),
+    failOnHttpError: integer('fail_on_http_error', { mode: 'boolean' }).notNull().default(true),
+    position: json<{ x: number; y: number }>('position_json').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.flowId, t.id] }), index('flow_steps_request_idx').on(t.requestId)],
+);
+
+export const flowConnections = sqliteTable(
+  'flow_connections',
+  {
+    id: text('id').notNull(),
+    flowId: text('flow_id')
+      .notNull()
+      .references(() => flows.id, { onDelete: 'cascade' }),
+    sourceStepId: text('source_step_id').notNull(),
+    targetStepId: text('target_step_id').notNull(),
+    handle: text('handle').$type<FlowHandle>().notNull().default('out'),
+  },
+  (t) => [primaryKey({ columns: [t.flowId, t.id] })],
+);
+
+export const flowExecutions = sqliteTable(
+  'flow_executions',
+  {
+    id: id(),
+    flowId: text('flow_id')
+      .notNull()
+      .references(() => flows.id, { onDelete: 'cascade' }),
+    environmentId: text('environment_id').references(() => environments.id, { onDelete: 'set null' }),
+    status: text('status').$type<ExecutionStatus>().notNull(),
+    trigger: text('trigger').$type<'run' | 'rerun'>().notNull().default('run'),
+    error: text('error'),
+    startedAt: integer('started_at').notNull(),
+    finishedAt: integer('finished_at'),
+  },
+  (t) => [index('flow_executions_flow_idx').on(t.flowId, t.startedAt)],
+);
+
+export const flowExecutionSteps = sqliteTable(
+  'flow_execution_steps',
+  {
+    id: id(),
+    executionId: text('execution_id')
+      .notNull()
+      .references(() => flowExecutions.id, { onDelete: 'cascade' }),
+    stepId: text('step_id').notNull(),
+    stepName: text('step_name').notNull(),
+    attempt: integer('attempt').notNull().default(1),
+    status: text('status').$type<StepStatus>().notNull(),
+    handle: text('handle').$type<FlowHandle>(),
+    request: json<ExecutionStep['request']>('request_json'),
+    response: json<StepResponse>('response_json'),
+    validation: json<ValidationResult>('validation_json'),
+    historyId: text('history_id').references(() => requestHistory.id, { onDelete: 'set null' }),
+    logs: json<StepLog[]>('logs_json').notNull().default([]),
+    error: text('error'),
+    startedAt: integer('started_at'),
+    finishedAt: integer('finished_at'),
+  },
+  (t) => [index('flow_exec_steps_exec_idx').on(t.executionId, t.stepId, t.attempt)],
 );

@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Db } from './db/client.ts';
 import { registerErrorHandler } from './lib/errors.ts';
+import { flowRoutes } from './routes/flows.ts';
 import { openapiRoutes } from './routes/openapi.ts';
 import { sendRoutes } from './routes/send.ts';
 import { workspaceRoutes } from './routes/workspace.ts';
@@ -44,5 +45,6 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
   workspaceRoutes(app, opts.db);
   sendRoutes(app, opts.db);
   openapiRoutes(app, opts.db);
+  flowRoutes(app, opts.db);
   return app;
 }

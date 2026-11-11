@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { parse } from '../lib/errors.ts';
 import { buildContext } from '../services/context.ts';
+import { previewLookup, stepCollectionId } from '../services/flows.ts';
 import { getRequest } from '../services/requests.ts';
 import { send } from '../services/send.ts';
 
@@ -16,13 +17,13 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
     reply.raw.on('close', () => {
       if (!reply.raw.writableFinished) controller.abort();
     });
-    return send(db, parse(SendInput, req.body), controller.signal);
+    return send(db, parse(SendInput, req.body), { signal: controller.signal });
   });
 
   app.get('/context-variables', async (req): Promise<ContextVariable[]> => {
     const q = parse(ContextQuery, req.query);
     const saved = q.requestId ? getRequest(db, q.requestId) : null;
-    const { ctx } = buildContext(db, { collectionId: q.collectionId ?? saved?.collectionId ?? null, requestId: saved?.id ?? null });
+    const { ctx } = buildContext(db, { collectionId: q.collectionId ?? saved?.collectionId ?? null, requestId: saved?.id ?? null, flowId: q.flowId });
     return [...ctx.variables.entries()]
       .map(([key, v]) => {
         const r = resolveTemplate(v.value, ctx);
@@ -39,10 +40,13 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
   app.post('/resolve-preview', async (req): Promise<ResolvedPreview[]> => {
     const input = parse(ResolvePreviewInput, req.body);
     const saved = input.requestId ? getRequest(db, input.requestId) : null;
+    const inFlow = input.flowId && input.stepId;
     const { ctx } = buildContext(db, {
-      collectionId: input.collectionId ?? saved?.collectionId ?? null,
+      collectionId: inFlow ? stepCollectionId(db, input.flowId!, input.stepId!) : (input.collectionId ?? saved?.collectionId ?? null),
       requestId: saved?.id ?? null,
       environmentId: input.environmentId,
+      flowId: input.flowId,
+      responses: inFlow ? previewLookup(db, input.flowId!, input.stepId!) : undefined,
     });
     return input.templates.map((template) => {
       const r = resolveTemplate(template, ctx);
@@ -57,7 +61,7 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
   });
 }
 
-const ContextQuery = z.object({ collectionId: z.string().optional(), requestId: z.string().optional() });
+const ContextQuery = z.object({ collectionId: z.string().optional(), requestId: z.string().optional(), flowId: z.string().optional() });
 
 function truncatePreview(s: string): string {
   return s.length > PREVIEW_MAX ? `${s.slice(0, PREVIEW_MAX)}…` : s;
