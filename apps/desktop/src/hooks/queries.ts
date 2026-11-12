@@ -1,4 +1,5 @@
 import { keepPreviousData, QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import * as React from 'react';
 import { toast } from 'sonner';
 import type { VariableInput, VariableScope } from '@postguy/shared';
 import { api, errorMessage } from '@/lib/api';
@@ -61,8 +62,18 @@ export function useHistory(requestId?: string) {
   });
 }
 
+function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = React.useState(value);
+  const key = JSON.stringify(value);
+  React.useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [key, ms]);
+  return v;
+}
+
 export function useResolvePreview(templates: string[], collectionId: string | null, requestId: string | null, flow?: FlowRef | null) {
-  const unique = [...new Set(templates.filter((t) => t.includes('{{')))].sort();
+  const unique = useDebounced([...new Set(templates.filter((t) => t.includes('{{')))].sort(), 200);
   return useQuery({
     queryKey: keys.preview(unique, collectionId, requestId, flow),
     queryFn: () =>

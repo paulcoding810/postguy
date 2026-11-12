@@ -28,6 +28,7 @@ import { buildContext } from './context.ts';
 import { globalEnvironment } from './environments.ts';
 import { executeHttp, isTextual } from './http.ts';
 import { recordSnapshot, validateResponse } from './memory.ts';
+import { afterSend } from './maintenance.ts';
 import { exchangeToken, needsTokenExchange } from './oauth.ts';
 import { getRequest } from './requests.ts';
 import { setVariable } from './variables.ts';
@@ -238,6 +239,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     })
     .run();
 
+  afterSend(db);
   let snapshotId: string | null = null;
   let validation: SendResult['validation'] = null;
   if (saved && raw.status !== null && textual) {

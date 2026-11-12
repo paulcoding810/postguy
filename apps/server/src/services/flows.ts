@@ -44,6 +44,7 @@ import { buildContext } from './context.ts';
 import { activeEnvironment } from './environments.ts';
 import { getRequest } from './requests.ts';
 import { deleteScripts, loadScripts, saveScripts, stepOwnerId } from './scripts.ts';
+import { pruneExecutions } from './maintenance.ts';
 import { send } from './send.ts';
 
 const BODY_TEXT_LIMIT = 1024 * 1024;
@@ -489,6 +490,7 @@ export function runFlow(db: Db, flowId: string, environmentId?: string | null, d
       .set({ status: result.status, error: result.error, pausedStepId: null, finishedAt: Date.now() })
       .where(eq(flowExecutions.id, executionId))
       .run();
+    pruneExecutions(db, flowId);
     emit({ type: 'execution', execution: executionRow(db, executionId) });
   });
 }

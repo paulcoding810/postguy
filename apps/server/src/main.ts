@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { buildServer } from './app.ts';
+import { loadSandbox } from '@postguy/core';
 import { openDatabase } from './db/client.ts';
 
 const { values } = parseArgs({
@@ -17,6 +18,7 @@ const dataDir = resolve(values['data-dir']!);
 const token = values.token ?? randomBytes(24).toString('hex');
 const { db, close } = openDatabase(join(dataDir, 'postguy.db'));
 const app = await buildServer({ db, token, logger: values.verbose });
+void loadSandbox();
 await app.listen({ port: Number(values.port), host: '127.0.0.1' });
 const address = app.server.address();
 const port = typeof address === 'object' && address ? address.port : Number(values.port);

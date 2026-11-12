@@ -18,6 +18,9 @@ export function openDatabase(file: string): { db: Db; close: () => void } {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   sqlite.pragma('busy_timeout = 5000');
+  sqlite.pragma('synchronous = NORMAL');
+  sqlite.pragma('temp_store = MEMORY');
+  sqlite.pragma('cache_size = -16000');
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: process.env.POSTGUY_MIGRATIONS_DIR ?? MIGRATIONS_DIR });
   seed(db);
