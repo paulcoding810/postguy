@@ -21,6 +21,7 @@ import type {
   OpenApiSourceType,
   PathEntry,
   RequestSettings,
+  ScriptRun,
   Timing,
   VariableScope,
 } from '@postguy/shared';
@@ -243,6 +244,7 @@ export const flowExecutions = sqliteTable(
     environmentId: text('environment_id').references(() => environments.id, { onDelete: 'set null' }),
     status: text('status').$type<ExecutionStatus>().notNull(),
     trigger: text('trigger').$type<'run' | 'rerun'>().notNull().default('run'),
+    runtime: json<Record<string, unknown>>('runtime_json').notNull().default({}),
     error: text('error'),
     startedAt: integer('started_at').notNull(),
     finishedAt: integer('finished_at'),
@@ -265,6 +267,7 @@ export const flowExecutionSteps = sqliteTable(
     request: json<ExecutionStep['request']>('request_json'),
     response: json<StepResponse>('response_json'),
     validation: json<ValidationResult>('validation_json'),
+    scripts: json<ScriptRun[]>('scripts_json'),
     historyId: text('history_id').references(() => requestHistory.id, { onDelete: 'set null' }),
     logs: json<StepLog[]>('logs_json').notNull().default([]),
     error: text('error'),
@@ -272,4 +275,17 @@ export const flowExecutionSteps = sqliteTable(
     finishedAt: integer('finished_at'),
   },
   (t) => [index('flow_exec_steps_exec_idx').on(t.executionId, t.stepId, t.attempt)],
+);
+
+export const scripts = sqliteTable(
+  'scripts',
+  {
+    id: id(),
+    ownerType: text('owner_type').$type<'request' | 'flow_step'>().notNull(),
+    ownerId: text('owner_id').notNull(),
+    phase: text('phase').$type<'pre' | 'post'>().notNull(),
+    source: text('source').notNull().default(''),
+    updatedAt: updatedAt(),
+  },
+  (t) => [uniqueIndex('scripts_owner_phase_uq').on(t.ownerType, t.ownerId, t.phase)],
 );

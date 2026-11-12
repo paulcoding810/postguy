@@ -107,3 +107,42 @@ describe('import / export', () => {
     expect((await h.call('POST', '/collections/import', { data: { nope: 1 } })).status).toBe(400);
   });
 });
+
+describe('partial updates', () => {
+  it('renaming or moving a request keeps its other fields', async () => {
+    const a = (await h.call('POST', '/collections', { name: 'A' })).body;
+    const b = (await h.call('POST', '/collections', { name: 'B' })).body;
+    const r = (
+      await h.call('POST', '/requests', {
+        collectionId: a.id,
+        name: 'Create',
+        method: 'POST',
+        url: 'http://x',
+        headers: [{ id: 'h', key: 'X', value: '1', enabled: true }],
+        body: { mode: 'json', raw: '{"a":1}' },
+        auth: { type: 'bearer', token: 't' },
+        scripts: { pre: 'flow.log(1)', post: 'flow.log(2)' },
+      })
+    ).body;
+    await h.call('PATCH', `/requests/${r.id}`, { name: 'Renamed' });
+    await h.call('PATCH', `/requests/${r.id}`, { collectionId: b.id });
+    await h.call('PATCH', `/requests/${r.id}`, { scripts: { post: 'flow.log(3)' } });
+    const after = (await h.call('GET', `/requests/${r.id}`)).body;
+    expect(after).toMatchObject({
+      name: 'Renamed',
+      collectionId: b.id,
+      method: 'POST',
+      body: { mode: 'json', raw: '{"a":1}' },
+      auth: { type: 'bearer', token: 't' },
+      scripts: { pre: 'flow.log(1)', post: 'flow.log(3)' },
+    });
+    expect(after.headers).toHaveLength(1);
+  });
+
+  it('updating one flow setting keeps the others', async () => {
+    const f = (await h.call('POST', '/flows', { name: 'F' })).body;
+    await h.call('PATCH', `/flows/${f.id}`, { settings: { stopOnError: false } });
+    await h.call('PATCH', `/flows/${f.id}`, { settings: { stepTimeoutMs: 5000 } });
+    expect((await h.call('GET', `/flows/${f.id}`)).body.settings).toEqual({ stopOnError: false, stepTimeoutMs: 5000 });
+  });
+});

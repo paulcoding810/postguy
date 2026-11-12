@@ -1,13 +1,12 @@
-import { LockIcon } from 'lucide-react';
 import type { KeyValue, RequestDefinition } from '@postguy/shared';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
-import { Tooltip } from '@/components/ui/misc';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTree } from '@/hooks/queries';
 import { useTabs, type RequestTab } from '@/stores/tabs';
 import { TemplateProvider } from '@/features/template/TemplateProvider';
 import { inheritedAuthSource, chainTo } from '@/features/collections/treeUtils';
 import { ResponsePanel } from '@/features/response/ResponsePanel';
+import { ScriptEditor, useRequestScriptTypes } from '@/components/ScriptEditor';
 import { AuthEditor } from './AuthEditor';
 import { BodyEditor } from './BodyEditor';
 import { DocsTab } from './DocsTab';
@@ -27,6 +26,9 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
     updateDraft(tab.id, (d) => ({ ...d, [key]: value }));
   const { draft } = tab;
   const breadcrumb = chainTo(tree.data, tab.collectionId).map((c) => c.name);
+  const preTypes = useRequestScriptTypes(tab.collectionId, tab.requestId, 'pre', draft.name);
+  const postTypes = useRequestScriptTypes(tab.collectionId, tab.requestId, 'post', draft.name);
+  const dot = <span className="size-1.5 rounded-full bg-success" />;
 
   return (
     <TemplateProvider draft={draft} collectionId={tab.collectionId} requestId={tab.requestId}>
@@ -54,20 +56,8 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
                 <TabsTrigger value="body">
                   Body {draft.body.mode !== 'none' && <span className="size-1.5 rounded-full bg-success" />}
                 </TabsTrigger>
-                <Tooltip content="Scripts arrive with the script engine (Phase 5)">
-                  <span>
-                    <TabsTrigger value="pre" disabled>
-                      Pre-request <LockIcon className="size-3" />
-                    </TabsTrigger>
-                  </span>
-                </Tooltip>
-                <Tooltip content="Scripts arrive with the script engine (Phase 5)">
-                  <span>
-                    <TabsTrigger value="post" disabled>
-                      Post-response <LockIcon className="size-3" />
-                    </TabsTrigger>
-                  </span>
-                </Tooltip>
+                <TabsTrigger value="pre">Pre-request {draft.scripts.pre.trim() && dot}</TabsTrigger>
+                <TabsTrigger value="post">Post-response {draft.scripts.post.trim() && dot}</TabsTrigger>
                 <TabsTrigger value="docs">Docs</TabsTrigger>
                 <TabsTrigger value="settings">Settings</TabsTrigger>
               </TabsList>
@@ -99,6 +89,24 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
               </TabsContent>
               <TabsContent value="body">
                 <BodyEditor body={draft.body} onChange={(v) => set('body', v)} editorPath={`body-${tab.id}.json`} />
+              </TabsContent>
+              <TabsContent value="pre">
+                <ScriptEditor
+                  phase="pre"
+                  value={draft.scripts.pre}
+                  onChange={(v) => set('scripts', { ...draft.scripts, pre: v })}
+                  types={preTypes}
+                  path={`file:///pre-${tab.id}.js`}
+                />
+              </TabsContent>
+              <TabsContent value="post">
+                <ScriptEditor
+                  phase="post"
+                  value={draft.scripts.post}
+                  onChange={(v) => set('scripts', { ...draft.scripts, post: v })}
+                  types={postTypes}
+                  path={`file:///post-${tab.id}.js`}
+                />
               </TabsContent>
               <TabsContent value="docs" className="overflow-auto">
                 <DocsTab requestId={tab.requestId} />

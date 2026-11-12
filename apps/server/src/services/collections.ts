@@ -10,6 +10,7 @@ import {
 import type { Db } from '../db/client.ts';
 import { collections, requests, variables } from '../db/schema.ts';
 import { badRequest, notFound } from '../lib/errors.ts';
+import { deleteScripts } from './scripts.ts';
 
 export function getCollection(db: Db, id: string): Collection {
   const row = db.select().from(collections).where(eq(collections.id, id)).get();
@@ -111,6 +112,7 @@ export function deleteCollection(db: Db, id: string): void {
     if (reqIds.length) tx.delete(variables).where(and(eq(variables.scope, 'request'), inArray(variables.ownerId, reqIds))).run();
     tx.delete(collections).where(eq(collections.id, id)).run();
   });
+  deleteScripts(db, 'request', reqIds);
 }
 
 /** The collection and its ancestors, innermost first. */

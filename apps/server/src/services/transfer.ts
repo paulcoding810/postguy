@@ -13,6 +13,7 @@ import { collections, requests } from '../db/schema.ts';
 import { badRequest } from '../lib/errors.ts';
 import { createCollection, getCollection } from './collections.ts';
 import { createRequest } from './requests.ts';
+import { loadScripts } from './scripts.ts';
 import { listVariables, replaceVariables } from './variables.ts';
 
 export function exportCollection(db: Db, id: string): CollectionExport {
@@ -48,6 +49,7 @@ function exportNode(db: Db, c: Collection): ExportedCollection {
       auth: redactAuth(r.auth),
       body: r.body,
       settings: r.settings,
+      scripts: loadScripts(db, 'request', r.id),
     })),
   };
 }

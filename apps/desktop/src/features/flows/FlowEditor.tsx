@@ -169,6 +169,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
       overrides: {},
       expression: '',
       failOnHttpError: true,
+      scripts: { pre: '', post: '' },
       position: freeSpot(desired, g.steps),
     };
     setGraph((cur) => ({ ...cur, steps: [...cur.steps, step] }));

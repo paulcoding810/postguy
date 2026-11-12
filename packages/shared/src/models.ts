@@ -51,6 +51,12 @@ export const RequestSettings = z.object({
 });
 export type RequestSettings = z.infer<typeof RequestSettings>;
 
+export const Scripts = z.object({
+  pre: z.string().max(100_000).default(''),
+  post: z.string().max(100_000).default(''),
+});
+export type Scripts = z.infer<typeof Scripts>;
+
 export const RequestDefinition = z.object({
   name: z.string().min(1),
   method: HttpMethod,
@@ -61,6 +67,7 @@ export const RequestDefinition = z.object({
   auth: Auth.default({ type: 'inherit' }),
   body: Body.default({ mode: 'none' }),
   settings: RequestSettings.default({}),
+  scripts: Scripts.default({ pre: '', post: '' }),
 });
 export type RequestDefinition = z.infer<typeof RequestDefinition>;
 
@@ -151,6 +158,43 @@ export interface ValidationResult {
   errors: ValidationIssue[];
 }
 
+export interface ScriptRequest {
+  method: string;
+  url: string;
+  headers: Record<string, string>;
+  body: string | null;
+}
+
+export interface ScriptResponse {
+  status: number;
+  headers: Record<string, string>;
+  body: unknown;
+  timeMs?: number;
+}
+
+export interface ScriptAssertion {
+  ok: boolean;
+  message: string;
+}
+
+export interface ScriptLog {
+  at: number;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}
+
+export interface ScriptRun {
+  phase: 'pre' | 'post';
+  ok: boolean;
+  error: string | null;
+  logs: ScriptLog[];
+  assertions: ScriptAssertion[];
+  request?: ScriptRequest;
+  durationMs: number;
+  /** Where the script came from, e.g. "request" or "step". */
+  source?: string;
+}
+
 export interface SendResult {
   historyId: string | null;
   snapshotId: string | null;
@@ -168,6 +212,7 @@ export interface SendResult {
   error: { code: string; message: string } | null;
   unresolved: string[];
   validation: ValidationResult | null;
+  scripts: ScriptRun[];
 }
 
 export interface HistoryEntry {

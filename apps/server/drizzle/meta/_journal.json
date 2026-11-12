@@ -15,6 +15,13 @@
       "when": 1794415928489,
       "tag": "0001_flows",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794454395435,
+      "tag": "0002_scripts",
+      "breakpoints": true
     }
   ]
 }

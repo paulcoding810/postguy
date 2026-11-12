@@ -54,6 +54,16 @@ export function replaceVariables(
   return listVariables(db, scope, ownerId);
 }
 
+/** Sets one variable, keeping its secret flag and position when it exists. */
+export function setVariable(db: Db, scope: VariableScope, ownerId: string, key: string, value: string): void {
+  const current = listVariables(db, scope, ownerId, true);
+  const existing = current.find((v) => v.key === key);
+  const next = existing
+    ? current.map((v) => (v.key === key ? { ...v, value } : v))
+    : [...current, { key, value, isSecret: false, enabled: true }];
+  replaceVariables(db, scope, ownerId, next.map(({ key: k, value: val, isSecret, enabled }) => ({ key: k, value: val, isSecret, enabled })));
+}
+
 /** Enabled variables of an owner as a resolver map. */
 export function variableMap(db: Db, scope: VariableScope, ownerId: string) {
   const out: Record<string, { value: string; secret: boolean }> = {};

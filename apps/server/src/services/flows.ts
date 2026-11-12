@@ -42,17 +42,19 @@ import { badRequest, HttpError, notFound } from '../lib/errors.ts';
 import { effectiveAuth, getCollection } from './collections.ts';
 import { buildContext } from './context.ts';
 import { activeEnvironment } from './environments.ts';
+import { getRequest } from './requests.ts';
+import { deleteScripts, loadScripts, saveScripts, stepOwnerId } from './scripts.ts';
 import { send } from './send.ts';
 
 const BODY_TEXT_LIMIT = 1024 * 1024;
 
 function toDefinition(r: SavedRequest): RequestDefinition {
-  return { name: r.name, method: r.method, url: r.url, params: r.params, pathParams: r.pathParams, headers: r.headers, auth: r.auth, body: r.body, settings: r.settings };
+  return { name: r.name, method: r.method, url: r.url, params: r.params, pathParams: r.pathParams, headers: r.headers, auth: r.auth, body: r.body, settings: r.settings, scripts: r.scripts };
 }
 
 function savedRequest(db: Db, id: string | null): SavedRequest | null {
-  if (!id) return null;
-  return (db.select().from(requests).where(eq(requests.id, id)).get() as SavedRequest | undefined) ?? null;
+  if (!id || !db.select({ id: requests.id }).from(requests).where(eq(requests.id, id)).get()) return null;
+  return getRequest(db, id);
 }
 
 // ---------- CRUD ----------
@@ -79,6 +81,7 @@ export function getGraph(db: Db, flowId: string): FlowGraph {
       overrides: s.overrides,
       expression: s.expression,
       failOnHttpError: s.failOnHttpError,
+      scripts: loadScripts(db, 'flow_step', stepOwnerId(flowId, s.id)),
       position: s.position,
     })),
     connections: conns.map((c) => ({ id: c.id, source: c.sourceStepId, target: c.targetStepId, handle: c.handle })),
@@ -118,6 +121,7 @@ export function updateFlow(db: Db, id: string, input: z.output<typeof UpdateFlow
 export function deleteFlow(db: Db, id: string): void {
   getFlowRow(db, id);
   if ([...runs.values()].some((r) => r.flowId === id)) throw new HttpError(409, 'Stop the running execution first', 'busy');
+  deleteScripts(db, 'flow_step', getGraph(db, id).steps.map((s) => stepOwnerId(id, s.id)));
   db.delete(flows).where(eq(flows.id, id)).run();
 }
 
@@ -128,7 +132,10 @@ export function saveGraph(db: Db, flowId: string, input: z.output<typeof FlowGra
   if (ids.size !== input.steps.length) throw badRequest('Step ids must be unique');
   for (const c of input.connections) if (!ids.has(c.source) || !ids.has(c.target)) throw badRequest('A connection points to a missing step');
   for (const s of input.steps) if (s.requestId && !savedRequest(db, s.requestId)) throw badRequest(`Request for step "${s.name}" does not exist`);
+  const previous = getGraph(db, flowId).steps.map((s) => stepOwnerId(flowId, s.id));
   db.transaction((tx) => {
+    deleteScripts(db, 'flow_step', previous);
+    for (const s of input.steps) saveScripts(db, 'flow_step', stepOwnerId(flowId, s.id), s.scripts);
     tx.delete(flowSteps).where(eq(flowSteps.flowId, flowId)).run();
     tx.delete(flowConnections).where(eq(flowConnections.flowId, flowId)).run();
     input.steps.forEach((s, i) =>
@@ -168,7 +175,8 @@ export function subscribe(executionId: string, fn: (e: FlowEvent | { type: 'end'
 function executionRow(db: Db, id: string): FlowExecution {
   const row = db.select().from(flowExecutions).where(eq(flowExecutions.id, id)).get();
   if (!row) throw notFound('Execution');
-  return row;
+  const { runtime: _runtime, ...exec } = row;
+  return exec;
 }
 
 function stepRow(db: Db, id: string): ExecutionStep {
@@ -188,7 +196,14 @@ export function getExecution(db: Db, id: string): FlowExecutionDetail {
 
 export function listExecutions(db: Db, flowId: string): FlowExecution[] {
   getFlowRow(db, flowId);
-  return db.select().from(flowExecutions).where(eq(flowExecutions.flowId, flowId)).orderBy(desc(flowExecutions.startedAt)).limit(50).all();
+  return db
+    .select()
+    .from(flowExecutions)
+    .where(eq(flowExecutions.flowId, flowId))
+    .orderBy(desc(flowExecutions.startedAt))
+    .limit(50)
+    .all()
+    .map(({ runtime: _runtime, ...e }) => e);
 }
 
 function lookupFrom(responses: ReadonlyMap<string, ResponseRecord>) {
@@ -218,6 +233,15 @@ interface StepContext {
   flow: Flow;
   environmentId: string | null;
   signal: AbortSignal;
+  /** Values set by scripts with flow.set, shared by every step of the run. */
+  runtime: Map<string, unknown>;
+  executionId: string;
+}
+
+function runtimeVars(runtime: Map<string, unknown>) {
+  const out: Record<string, { value: string }> = {};
+  for (const [k, v] of runtime) out[k] = { value: typeof v === 'string' ? v : JSON.stringify(v) };
+  return out;
 }
 
 /** Runs one step against the given responses; never throws. */
@@ -226,14 +250,26 @@ async function runStep(
   step: FlowStep,
   responses: ReadonlyMap<string, ResponseRecord>,
   logs: StepLog[],
-  sink: { response?: StepResponse; request?: ExecutionStep['request']; validation?: ExecutionStep['validation']; historyId?: string | null },
+  sink: {
+    response?: StepResponse;
+    request?: ExecutionStep['request'];
+    validation?: ExecutionStep['validation'];
+    historyId?: string | null;
+    scripts?: ExecutionStep['scripts'];
+  },
 ): Promise<StepOutcome> {
   const log = (level: StepLog['level'], message: string) => logs.push({ at: Date.now(), level, message });
   const lookup = lookupFrom(responses);
 
   if (step.kind === 'condition') {
     try {
-      const { ctx } = buildContext(c.db, { collectionId: c.flow.collectionId, environmentId: c.environmentId, flowId: c.flow.id, responses: lookup });
+      const { ctx } = buildContext(c.db, {
+        collectionId: c.flow.collectionId,
+        environmentId: c.environmentId,
+        flowId: c.flow.id,
+        responses: lookup,
+        runtime: runtimeVars(c.runtime),
+      });
       const r = evaluateExpression(step.expression, ctx);
       if (r.unresolved.length) log('warn', `Unresolved in condition: ${r.unresolved.map((u) => `{{${u}}}`).join(', ')}`);
       log('info', `${step.expression} → ${r.value}`);
@@ -255,8 +291,15 @@ async function runStep(
   const res = await send(
     c.db,
     { requestId: saved.id, collectionId: saved.collectionId, environmentId: c.environmentId, request: def },
-    { signal: c.signal, responses: lookup, flowId: c.flow.id, failOnUnresolved: true },
+    { signal: c.signal, responses: lookup, flowId: c.flow.id, failOnUnresolved: true, runtime: c.runtime, extraScripts: step.scripts, selfName: step.name },
   );
+  c.db.update(flowExecutions).set({ runtime: Object.fromEntries(c.runtime) }).where(eq(flowExecutions.id, c.executionId)).run();
+  sink.scripts = res.scripts.length ? res.scripts : null;
+  for (const s of res.scripts) {
+    logs.push(...s.logs);
+    for (const a of s.assertions) log(a.ok ? 'info' : 'error', `${a.ok ? '✓' : '✗'} ${a.message}`);
+    if (s.error && s.phase === 'post') log('error', `Post-response script (${s.source}): ${s.error}`);
+  }
   sink.request = res.request;
   sink.validation = res.validation;
   sink.historyId = res.historyId;
@@ -279,9 +322,18 @@ async function runStep(
   if (res.validation && !res.validation.ok)
     log('warn', `Schema: ${res.validation.errors.slice(0, 3).map((e) => `${e.path} ${e.message}`).join('; ')}`);
   const record: ResponseRecord = { name: step.name, status: res.status!, headers: res.headers, body, source: 'execution', requestId: saved.id };
-  const failed = step.failOnHttpError && res.status! >= 400;
-  if (failed) log('error', `HTTP ${res.status} counts as a failure`);
-  return { ok: !failed, record, error: failed ? `HTTP ${res.status}` : undefined };
+  const httpFailed = step.failOnHttpError && res.status! >= 400;
+  if (httpFailed) log('error', `HTTP ${res.status} counts as a failure`);
+  const scriptFailed = res.scripts.find((s) => !s.ok);
+  const failedAssertions = res.scripts.flatMap((s) => s.assertions.filter((a) => !a.ok));
+  const error = httpFailed
+    ? `HTTP ${res.status}`
+    : scriptFailed?.error
+      ? `Script error: ${scriptFailed.error}`
+      : failedAssertions.length
+        ? `Assertion failed: ${failedAssertions[0]!.message}`
+        : undefined;
+  return { ok: !error, record, error };
 }
 
 function nextAttempt(db: Db, executionId: string, stepId: string): number {
@@ -339,6 +391,7 @@ function persistence(db: Db, c: StepContext, executionId: string, emit: (e: Flow
           request: p.sink.request ?? null,
           response: p.sink.response ?? null,
           validation: p.sink.validation ?? null,
+          scripts: p.sink.scripts ?? null,
           historyId: p.sink.historyId ?? null,
           logs: p.logs,
           error: outcome.error ?? null,
@@ -381,7 +434,7 @@ export function runFlow(db: Db, flowId: string, environmentId?: string | null): 
 
   return startRun(db, executionId, flowId, async (run, emit) => {
     emit({ type: 'execution', execution: executionRow(db, executionId) });
-    const c: StepContext = { db, flow, environmentId: envId, signal: run.controller.signal };
+    const c: StepContext = { db, flow, environmentId: envId, signal: run.controller.signal, runtime: new Map(), executionId };
     const result = await executeFlow(graph, { stopOnError: flow.settings.stopOnError, signal: run.controller.signal, ...persistence(db, c, executionId, emit) });
     db.update(flowExecutions).set({ status: result.status, error: result.error, finishedAt: Date.now() }).where(eq(flowExecutions.id, executionId)).run();
     emit({ type: 'execution', execution: executionRow(db, executionId) });
@@ -426,7 +479,14 @@ export function rerunStep(db: Db, executionId: string, stepId: string): FlowExec
 
   return startRun(db, executionId, exec.flowId, async (run, emit) => {
     emit({ type: 'execution', execution: executionRow(db, executionId) });
-    const c: StepContext = { db, flow, environmentId: exec.environmentId, signal: run.controller.signal };
+    const c: StepContext = {
+      db,
+      flow,
+      environmentId: exec.environmentId,
+      signal: run.controller.signal,
+      runtime: new Map(Object.entries(db.select({ r: flowExecutions.runtime }).from(flowExecutions).where(eq(flowExecutions.id, executionId)).get()?.r ?? {})),
+      executionId,
+    };
     const hooks = persistence(db, c, executionId, emit);
     hooks.onStart(step);
     let outcome: StepOutcome;

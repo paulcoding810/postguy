@@ -38,6 +38,7 @@ export function blankRequest(name = 'New Request'): RequestDefinition {
     auth: { type: 'inherit' },
     body: { mode: 'none' },
     settings: {},
+    scripts: { pre: '', post: '' },
   };
 }
 
@@ -52,6 +53,7 @@ export function toDefinition(r: SavedRequest | RequestDefinition): RequestDefini
     auth: r.auth ?? { type: 'inherit' },
     body: r.body ?? { mode: 'none' },
     settings: r.settings ?? {},
+    scripts: { pre: r.scripts?.pre ?? '', post: r.scripts?.post ?? '' },
   };
 }
 

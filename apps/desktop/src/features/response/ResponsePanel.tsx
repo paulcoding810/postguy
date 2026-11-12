@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CodeEditor } from '@/components/CodeEditor';
 import { cn, formatBytes, formatMs, modKey, statusTone, tryParseJson } from '@/lib/utils';
 import { SchemaTab } from './SchemaTab';
+import { TestsTab, testCounts } from './TestsTab';
 
 function languageFor(contentType: string | null): string {
   if (!contentType) return 'plaintext';
@@ -76,6 +77,15 @@ export function ResponsePanel({
             Cookies {response.cookies.length > 0 && <span className="text-muted-foreground">{response.cookies.length}</span>}
           </TabsTrigger>
           <TabsTrigger value="schema">Schema</TabsTrigger>
+          <TabsTrigger value="tests">
+            Tests{' '}
+            {(() => {
+              const c = testCounts(response.scripts);
+              if (!response.scripts?.length) return null;
+              const bad = c.passed < c.total || c.errors > 0;
+              return <span className={bad ? 'text-destructive' : 'text-success'}>{c.total ? `${c.passed}/${c.total}` : c.errors ? '!' : '✓'}</span>;
+            })()}
+          </TabsTrigger>
           <TabsTrigger value="request">Request</TabsTrigger>
         </TabsList>
         <div className="ml-auto flex items-center gap-3 text-xs">
@@ -181,6 +191,9 @@ export function ResponsePanel({
       </TabsContent>
       <TabsContent value="schema">
         <SchemaTab requestId={requestId} response={response} />
+      </TabsContent>
+      <TabsContent value="tests">
+        <TestsTab runs={response.scripts} />
       </TabsContent>
       <TabsContent value="request">
         <Table

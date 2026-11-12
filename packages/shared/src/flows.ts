@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Auth, Body, KeyValue, type ValidationResult } from './models.ts';
+import { Auth, Body, KeyValue, Scripts, type ScriptLog, type ScriptRun, type ValidationResult } from './models.ts';
 
 /** Fields of a request a flow step replaces; absent fields come from the saved request. */
 export const StepOverrides = z.object({
@@ -27,6 +27,7 @@ export const FlowStepInput = z.object({
   overrides: StepOverrides.default({}),
   expression: z.string().default(''),
   failOnHttpError: z.boolean().default(true),
+  scripts: Scripts.default({ pre: '', post: '' }),
   position: z.object({ x: z.number(), y: z.number() }).default({ x: 0, y: 0 }),
 });
 export type FlowStepInput = z.input<typeof FlowStepInput>;
@@ -73,17 +74,13 @@ export const UpdateFlowInput = z.object({
   name: z.string().min(1).optional(),
   description: z.string().nullable().optional(),
   collectionId: z.string().nullable().optional(),
-  settings: FlowSettings.partial().optional(),
+  settings: z.object({ stopOnError: z.boolean().optional(), stepTimeoutMs: z.number().int().positive().max(600_000).optional() }).optional(),
 });
 
 export type ExecutionStatus = 'running' | 'success' | 'failed' | 'stopped';
 export type StepStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped';
 
-export interface StepLog {
-  at: number;
-  level: 'info' | 'warn' | 'error';
-  message: string;
-}
+export type StepLog = ScriptLog;
 
 export interface StepResponse {
   status: number | null;
@@ -107,6 +104,7 @@ export interface ExecutionStep {
   request: { method: string; url: string; headers: Record<string, string> } | null;
   response: StepResponse | null;
   validation: ValidationResult | null;
+  scripts: ScriptRun[] | null;
   historyId: string | null;
   logs: StepLog[];
   error: string | null;

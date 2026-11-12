@@ -1,7 +1,11 @@
 import { z } from 'zod';
 import {
   Auth,
+  Body,
+  HttpMethod,
+  KeyValue,
   RequestDefinition,
+  RequestSettings,
   VariableScope,
   type ApiModel,
   type Collection,
@@ -55,7 +59,18 @@ export const CreateRequestInput = RequestDefinition.extend({
 });
 export type CreateRequestInput = z.input<typeof CreateRequestInput>;
 
-export const UpdateRequestInput = RequestDefinition.partial().extend({
+/** Every field optional and without defaults, so a partial update never resets other fields. */
+export const UpdateRequestInput = z.object({
+  name: z.string().min(1).optional(),
+  method: HttpMethod.optional(),
+  url: z.string().optional(),
+  params: z.array(KeyValue).optional(),
+  pathParams: z.array(KeyValue).optional(),
+  headers: z.array(KeyValue).optional(),
+  auth: Auth.optional(),
+  body: Body.optional(),
+  settings: RequestSettings.optional(),
+  scripts: z.object({ pre: z.string().max(100_000).optional(), post: z.string().max(100_000).optional() }).optional(),
   collectionId: z.string().optional(),
   description: z.string().nullable().optional(),
   sortOrder: z.number().int().optional(),

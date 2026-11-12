@@ -21,10 +21,13 @@ import { JsonTree } from '@/features/memory/JsonTree';
 import { refFor } from '@/features/memory/refs';
 import { blankRequest } from '@/stores/tabs';
 import { StatusIcon } from './nodes';
+import { ScriptEditor, useStepScriptTypes } from '@/components/ScriptEditor';
+import { TestsTab } from '@/features/response/TestsTab';
+import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { useFlowSources, useSavedRequest } from './queries';
 
 function toDefinition(r: SavedRequest): RequestDefinition {
-  return { name: r.name, method: r.method, url: r.url, params: r.params, pathParams: r.pathParams, headers: r.headers, auth: r.auth, body: r.body, settings: r.settings };
+  return { name: r.name, method: r.method, url: r.url, params: r.params, pathParams: r.pathParams, headers: r.headers, auth: r.auth, body: r.body, settings: r.settings, scripts: r.scripts };
 }
 
 function Section({ title, overridden, onReset, children }: { title: string; overridden: boolean; onReset: () => void; children: React.ReactNode }) {
@@ -74,6 +77,8 @@ export function StepInspector(props: StepInspectorProps) {
   const draft: RequestDefinition = base
     ? { ...base, url, params: o.params ?? base.params, pathParams: o.pathParams ?? syncPathParams(url, base.pathParams), headers: o.headers ?? base.headers, auth: o.auth ?? base.auth, body: o.body ?? base.body }
     : blankRequest();
+  const preTypes = useStepScriptTypes(flowId, step.id, step.requestId, 'pre', step.name);
+  const postTypes = useStepScriptTypes(flowId, step.id, step.requestId, 'post', step.name);
   const exprRefs = React.useMemo(() => [...step.expression.matchAll(/\{\{\s*([^{}]+?)\s*\}\}/g)].map((m) => m[1]!), [step.expression]);
 
   return (
@@ -82,6 +87,11 @@ export function StepInspector(props: StepInspectorProps) {
         <TabsList>
           <TabsTrigger value="inputs">Inputs</TabsTrigger>
           <TabsTrigger value="data">Data</TabsTrigger>
+          {step.kind === 'request' && (
+            <TabsTrigger value="scripts">
+              Scripts {(step.scripts.pre.trim() || step.scripts.post.trim()) && <span className="size-1.5 rounded-full bg-success" />}
+            </TabsTrigger>
+          )}
           <TabsTrigger value="result">
             Result <StatusIcon status={run?.status} />
           </TabsTrigger>
@@ -179,6 +189,43 @@ export function StepInspector(props: StepInspectorProps) {
           )}
         </TabsContent>
 
+        <TabsContent value="scripts" className="flex min-h-0 flex-col">
+          <p className="border-b px-3 py-1.5 text-[11px] text-muted-foreground">
+            Step scripts run after the request’s own scripts. Use flow.set() to pass values to later steps.
+          </p>
+          <ResizableGroup id="step-scripts" orientation="vertical" className="min-h-0 flex-1">
+            <ResizablePanel id="step-pre" defaultSize="40%" minSize="15%">
+              <div className="flex h-full flex-col">
+                <div className="border-b px-3 py-1 text-[11px] font-semibold text-muted-foreground uppercase">Pre-request</div>
+                <div className="min-h-0 flex-1">
+                  <ScriptEditor
+                    phase="pre"
+                    value={step.scripts.pre}
+                    onChange={(v) => onChange({ scripts: { ...step.scripts, pre: v } })}
+                    types={preTypes}
+                    path={`file:///flow-${flowId}-${step.id}-pre.js`}
+                  />
+                </div>
+              </div>
+            </ResizablePanel>
+            <ResizableHandle orientation="vertical" />
+            <ResizablePanel id="step-post" defaultSize="60%" minSize="15%">
+              <div className="flex h-full flex-col">
+                <div className="border-b px-3 py-1 text-[11px] font-semibold text-muted-foreground uppercase">Post-response</div>
+                <div className="min-h-0 flex-1">
+                  <ScriptEditor
+                    phase="post"
+                    value={step.scripts.post}
+                    onChange={(v) => onChange({ scripts: { ...step.scripts, post: v } })}
+                    types={postTypes}
+                    path={`file:///flow-${flowId}-${step.id}-post.js`}
+                  />
+                </div>
+              </div>
+            </ResizablePanel>
+          </ResizableGroup>
+        </TabsContent>
+
         <TabsContent value="data" className="overflow-auto">
           <DataPicker flowId={flowId} stepId={step.id} />
         </TabsContent>
@@ -265,6 +312,11 @@ function StepResult({ run, onRerun }: { run: ExecutionStep | undefined; onRerun:
           </div>
         ))}
       </div>
+      {run.scripts && run.scripts.length > 0 && (
+        <div className="max-h-56 shrink-0 overflow-auto border-b">
+          <TestsTab runs={run.scripts} />
+        </div>
+      )}
       <div className="min-h-40 flex-1">{r && <CodeEditor readOnly value={body} language={r.body !== null && r.body !== undefined ? 'json' : 'plaintext'} />}</div>
     </div>
   );

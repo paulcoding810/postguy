@@ -10,11 +10,12 @@ import type { Db } from '../db/client.ts';
 import { requests, variables } from '../db/schema.ts';
 import { notFound } from '../lib/errors.ts';
 import { getCollection } from './collections.ts';
+import { deleteScripts, loadScripts, saveScripts } from './scripts.ts';
 
 export function getRequest(db: Db, id: string): SavedRequest {
   const row = db.select().from(requests).where(eq(requests.id, id)).get();
   if (!row) throw notFound('Request');
-  return row as SavedRequest;
+  return { ...row, scripts: loadScripts(db, 'request', id) } as SavedRequest;
 }
 
 function nextSortOrder(db: Db, collectionId: string): number {
@@ -55,18 +56,28 @@ export function createRequest(
     createdAt: now,
     updatedAt: now,
   };
-  db.insert(requests).values(row).run();
-  return row;
+  db.transaction(() => {
+    db.insert(requests).values(row).run();
+    saveScripts(db, 'request', row.id, input.scripts);
+  });
+  return { ...row, scripts: input.scripts };
 }
 
 export function updateRequest(db: Db, id: string, input: UpdateRequestInput): SavedRequest {
   getRequest(db, id);
   if (input.collectionId) getCollection(db, input.collectionId);
-  const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
-  db.update(requests)
-    .set({ ...patch, updatedAt: Date.now() })
-    .where(eq(requests.id, id))
-    .run();
+  const { scripts, ...rest } = input;
+  const patch = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
+  db.transaction(() => {
+    db.update(requests)
+      .set({ ...patch, updatedAt: Date.now() })
+      .where(eq(requests.id, id))
+      .run();
+    if (scripts) {
+      const current = loadScripts(db, 'request', id);
+      saveScripts(db, 'request', id, { pre: scripts.pre ?? current.pre, post: scripts.post ?? current.post });
+    }
+  });
   return getRequest(db, id);
 }
 
@@ -76,6 +87,7 @@ export function deleteRequest(db: Db, id: string): void {
     tx.delete(variables).where(and(eq(variables.scope, 'request'), eq(variables.ownerId, id))).run();
     tx.delete(requests).where(eq(requests.id, id)).run();
   });
+  deleteScripts(db, 'request', [id]);
 }
 
 export function duplicateRequest(db: Db, id: string): SavedRequest {
@@ -92,5 +104,6 @@ export function duplicateRequest(db: Db, id: string): SavedRequest {
     auth: src.auth,
     body: src.body,
     settings: src.settings,
+    scripts: src.scripts,
   });
 }

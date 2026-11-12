@@ -1,15 +1,38 @@
-import { parseSetCookies, redactHeaders, redactText, resolveRequest, type ResponseRecord } from '@postguy/core';
-import { newId, SendInput, type SendResult } from '@postguy/shared';
+import {
+  parseSetCookies,
+  redactHeaders,
+  redactText,
+  resolveRequest,
+  resolveValue,
+  runScript,
+  type ResolutionContext,
+  type ResponseRecord,
+  type ScriptHost,
+} from '@postguy/core';
+import {
+  newId,
+  SendInput,
+  type KeyValue,
+  type RequestDefinition,
+  type ScriptRequest,
+  type ScriptResponse,
+  type ScriptRun,
+  type Scripts,
+  type SendResult,
+} from '@postguy/shared';
 import type { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { requestHistory } from '../db/schema.ts';
 import { effectiveAuth } from './collections.ts';
 import { buildContext } from './context.ts';
+import { globalEnvironment } from './environments.ts';
 import { executeHttp, isTextual } from './http.ts';
 import { recordSnapshot, validateResponse } from './memory.ts';
 import { getRequest } from './requests.ts';
+import { setVariable } from './variables.ts';
 
 export const HISTORY_BODY_LIMIT = 5 * 1024 * 1024;
+export const SCRIPT_TIMEOUT_MS = 2000;
 
 export interface SendOptions {
   signal?: AbortSignal;
@@ -18,45 +41,162 @@ export interface SendOptions {
   flowId?: string | null;
   /** Do not send when a reference cannot be resolved. */
   failOnUnresolved?: boolean;
+  /** Values set with `flow.set`; the highest-precedence variables. A flow shares one map across its steps. */
+  runtime?: Map<string, unknown>;
+  /** Scripts that run after the request's own, e.g. a flow step's. */
+  extraScripts?: Scripts;
+  /** The name `flow.response(name)` uses for the current response in post scripts; defaults to the request name. */
+  selfName?: string;
+}
+
+function queryString(params: KeyValue[]): string {
+  return params
+    .filter((p) => p.enabled && p.key)
+    .map((p) => (p.value === '' ? p.key : `${p.key}=${p.value}`))
+    .join('&');
+}
+
+function toScriptRequest(def: RequestDefinition): ScriptRequest {
+  const qs = queryString(def.params);
+  const headers: Record<string, string> = {};
+  for (const h of def.headers) if (h.enabled && h.key) headers[h.key] = h.value;
+  return {
+    method: def.method,
+    url: qs ? `${def.url}${def.url.includes('?') ? '&' : '?'}${qs}` : def.url,
+    headers,
+    body: def.body.mode === 'json' || def.body.mode === 'text' ? (def.body.raw ?? '') : null,
+  };
+}
+
+/** Folds a pre-request script's edits back into the request definition. */
+function applyScriptRequest(def: RequestDefinition, before: ScriptRequest, after: ScriptRequest): RequestDefinition {
+  const next = { ...def };
+  const method = String(after.method ?? def.method).toUpperCase();
+  if (method !== def.method && ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(method)) next.method = method as RequestDefinition['method'];
+  if (after.url !== before.url) {
+    next.url = String(after.url ?? '');
+    next.params = [];
+  }
+  if (JSON.stringify(after.headers) !== JSON.stringify(before.headers)) {
+    next.headers = Object.entries(after.headers ?? {}).map(([key, value]) => ({
+      id: newId(8),
+      key,
+      value: typeof value === 'string' ? value : JSON.stringify(value),
+      enabled: true,
+    }));
+  }
+  if (after.body !== before.body) {
+    if (after.body === null || after.body === undefined) next.body = { mode: 'none' };
+    else {
+      const raw = typeof after.body === 'string' ? after.body : JSON.stringify(after.body);
+      const mode = def.body.mode === 'json' || def.body.mode === 'text' ? def.body.mode : /^\s*[[{]/.test(raw) ? 'json' : 'text';
+      next.body = { ...def.body, mode, raw };
+    }
+  }
+  return next;
+}
+
+function runtimeVarMap(runtime: Map<string, unknown>) {
+  const out: Record<string, { value: string }> = {};
+  for (const [k, v] of runtime) out[k] = { value: typeof v === 'string' ? v : JSON.stringify(v) };
+  return out;
+}
+
+function secretValues(ctx: ResolutionContext): string[] {
+  const out: string[] = [];
+  for (const v of ctx.variables.values()) if (v.secret && v.value) out.push(v.value);
+  return out;
+}
+
+function parseBody(text: string, contentType: string | null): unknown {
+  if (/json/i.test(contentType ?? '') || /^\s*[[{]/.test(text)) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      /* not JSON */
+    }
+  }
+  return text;
 }
 
 export async function send(db: Db, input: z.output<typeof SendInput>, opts: SendOptions = {}): Promise<SendResult> {
   const saved = input.requestId ? getRequest(db, input.requestId) : null;
   const collectionId = input.collectionId ?? saved?.collectionId ?? null;
-  const { ctx, environmentId } = buildContext(db, {
-    collectionId,
-    requestId: saved?.id ?? null,
-    environmentId: input.environmentId,
-    flowId: opts.flowId,
-    responses: opts.responses,
+  const runtime = opts.runtime ?? new Map<string, unknown>();
+  const context = () =>
+    buildContext(db, {
+      collectionId,
+      requestId: saved?.id ?? null,
+      environmentId: input.environmentId,
+      flowId: opts.flowId,
+      responses: opts.responses,
+      runtime: runtimeVarMap(runtime),
+    });
+  const envTarget = () => {
+    const env = context().environmentId;
+    return env ? { scope: 'environment' as const, ownerId: env } : { scope: 'global' as const, ownerId: globalEnvironment(db).id };
+  };
+  let current: ScriptResponse | undefined;
+  const selfName = (opts.selfName ?? input.request.name).toLowerCase();
+  const host = (ctx: ResolutionContext): ScriptHost => ({
+    response: (name) => {
+      if (current && name.toLowerCase() === selfName) return current;
+      const r = ctx.response(name);
+      return r ? { status: r.status, headers: r.headers, body: r.body } : undefined;
+    },
+    get: (key) => {
+      if (runtime.has(key)) return runtime.get(key);
+      const v = ctx.variables.get(key);
+      return v ? resolveValue(`{{${key}}}`, ctx).value : undefined;
+    },
+    set: (key, value) => {
+      if (value === null) runtime.delete(key);
+      else runtime.set(key, value);
+    },
+    envGet: (key) => (ctx.variables.has(key) ? resolveValue(`{{${key}}}`, ctx).value : undefined),
+    envSet: (key, value) => {
+      const t = envTarget();
+      setVariable(db, t.scope, t.ownerId, key, typeof value === 'string' ? value : JSON.stringify(value));
+    },
   });
-  const def = input.request;
+
+  let def: RequestDefinition = structuredClone(input.request);
+  const scripts: ScriptRun[] = [];
+  const sources = (phase: 'pre' | 'post'): [string, string][] =>
+    (
+      [
+        ['request', def.scripts?.[phase] ?? ''],
+        ['step', opts.extraScripts?.[phase] ?? ''],
+      ] as [string, string][]
+    ).filter(([, src]) => src.trim() !== '');
+
+  for (const [label, source] of sources('pre')) {
+    const { ctx } = context();
+    const before = toScriptRequest(def);
+    const run = await runScript({ source, phase: 'pre', host: host(ctx), request: before, timeoutMs: SCRIPT_TIMEOUT_MS });
+    const secrets = secretValues(context().ctx);
+    scripts.push({ ...run, source: label, request: undefined, logs: run.logs.map((l) => ({ ...l, message: redactText(l.message, secrets) })) });
+    if (run.request) def = applyScriptRequest(def, before, run.request);
+    if (run.error) return failure(def, { code: 'SCRIPT_ERROR', message: `Pre-request script (${label}): ${run.error}` }, [], scripts);
+  }
+
+  const { ctx, environmentId } = context();
   const auth = effectiveAuth(db, collectionId, def.auth);
   const resolution = resolveRequest(def, ctx, auth);
-  const secrets = resolution.secrets;
+  const secrets = [...resolution.secrets, ...secretValues(ctx)];
+  const redactedRequest = {
+    method: resolution.request.method,
+    url: redactText(resolution.request.url, secrets),
+    headers: redactHeaders(resolution.request.headers, secrets),
+  };
   if (opts.failOnUnresolved && resolution.unresolved.length) {
-    return {
-      historyId: null,
-      snapshotId: null,
-      request: {
-        method: resolution.request.method,
-        url: redactText(resolution.request.url, secrets),
-        headers: redactHeaders(resolution.request.headers, secrets),
-      },
-      status: null,
-      statusText: null,
-      headers: {},
-      cookies: [],
-      body: '',
-      bodyEncoding: 'utf8',
-      truncated: false,
-      contentType: null,
-      size: 0,
-      timing: { totalMs: 0 },
-      error: { code: 'UNRESOLVED', message: `Unresolved: ${resolution.unresolved.map((u) => `{{${u}}}`).join(', ')}` },
-      unresolved: resolution.unresolved,
-      validation: null,
-    };
+    return failure(
+      def,
+      { code: 'UNRESOLVED', message: `Unresolved: ${resolution.unresolved.map((u) => `{{${u}}}`).join(', ')}` },
+      resolution.unresolved,
+      scripts,
+      redactedRequest,
+    );
   }
   const raw = await executeHttp(resolution.request, def.settings, opts.signal);
 
@@ -64,12 +204,6 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
   const textual = isTextual(contentType, raw.body);
   const bodyText = textual ? raw.body.toString('utf8') : raw.body.toString('base64');
   const historyId = newId();
-
-  const redactedRequest = {
-    method: resolution.request.method,
-    url: redactText(resolution.request.url, secrets),
-    headers: redactHeaders(resolution.request.headers, secrets),
-  };
 
   db.insert(requestHistory)
     .values({
@@ -102,6 +236,21 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     validation = validateResponse(db, saved.id, raw.status, contentType, bodyText);
   }
 
+  if (raw.status !== null) {
+    const response: ScriptResponse = {
+      status: raw.status,
+      headers: raw.headers,
+      body: textual ? parseBody(bodyText, contentType) : null,
+      timeMs: raw.timing.totalMs,
+    };
+    current = response;
+    for (const [label, source] of sources('post')) {
+      const run = await runScript({ source, phase: 'post', host: host(context().ctx), response, timeoutMs: SCRIPT_TIMEOUT_MS });
+      const logSecrets = [...secrets, ...secretValues(context().ctx)];
+      scripts.push({ ...run, source: label, logs: run.logs.map((l) => ({ ...l, message: redactText(l.message, logSecrets) })) });
+    }
+  }
+
   return {
     historyId,
     snapshotId,
@@ -119,6 +268,35 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     error: raw.error,
     unresolved: resolution.unresolved,
     validation,
+    scripts,
+  };
+}
+
+function failure(
+  def: RequestDefinition,
+  error: { code: string; message: string },
+  unresolved: string[],
+  scripts: ScriptRun[],
+  request?: SendResult['request'],
+): SendResult {
+  return {
+    historyId: null,
+    snapshotId: null,
+    request: request ?? { method: def.method, url: def.url, headers: {} },
+    status: null,
+    statusText: null,
+    headers: {},
+    cookies: [],
+    body: '',
+    bodyEncoding: 'utf8',
+    truncated: false,
+    contentType: null,
+    size: 0,
+    timing: { totalMs: 0 },
+    error,
+    unresolved,
+    validation: null,
+    scripts,
   };
 }
 

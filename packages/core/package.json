@@ -16,6 +16,7 @@
     "@postguy/shared": "workspace:*",
     "ajv": "^8.20.0",
     "jsonpath-plus": "^11.3.0",
+    "quickjs-emscripten": "^0.32.0",
     "yaml": "^2.9.1"
   }
 }

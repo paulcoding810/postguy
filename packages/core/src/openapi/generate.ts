@@ -150,6 +150,7 @@ export function requestFromOperation(
     auth,
     body: bodyFor(op),
     settings: {},
+    scripts: { pre: '', post: '' },
   };
   const description = [op.description, op.deprecated ? '**Deprecated**' : ''].filter(Boolean).join('\n\n') || null;
   return { def, description, operationId: op.id, fingerprint: fingerprintRequest(def) };
