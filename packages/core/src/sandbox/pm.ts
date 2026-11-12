@@ -104,6 +104,12 @@ const __pmRequest = request ? {
   headers: __headers(request.headers),
   body: { get raw() { return request.body; }, set raw(v) { request.body = v; }, mode: 'raw' },
 } : undefined;
+/** chai's expect, plus expect.fail(message) and expect.fail(actual, expected, message, operator). */
+const __pmExpect = (v) => __expect(v, false);
+__pmExpect.fail = function (actual, expected, message, operator) {
+  if (arguments.length <= 1) throw new Error(actual === undefined ? 'expect.fail()' : String(actual));
+  throw new Error(message !== undefined ? String(message) : 'expected ' + __pmFmt(actual) + ' to ' + (operator ?? 'not equal') + ' ' + __pmFmt(expected));
+};
 const pm = Object.freeze({
   environment: __scope('environment'),
   globals: __scope('globals'),
@@ -111,7 +117,7 @@ const pm = Object.freeze({
   variables: __scope('variables'),
   response: __pmResponse,
   request: __pmRequest,
-  expect: (v) => __expect(v, false),
+  expect: __pmExpect,
   test: (name, fn) => {
     try { fn(); __call('assert', true, String(name)); }
     catch (e) { __call('assert', false, String(name) + ': ' + (e && e.message ? e.message : String(e))); }

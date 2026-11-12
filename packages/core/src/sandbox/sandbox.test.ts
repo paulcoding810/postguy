@@ -154,6 +154,30 @@ describe('Postman compatibility', () => {
     expect(r.request!.headers).toEqual({ A: '2', 'X-Ts': '42' });
   });
 
+  it('supports pm.expect.fail in both forms', async () => {
+    const r = await runScript({
+      phase: 'post',
+      host: host(),
+      response: login,
+      source: `
+        pm.test('message form', () => pm.expect.fail('token was missing'));
+        pm.test('no arguments', () => pm.expect.fail());
+        pm.test('actual and expected', () => pm.expect.fail(404, 200));
+        pm.test('custom message and operator', () => pm.expect.fail(1, 2, 'numbers differ', '==='));
+        pm.test('operator only', () => pm.expect.fail(1, 2, undefined, '>'));
+        pm.test('branch not taken', () => { if (pm.response.code !== 200) pm.expect.fail('unexpected status'); });
+      `,
+    });
+    expect(r.assertions).toEqual([
+      { ok: false, message: 'message form: token was missing' },
+      { ok: false, message: 'no arguments: expect.fail()' },
+      { ok: false, message: 'actual and expected: expected 404 to not equal 200' },
+      { ok: false, message: 'custom message and operator: numbers differ' },
+      { ok: false, message: 'operator only: expected 1 to > 2' },
+      { ok: true, message: 'branch not taken' },
+    ]);
+  });
+
   it('explains unsupported pm.sendRequest', async () => {
     const r = await runScript({ phase: 'post', host: host(), response: login, source: 'pm.sendRequest("http://x", () => {})' });
     expect(r.error).toMatch(/pm.sendRequest is not available/);
