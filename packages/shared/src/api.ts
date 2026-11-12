@@ -296,7 +296,8 @@ export interface ApiRoutes {
   'PATCH /flows/:id': { body: zt.input<typeof UpdateFlowInput>; response: FlowDetail };
   'DELETE /flows/:id': { response: { ok: true } };
   'PUT /flows/:id/graph': { body: zt.input<typeof FlowGraphInput>; response: FlowDetail };
-  'POST /flows/:id/run': { body: { environmentId?: string | null }; response: FlowExecution };
+  'POST /flows/:id/run': { body: { environmentId?: string | null; debug?: boolean }; response: FlowExecution };
+  'POST /executions/:id/continue': { body: { mode: 'continue' | 'step' }; response: { ok: true } };
   'GET /flows/:id/executions': { response: FlowExecution[] };
   'GET /flows/:id/sources': { query: { stepId: string }; response: FlowSource[] };
   'POST /flows/:id/suggest-mappings': { body: { stepId: string }; response: MappingSuggestion[] };

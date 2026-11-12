@@ -81,6 +81,7 @@ export function getGraph(db: Db, flowId: string): FlowGraph {
       overrides: s.overrides,
       expression: s.expression,
       failOnHttpError: s.failOnHttpError,
+      breakpoint: s.breakpoint,
       scripts: loadScripts(db, 'flow_step', stepOwnerId(flowId, s.id)),
       position: s.position,
     })),
@@ -140,7 +141,19 @@ export function saveGraph(db: Db, flowId: string, input: z.output<typeof FlowGra
     tx.delete(flowConnections).where(eq(flowConnections.flowId, flowId)).run();
     input.steps.forEach((s, i) =>
       tx.insert(flowSteps)
-        .values({ id: s.id, flowId, name: s.name.trim(), kind: s.kind, requestId: s.requestId, overrides: s.overrides, expression: s.expression, failOnHttpError: s.failOnHttpError, position: s.position, sortOrder: i })
+        .values({
+          id: s.id,
+          flowId,
+          name: s.name.trim(),
+          kind: s.kind,
+          requestId: s.requestId,
+          overrides: s.overrides,
+          expression: s.expression,
+          failOnHttpError: s.failOnHttpError,
+          breakpoint: s.breakpoint,
+          position: s.position,
+          sortOrder: i,
+        })
         .run(),
     );
     for (const c of input.connections)
@@ -157,6 +170,9 @@ interface Run {
   controller: AbortController;
   events: EventEmitter;
   done: Promise<void>;
+  /** Pause before every step (debug "step through"). */
+  stepMode: boolean;
+  resume: (() => void) | null;
 }
 
 const runs = new Map<string, Run>();
@@ -177,6 +193,32 @@ function executionRow(db: Db, id: string): FlowExecution {
   if (!row) throw notFound('Execution');
   const { runtime: _runtime, ...exec } = row;
   return exec;
+}
+
+/** Pauses before a step when it has a breakpoint or the run is stepping; edits saved meanwhile apply. */
+function debugHook(db: Db, run: Run, flowId: string, executionId: string, emit: (e: FlowEvent) => void) {
+  return async (step: FlowStep) => {
+    const fresh = getGraph(db, flowId).steps.find((s) => s.id === step.id) ?? step;
+    if (!run.stepMode && !fresh.breakpoint) return;
+    if (run.controller.signal.aborted) return;
+    db.update(flowExecutions).set({ status: 'paused', pausedStepId: step.id }).where(eq(flowExecutions.id, executionId)).run();
+    emit({ type: 'execution', execution: executionRow(db, executionId) });
+    await new Promise<void>((resolve) => {
+      run.resume = resolve;
+      run.controller.signal.addEventListener('abort', () => resolve(), { once: true });
+    });
+    run.resume = null;
+    if (run.controller.signal.aborted) return;
+    db.update(flowExecutions).set({ status: 'running', pausedStepId: null }).where(eq(flowExecutions.id, executionId)).run();
+    emit({ type: 'execution', execution: executionRow(db, executionId) });
+  };
+}
+
+export function continueExecution(executionId: string, mode: 'continue' | 'step'): void {
+  const run = runs.get(executionId);
+  if (!run?.resume) throw badRequest('This execution is not paused');
+  run.stepMode = mode === 'step';
+  run.resume();
 }
 
 function stepRow(db: Db, id: string): ExecutionStep {
@@ -350,7 +392,7 @@ function startRun(db: Db, executionId: string, flowId: string, work: (run: Run, 
   const events = new EventEmitter();
   events.setMaxListeners(50);
   const emit = (e: FlowEvent | { type: 'end' }) => events.emit('event', e);
-  const run: Run = { flowId, controller, events, done: Promise.resolve() };
+  const run: Run = { flowId, controller, events, done: Promise.resolve(), stepMode: false, resume: null };
   runs.set(executionId, run);
   run.done = (async () => {
     try {
@@ -372,7 +414,8 @@ function persistence(db: Db, c: StepContext, executionId: string, emit: (e: Flow
   return {
     run: async (step: FlowStep, responses: ReadonlyMap<string, ResponseRecord>) => {
       const p = pending.get(step.id)!;
-      return runStep(c, step, responses, p.logs, p.sink);
+      const fresh = getGraph(db, c.flow.id).steps.find((s) => s.id === step.id) ?? step;
+      return runStep(c, { ...fresh, name: step.name }, responses, p.logs, p.sink);
     },
     onStart: (step: FlowStep) => {
       const rowId = newId();
@@ -422,7 +465,7 @@ function persistence(db: Db, c: StepContext, executionId: string, emit: (e: Flow
   };
 }
 
-export function runFlow(db: Db, flowId: string, environmentId?: string | null): FlowExecution {
+export function runFlow(db: Db, flowId: string, environmentId?: string | null, debug = false): FlowExecution {
   const flow = getFlowRow(db, flowId);
   const graph = getGraph(db, flowId);
   const issues = validateGraph(graph);
@@ -434,9 +477,18 @@ export function runFlow(db: Db, flowId: string, environmentId?: string | null): 
 
   return startRun(db, executionId, flowId, async (run, emit) => {
     emit({ type: 'execution', execution: executionRow(db, executionId) });
+    run.stepMode = debug;
     const c: StepContext = { db, flow, environmentId: envId, signal: run.controller.signal, runtime: new Map(), executionId };
-    const result = await executeFlow(graph, { stopOnError: flow.settings.stopOnError, signal: run.controller.signal, ...persistence(db, c, executionId, emit) });
-    db.update(flowExecutions).set({ status: result.status, error: result.error, finishedAt: Date.now() }).where(eq(flowExecutions.id, executionId)).run();
+    const result = await executeFlow(graph, {
+      stopOnError: flow.settings.stopOnError,
+      signal: run.controller.signal,
+      ...persistence(db, c, executionId, emit),
+      beforeStep: debugHook(db, run, flowId, executionId, emit),
+    });
+    db.update(flowExecutions)
+      .set({ status: result.status, error: result.error, pausedStepId: null, finishedAt: Date.now() })
+      .where(eq(flowExecutions.id, executionId))
+      .run();
     emit({ type: 'execution', execution: executionRow(db, executionId) });
   });
 }

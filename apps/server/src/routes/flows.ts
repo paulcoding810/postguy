@@ -21,8 +21,8 @@ export function flowRoutes(app: FastifyInstance, db: Db) {
   });
   app.put('/flows/:id/graph', async (req) => flows.saveGraph(db, id(req.params), parse(FlowGraphInput, req.body)));
   app.post('/flows/:id/run', async (req) => {
-    const body = parse(z.object({ environmentId: z.string().nullable().optional() }), req.body ?? {});
-    return flows.runFlow(db, id(req.params), body.environmentId);
+    const body = parse(z.object({ environmentId: z.string().nullable().optional(), debug: z.boolean().optional() }), req.body ?? {});
+    return flows.runFlow(db, id(req.params), body.environmentId, body.debug);
   });
   app.get('/flows/:id/executions', async (req) => flows.listExecutions(db, id(req.params)));
   app.get('/flows/:id/sources', async (req) => flows.flowSources(db, id(req.params), parse(z.object({ stepId: z.string() }), req.query).stepId));
@@ -31,6 +31,10 @@ export function flowRoutes(app: FastifyInstance, db: Db) {
   );
 
   app.get('/executions/:id', async (req) => flows.getExecution(db, id(req.params)));
+  app.post('/executions/:id/continue', async (req) => {
+    flows.continueExecution(id(req.params), parse(z.object({ mode: z.enum(['continue', 'step']) }), req.body).mode);
+    return { ok: true };
+  });
   app.post('/executions/:id/stop', async (req) => {
     flows.stopExecution(id(req.params));
     return { ok: true };

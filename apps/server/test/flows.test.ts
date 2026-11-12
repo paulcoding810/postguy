@@ -176,3 +176,62 @@ describe('flows', () => {
     expect(detail.steps.map((s: any) => s.status)).toEqual(['failed', 'skipped']);
   });
 });
+
+describe('flow debugging', () => {
+  const poll = async (id: string, status: string) => {
+    for (let i = 0; i < 100; i++) {
+      const d = (await h.call('GET', `/executions/${id}`)).body;
+      if (d.status === status) return d;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    throw new Error(`execution never reached ${status}`);
+  };
+
+  it('pauses at breakpoints, applies edits made while paused, and steps through', async () => {
+    const { req, flow } = await setup();
+    const graph = (bp: boolean, profileId = '{{Login.data.user.id}}') => ({
+      steps: [
+        step('s1', 'Login', req('Login')),
+        step('s2', 'Profile', req('Get User Profile'), {
+          breakpoint: bp,
+          overrides: { pathParams: [{ id: 'p', key: 'id', value: profileId, enabled: true }], auth: { type: 'bearer', token: '{{Login.data.access_token}}' } },
+        }),
+        step('s3', 'Health', req('Health check')),
+      ],
+      connections: [
+        { id: 'c1', source: 's1', target: 's2' },
+        { id: 'c2', source: 's2', target: 's3' },
+      ],
+    });
+    await h.call('PUT', `/flows/${flow.id}/graph`, graph(true, '999'));
+    const exec = (await h.call('POST', `/flows/${flow.id}/run`, {})).body;
+    const paused = await poll(exec.id, 'paused');
+    expect(paused.pausedStepId).toBe('s2');
+    expect(paused.steps.map((s: any) => s.stepName)).toEqual(['Login']);
+
+    await h.call('PUT', `/flows/${flow.id}/graph`, graph(true));
+    await h.call('POST', `/executions/${exec.id}/continue`, { mode: 'step' });
+    const pausedAgain = await poll(exec.id, 'paused');
+    expect(pausedAgain.pausedStepId).toBe('s3');
+    expect(pausedAgain.steps[1]).toMatchObject({ stepName: 'Profile', status: 'success' });
+    expect(pausedAgain.steps[1].request.url).toBe(`${h.mockUrl}/users/1001`);
+
+    await h.call('POST', `/executions/${exec.id}/continue`, { mode: 'continue' });
+    await waitForExecution(exec.id);
+    const done = (await h.call('GET', `/executions/${exec.id}`)).body;
+    expect(done).toMatchObject({ status: 'success', pausedStepId: null });
+    expect((await h.call('POST', `/executions/${exec.id}/continue`, { mode: 'continue' })).status).toBe(400);
+  });
+
+  it('debug mode pauses before the first step and stop ends a paused run', async () => {
+    const { req, flow } = await setup();
+    await h.call('PUT', `/flows/${flow.id}/graph`, { steps: [step('s1', 'Login', req('Login'))], connections: [] });
+    const exec = (await h.call('POST', `/flows/${flow.id}/run`, { debug: true })).body;
+    expect((await poll(exec.id, 'paused')).pausedStepId).toBe('s1');
+    await h.call('POST', `/executions/${exec.id}/stop`, {});
+    await waitForExecution(exec.id);
+    const done = (await h.call('GET', `/executions/${exec.id}`)).body;
+    expect(done.status).toBe('stopped');
+    expect(done.steps.map((s: any) => s.status)).toEqual(['skipped']);
+  });
+});

@@ -27,6 +27,7 @@ export const FlowStepInput = z.object({
   overrides: StepOverrides.default({}),
   expression: z.string().default(''),
   failOnHttpError: z.boolean().default(true),
+  breakpoint: z.boolean().default(false),
   scripts: Scripts.default({ pre: '', post: '' }),
   position: z.object({ x: z.number(), y: z.number() }).default({ x: 0, y: 0 }),
 });
@@ -77,7 +78,7 @@ export const UpdateFlowInput = z.object({
   settings: z.object({ stopOnError: z.boolean().optional(), stepTimeoutMs: z.number().int().positive().max(600_000).optional() }).optional(),
 });
 
-export type ExecutionStatus = 'running' | 'success' | 'failed' | 'stopped';
+export type ExecutionStatus = 'running' | 'paused' | 'success' | 'failed' | 'stopped';
 export type StepStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped';
 
 export type StepLog = ScriptLog;
@@ -118,6 +119,8 @@ export interface FlowExecution {
   environmentId: string | null;
   status: ExecutionStatus;
   trigger: 'run' | 'rerun';
+  /** Step the debugger is paused before. */
+  pausedStepId: string | null;
   error: string | null;
   startedAt: number;
   finishedAt: number | null;

@@ -13,7 +13,7 @@ import {
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react';
-import { LoaderIcon, PlayIcon, SquareIcon, VariableIcon, WorkflowIcon } from 'lucide-react';
+import { BugIcon, LoaderIcon, PlayIcon, SkipForwardIcon, SquareIcon, StepForwardIcon, VariableIcon, WorkflowIcon } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { newId, type FlowConnection, type FlowGraph, type FlowHandle, type FlowStep, type SavedRequest } from '@postguy/shared';
@@ -77,7 +77,8 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
   const currentId = executionId ?? executions.data?.[0]?.id ?? null;
   const live = useLiveExecution(currentId, flowId);
   const runs = React.useMemo(() => latestByStep(live.data), [live.data]);
-  const running = live.data?.status === 'running';
+  const running = live.data?.status === 'running' || live.data?.status === 'paused';
+  const pausedAt = live.data?.status === 'paused' ? live.data.pausedStepId : null;
 
   const saveNow = React.useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -169,6 +170,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
       overrides: {},
       expression: '',
       failOnHttpError: true,
+      breakpoint: false,
       scripts: { pre: '', post: '' },
       position: freeSpot(desired, g.steps),
     };
@@ -189,7 +191,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
       type: s.kind,
       position: s.position,
       selected: s.id === selected,
-      data: { step: s, method: req?.method ?? null, requestName: req?.name ?? null, run: runs.get(s.id), issue: issueFor(s, graph.steps) },
+      data: { step: s, method: req?.method ?? null, requestName: req?.name ?? null, run: runs.get(s.id), issue: issueFor(s, graph.steps), paused: s.id === pausedAt },
     };
   });
 
@@ -238,16 +240,22 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
 
   const onConnect = (c: Connection) => connect(c.source, c.target, (c.sourceHandle as FlowHandle | null) ?? 'out');
 
-  const run = async () => {
+  const run = async (debug = false) => {
     await saveNow();
     try {
-      const exec = await api('POST /flows/:id/run', { params: { id: flowId }, body: {} });
+      const exec = await api('POST /flows/:id/run', { params: { id: flowId }, body: { debug } });
       qc.setQueryData(flowKeys.execution(exec.id), { ...exec, steps: [] });
       setExecutionId(exec.id);
       await qc.invalidateQueries({ queryKey: flowKeys.executions(flowId) });
     } catch (e) {
       toast.error(errorMessage(e));
     }
+  };
+
+  const resume = async (mode: 'continue' | 'step') => {
+    if (!currentId) return;
+    await saveNow();
+    api('POST /executions/:id/continue', { params: { id: currentId }, body: { mode } }).catch((e) => toast.error(errorMessage(e)));
   };
 
   const stop = () => currentId && api('POST /executions/:id/stop', { params: { id: currentId }, body: {} }).catch((e) => toast.error(errorMessage(e)));
@@ -304,14 +312,36 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
             />
             Stop on error
           </label>
-          {running ? (
+          {pausedAt ? (
+            <>
+              <span className="text-xs text-warning">Paused before “{graph.steps.find((s) => s.id === pausedAt)?.name}”</span>
+              <Tooltip content="Run this step and pause before the next">
+                <Button size="sm" variant="outline" onClick={() => resume('step')}>
+                  <StepForwardIcon /> Step
+                </Button>
+              </Tooltip>
+              <Button size="sm" onClick={() => resume('continue')}>
+                <SkipForwardIcon /> Continue
+              </Button>
+              <Button size="sm" variant="secondary" onClick={stop}>
+                <SquareIcon /> Stop
+              </Button>
+            </>
+          ) : running ? (
             <Button size="sm" variant="secondary" onClick={stop}>
               <SquareIcon /> Stop
             </Button>
           ) : (
-            <Button size="sm" onClick={run} disabled={!graph.steps.length}>
-              <PlayIcon /> Run flow
-            </Button>
+            <>
+              <Tooltip content="Pause before every step; edit inputs while paused">
+                <Button size="sm" variant="outline" onClick={() => run(true)} disabled={!graph.steps.length}>
+                  <BugIcon /> Debug
+                </Button>
+              </Tooltip>
+              <Button size="sm" onClick={() => run()} disabled={!graph.steps.length}>
+                <PlayIcon /> Run flow
+              </Button>
+            </>
           )}
         </div>
       </div>

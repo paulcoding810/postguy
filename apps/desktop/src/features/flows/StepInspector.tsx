@@ -104,6 +104,10 @@ export function StepInspector(props: StepInspectorProps) {
               <Input value={step.name} onChange={(e) => onChange({ name: e.target.value })} aria-invalid={nameTaken} className={cn(nameTaken && 'border-destructive')} />
               {nameTaken && <span className="text-[11px] text-destructive">Another step already uses this name.</span>}
             </div>
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-foreground">Breakpoint: pause before this step</Label>
+              <Switch checked={step.breakpoint} onCheckedChange={(v) => onChange({ breakpoint: v })} />
+            </div>
             {step.kind === 'request' && (
               <>
                 <div className="flex items-center gap-2 text-xs">

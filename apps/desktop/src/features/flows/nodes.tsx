@@ -9,6 +9,7 @@ export interface StepNodeData extends Record<string, unknown> {
   requestName: string | null;
   run: ExecutionStep | undefined;
   issue: string | null;
+  paused: boolean;
 }
 
 export type StepNode = Node<StepNodeData, 'request' | 'condition'>;
@@ -54,10 +55,20 @@ function RunLine({ run }: { run: ExecutionStep | undefined }) {
 
 const handleClass = '!size-2.5 !border-2 !border-background';
 
+function Breakpoint({ on }: { on: boolean }) {
+  return on ? <span title="Breakpoint" className="absolute top-1/2 -left-4 size-2.5 -translate-y-1/2 rounded-full bg-destructive shadow" /> : null;
+}
+
+function PausedBadge({ on }: { on: boolean }) {
+  return on ? <span className="absolute -top-5 left-0 rounded bg-warning px-1.5 text-[10px] font-semibold text-background">Paused here</span> : null;
+}
+
 export function RequestNode({ data, selected }: NodeProps<StepNode>) {
-  const { step, method, requestName, run, issue } = data;
+  const { step, method, requestName, run, issue, paused } = data;
   return (
-    <div className={cn('w-60 rounded-lg border-2 bg-card text-[12px] shadow-sm', BORDER[run?.status ?? 'idle'], selected && 'ring-2 ring-primary/60')}>
+    <div className={cn('relative w-60 rounded-lg border-2 bg-card text-[12px] shadow-sm', paused ? 'border-warning shadow-[0_0_0_3px] shadow-warning/30' : BORDER[run?.status ?? 'idle'], selected && 'ring-2 ring-primary/60')}>
+      <Breakpoint on={step.breakpoint} />
+      <PausedBadge on={paused} />
       <Handle type="target" position={Position.Top} className={cn(handleClass, '!bg-muted-foreground')} />
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <span className={cn('font-mono text-[10px] font-bold', method ? `method-${method}` : 'text-muted-foreground')}>{method ?? '—'}</span>
@@ -81,9 +92,11 @@ export function RequestNode({ data, selected }: NodeProps<StepNode>) {
 }
 
 export function ConditionNode({ data, selected }: NodeProps<StepNode>) {
-  const { step, run, issue } = data;
+  const { step, run, issue, paused } = data;
   return (
-    <div className={cn('relative w-60 rounded-lg border-2 bg-card text-[12px] shadow-sm', BORDER[run?.status ?? 'idle'], selected && 'ring-2 ring-primary/60')}>
+    <div className={cn('relative w-60 rounded-lg border-2 bg-card text-[12px] shadow-sm', paused ? 'border-warning shadow-[0_0_0_3px] shadow-warning/30' : BORDER[run?.status ?? 'idle'], selected && 'ring-2 ring-primary/60')}>
+      <Breakpoint on={step.breakpoint} />
+      <PausedBadge on={paused} />
       <Handle type="target" position={Position.Top} className={cn(handleClass, '!bg-muted-foreground')} />
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <GitBranchIcon className="size-3.5 text-warning" />

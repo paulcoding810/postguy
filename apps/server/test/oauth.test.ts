@@ -11,7 +11,7 @@ afterEach(async () => {
   await h.close();
 });
 
-const stats = async () => (await (await fetch(`${h.mockUrl}/oauth/stats`)).json()).tokenRequests as number;
+const stats = async () => ((await (await fetch(`${h.mockUrl}/oauth/stats`)).json()) as { tokenRequests: number }).tokenRequests;
 
 describe('OAuth 2.0', () => {
   it('fetches, caches and applies client credentials tokens', async () => {

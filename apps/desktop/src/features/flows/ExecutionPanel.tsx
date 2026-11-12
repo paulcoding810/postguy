@@ -8,6 +8,7 @@ import { StatusIcon } from './nodes';
 
 const TONE: Record<FlowExecution['status'], 'success' | 'destructive' | 'secondary' | 'default'> = {
   running: 'default',
+  paused: 'default',
   success: 'success',
   failed: 'destructive',
   stopped: 'secondary',

@@ -44,7 +44,7 @@ export function useLiveExecution(executionId: string | null, flowId: string) {
     queryFn: () => api('GET /executions/:id', { params: { id: executionId! } }),
     enabled: !!executionId,
   });
-  const running = query.data?.status === 'running';
+  const running = query.data?.status === 'running' || query.data?.status === 'paused';
 
   React.useEffect(() => {
     if (!executionId || !running) return;

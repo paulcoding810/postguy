@@ -100,6 +100,8 @@ export interface ExecutorHooks {
   stopOnError: boolean;
   signal?: AbortSignal;
   run: (step: FlowStep, responses: ReadonlyMap<string, ResponseRecord>) => Promise<StepOutcome>;
+  /** Awaited before a step runs; a debugger pauses here. */
+  beforeStep?: (step: FlowStep) => void | Promise<void>;
   onStart?: (step: FlowStep) => void | Promise<void>;
   onFinish?: (step: FlowStep, status: StepStatus, handle: FlowHandle | null, outcome: StepOutcome) => void | Promise<void>;
   onSkip?: (step: FlowStep, reason: string) => void | Promise<void>;
@@ -154,6 +156,8 @@ export async function executeFlow(graph: FlowGraph, hooks: ExecutorHooks, seed?:
       continue;
     }
 
+    await hooks.beforeStep?.(step);
+    if (hooks.signal?.aborted) continue;
     status.set(step.id, 'running');
     await hooks.onStart?.(step);
     let outcome: StepOutcome;
