@@ -1,5 +1,5 @@
 import { asc, eq } from 'drizzle-orm';
-import { redactAuth } from '@postguy/core';
+import { isPostmanCollection, postmanToCollection, redactAuth } from '@postguy/core';
 import {
   Auth,
   RequestDefinition,
@@ -71,9 +71,10 @@ const ExportSchema = z.object({
   collection: ExportedCollectionSchema,
 });
 
+/** Imports a Postguy export or a Postman v2.0/v2.1 collection. */
 export function importCollection(db: Db, data: unknown): Collection {
-  const parsed = ExportSchema.safeParse(data);
-  if (!parsed.success) throw badRequest('Not a valid Postguy collection export', parsed.error.issues.slice(0, 5));
+  const parsed = ExportSchema.safeParse(isPostmanCollection(data) ? postmanToCollection(data) : data);
+  if (!parsed.success) throw badRequest('Not a Postguy or Postman collection', parsed.error.issues.slice(0, 5));
   let root: Collection | null = null;
   db.transaction(() => {
     root = importNode(db, parsed.data.collection, null);

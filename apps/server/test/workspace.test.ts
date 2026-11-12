@@ -146,3 +146,14 @@ describe('partial updates', () => {
     expect((await h.call('GET', `/flows/${f.id}`)).body.settings).toEqual({ stopOnError: false, stepTimeoutMs: 5000 });
   });
 });
+
+describe('Postman import', () => {
+  it('imports a Postman collection through the collection import endpoint', async () => {
+    const { fixture } = await import('@postguy/mock-api');
+    const res = await h.call('POST', '/collections/import', { data: JSON.parse(fixture('shop.postman_collection.json')) });
+    expect(res.status).toBe(200);
+    const tree = (await h.call('GET', '/collections/tree')).body.find((c: any) => c.id === res.body.id);
+    expect(tree.children[0].requests[0].name).toBe('Login');
+    expect(tree.requests.map((r: any) => r.name)).toEqual(['Get User Orders', 'Create order (form)']);
+  });
+});
