@@ -53,7 +53,7 @@ export function authSecretValues(auth: Auth): string[] {
     case 'apikey':
       return [auth.value];
     case 'oauth2':
-      return [auth.clientSecret, auth.accessToken ?? ''];
+      return [auth.clientSecret, auth.accessToken ?? '', auth.password ?? ''];
     default:
       return [];
   }
@@ -66,7 +66,7 @@ export function base64(text: string): string {
   return btoa(bin);
 }
 
-function resolveAuth(auth: Auth, resolve: (s: string) => string): Auth {
+export function resolveAuth(auth: Auth, resolve: (s: string) => string): Auth {
   switch (auth.type) {
     case 'bearer':
       return { ...auth, token: resolve(auth.token) };
@@ -80,6 +80,9 @@ function resolveAuth(auth: Auth, resolve: (s: string) => string): Auth {
         tokenUrl: resolve(auth.tokenUrl),
         clientId: resolve(auth.clientId),
         clientSecret: resolve(auth.clientSecret),
+        scope: auth.scope ? resolve(auth.scope) : auth.scope,
+        username: auth.username ? resolve(auth.username) : auth.username,
+        password: auth.password ? resolve(auth.password) : auth.password,
         accessToken: auth.accessToken ? resolve(auth.accessToken) : auth.accessToken,
       };
     default:

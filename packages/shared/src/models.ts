@@ -38,6 +38,9 @@ export const Auth = z.discriminatedUnion('type', [
     clientId: z.string(),
     clientSecret: z.string(),
     scope: z.string().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    clientAuth: z.enum(['header', 'body']).optional(),
     accessToken: z.string().optional(),
   }),
 ]);

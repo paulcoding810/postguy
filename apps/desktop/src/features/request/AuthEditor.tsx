@@ -1,4 +1,9 @@
-import { InfoIcon } from 'lucide-react';
+import { InfoIcon, KeyRoundIcon, LoaderIcon } from 'lucide-react';
+import * as React from 'react';
+import { toast } from 'sonner';
+import type { OAuthTokenResult } from '@postguy/shared';
+import { Button } from '@/components/ui/button';
+import { api, errorMessage } from '@/lib/api';
 import type { Auth, AuthType } from '@postguy/shared';
 import { Label } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -42,11 +47,13 @@ export function AuthEditor({
   onChange,
   allowInherit = true,
   inheritedFrom,
+  tokenContext,
 }: {
   auth: Auth;
   onChange: (auth: Auth) => void;
   allowInherit?: boolean;
   inheritedFrom?: string | null;
+  tokenContext?: { collectionId: string | null; requestId: string | null };
 }) {
   const types = (Object.keys(LABELS) as AuthType[]).filter((t) => allowInherit || t !== 'inherit');
   const set = <K extends string>(key: K, value: string) => onChange({ ...auth, [key]: value } as Auth);
@@ -133,6 +140,27 @@ export function AuthEditor({
           <Field label="Client secret">
             <TemplateInput value={auth.clientSecret} onChange={(v) => set('clientSecret', v)} fieldLabel="Client secret" />
           </Field>
+          <Field label="Send credentials">
+            <Select value={auth.clientAuth ?? 'header'} onValueChange={(v) => onChange({ ...auth, clientAuth: v as 'header' | 'body' })}>
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="header">As Basic auth header</SelectItem>
+                <SelectItem value="body">In the request body</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          {auth.grantType === 'password' && (
+            <>
+              <Field label="Username">
+                <TemplateInput value={auth.username ?? ''} onChange={(v) => set('username', v)} fieldLabel="OAuth username" />
+              </Field>
+              <Field label="Password">
+                <TemplateInput value={auth.password ?? ''} onChange={(v) => set('password', v)} fieldLabel="OAuth password" />
+              </Field>
+            </>
+          )}
           <Field label="Scope">
             <TemplateInput value={auth.scope ?? ''} onChange={(v) => set('scope', v)} fieldLabel="Scope" />
           </Field>
@@ -144,11 +172,49 @@ export function AuthEditor({
               placeholder="Paste a token or reference {{Login.data.access_token}}"
             />
           </Field>
-          <p className="text-xs text-muted-foreground">
-            The access token is sent as a Bearer header. Automatic token exchange is planned for a later release.
-          </p>
+          {auth.grantType === 'authorization_code' ? (
+            <p className="text-xs text-muted-foreground">The authorization code grant needs a browser sign-in. Paste or reference an access token above.</p>
+          ) : (
+            <TokenButton auth={auth} context={tokenContext} />
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+function TokenButton({ auth, context }: { auth: Auth; context?: { collectionId: string | null; requestId: string | null } }) {
+  const [busy, setBusy] = React.useState(false);
+  const [token, setToken] = React.useState<OAuthTokenResult | null>(null);
+  const get = async () => {
+    setBusy(true);
+    try {
+      setToken(await api('POST /oauth/token', { body: { auth, collectionId: context?.collectionId ?? null, requestId: context?.requestId ?? null, refresh: true } }));
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-2 rounded-md border p-3 text-xs">
+      <p className="text-muted-foreground">
+        Leave the access token empty and Postguy fetches one before sending, then reuses it until it expires.
+      </p>
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" onClick={get} disabled={busy}>
+          {busy ? <LoaderIcon className="animate-spin" /> : <KeyRoundIcon />} Get new token
+        </Button>
+        {token && (
+          <span className="font-mono">
+            {token.tokenType} {token.tokenPreview}
+            <span className="ml-2 font-sans text-muted-foreground">
+              {token.expiresAt ? `expires ${new Date(token.expiresAt).toLocaleTimeString()}` : 'no expiry'}
+              {token.scope ? ` · scope ${token.scope}` : ''}
+            </span>
+          </span>
+        )}
+      </div>
     </div>
   );
 }

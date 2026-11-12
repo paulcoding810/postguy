@@ -89,6 +89,7 @@ export function CollectionSettings() {
                   onChange={setAuth}
                   allowInherit={node.kind === 'folder'}
                   inheritedFrom={inheritedAuthSource(tree.data, node.parentId)}
+                  tokenContext={{ collectionId: node.id, requestId: null }}
                 />
               </TemplateProvider>
               <div className="px-4 pb-4">

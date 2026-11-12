@@ -57,6 +57,31 @@ export function buildMockApi(opts: MockApiOptions = {}) {
     };
   });
 
+  let tokenRequests = 0;
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) =>
+    done(null, Object.fromEntries(new URLSearchParams(body as string))),
+  );
+  /** OAuth 2.0 token endpoint: client_credentials (postguy / shh) and password grants. */
+  app.post<{ Body: Record<string, string> }>('/oauth/token', async (req, reply) => {
+    tokenRequests++;
+    const body = req.body ?? {};
+    let clientId = body.client_id;
+    let clientSecret = body.client_secret;
+    const basic = /^Basic\s+(.+)$/i.exec(req.headers.authorization ?? '');
+    if (basic) [clientId, clientSecret] = Buffer.from(basic[1]!, 'base64').toString().split(':');
+    if (clientId !== 'postguy' || clientSecret !== 'shh') return reply.code(401).send({ error: 'invalid_client' });
+    let user = users[0]!;
+    if (body.grant_type === 'password') {
+      const u = users.find((x) => x.username === body.username && x.password === body.password);
+      if (!u) return reply.code(400).send({ error: 'invalid_grant' });
+      user = u;
+    } else if (body.grant_type !== 'client_credentials') return reply.code(400).send({ error: 'unsupported_grant_type' });
+    const token = `oat_${randomBytes(12).toString('hex')}`;
+    tokens.set(token, { userId: user.id, expiresAt: Date.now() + ttl * 1000 });
+    return { access_token: token, token_type: 'Bearer', expires_in: ttl, scope: body.scope ?? '' };
+  });
+  app.get('/oauth/stats', async () => ({ tokenRequests }));
+
   app.get<{ Params: { id: string } }>('/users/:id', async (req, reply) => {
     const me = authUser(req, reply);
     if (!me) return reply;

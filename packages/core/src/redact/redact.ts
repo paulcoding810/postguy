@@ -54,7 +54,7 @@ export function redactAuth(auth: Auth): Auth {
     case 'apikey':
       return { ...auth, value: keep(auth.value) };
     case 'oauth2':
-      return { ...auth, clientSecret: keep(auth.clientSecret), accessToken: undefined };
+      return { ...auth, clientSecret: keep(auth.clientSecret), password: auth.password ? keep(auth.password) : auth.password, accessToken: undefined };
     default:
       return auth;
   }

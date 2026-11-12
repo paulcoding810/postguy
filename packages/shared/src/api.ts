@@ -186,6 +186,22 @@ export const SyncInput = z.object({
 });
 export type SyncInput = z.input<typeof SyncInput>;
 
+export const OAuthTokenInput = z.object({
+  auth: Auth,
+  collectionId: z.string().nullable().optional(),
+  requestId: z.string().nullable().optional(),
+  refresh: z.boolean().optional(),
+});
+export type OAuthTokenInput = z.input<typeof OAuthTokenInput>;
+
+export interface OAuthTokenResult {
+  tokenPreview: string;
+  tokenType: string;
+  expiresAt: number | null;
+  scope: string | null;
+  cached: boolean;
+}
+
 export interface ReferenceSource {
   requestId: string;
   name: string;
@@ -251,6 +267,7 @@ export interface ApiRoutes {
   'PUT /variables/:scope/:ownerId': { body: { variables: VariableInput[] }; response: Variable[] };
 
   'POST /send': { body: SendInput; response: SendResult };
+  'POST /oauth/token': { body: OAuthTokenInput; response: OAuthTokenResult };
   'POST /resolve-preview': { body: ResolvePreviewInput; response: ResolvedPreview[] };
   'GET /context-variables': { query: { collectionId?: string; requestId?: string; flowId?: string }; response: ContextVariable[] };
 

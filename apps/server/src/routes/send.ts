@@ -1,6 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { resolveTemplate, redactText, MASK, type RefResolution } from '@postguy/core';
-import { ResolvePreviewInput, SendInput, type ContextVariable, type ResolvedPreview } from '@postguy/shared';
+import { OAuthTokenInput, ResolvePreviewInput, SendInput, type ContextVariable, type ResolvedPreview } from '@postguy/shared';
+import { badRequest } from '../lib/errors.ts';
+import { exchangeToken, tokenSummary } from '../services/oauth.ts';
+import { effectiveAuth } from '../services/collections.ts';
 import { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { parse } from '../lib/errors.ts';
@@ -18,6 +21,16 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
       if (!reply.raw.writableFinished) controller.abort();
     });
     return send(db, parse(SendInput, req.body), { signal: controller.signal });
+  });
+
+  app.post('/oauth/token', async (req) => {
+    const input = parse(OAuthTokenInput, req.body);
+    const saved = input.requestId ? getRequest(db, input.requestId) : null;
+    const collectionId = input.collectionId ?? saved?.collectionId ?? null;
+    const auth = effectiveAuth(db, collectionId, input.auth);
+    if (auth.type !== 'oauth2') throw badRequest('This request does not use OAuth 2.0');
+    const { ctx } = buildContext(db, { collectionId, requestId: saved?.id ?? null });
+    return tokenSummary(await exchangeToken(auth, ctx, { refresh: input.refresh }));
   });
 
   app.get('/context-variables', async (req): Promise<ContextVariable[]> => {

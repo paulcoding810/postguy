@@ -85,6 +85,7 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
                   auth={draft.auth}
                   onChange={(v) => set('auth', v)}
                   inheritedFrom={inheritedAuthSource(tree.data, tab.collectionId)}
+                  tokenContext={{ collectionId: tab.collectionId, requestId: tab.requestId }}
                 />
               </TabsContent>
               <TabsContent value="body">

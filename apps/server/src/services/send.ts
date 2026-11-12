@@ -28,6 +28,7 @@ import { buildContext } from './context.ts';
 import { globalEnvironment } from './environments.ts';
 import { executeHttp, isTextual } from './http.ts';
 import { recordSnapshot, validateResponse } from './memory.ts';
+import { exchangeToken, needsTokenExchange } from './oauth.ts';
 import { getRequest } from './requests.ts';
 import { setVariable } from './variables.ts';
 
@@ -181,7 +182,15 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
   }
 
   const { ctx, environmentId } = context();
-  const auth = effectiveAuth(db, collectionId, def.auth);
+  let auth = effectiveAuth(db, collectionId, def.auth);
+  if (needsTokenExchange(auth, ctx)) {
+    try {
+      const t = await exchangeToken(auth, ctx, { signal: opts.signal });
+      auth = { ...auth, accessToken: t.token };
+    } catch (e) {
+      return failure(def, { code: 'OAUTH_ERROR', message: (e as Error).message }, [], scripts);
+    }
+  }
   const resolution = resolveRequest(def, ctx, auth);
   const secrets = [...resolution.secrets, ...secretValues(ctx)];
   const redactedRequest = {
