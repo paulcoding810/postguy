@@ -16,7 +16,7 @@ import {
 import { BugIcon, LoaderIcon, PlayIcon, SkipForwardIcon, SquareIcon, StepForwardIcon, VariableIcon, WorkflowIcon } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
-import { newId, type FlowConnection, type FlowGraph, type FlowHandle, type FlowStep, type SavedRequest } from '@postguy/shared';
+import { newId, type FlowConnection, type FlowDetail, type FlowGraph, type FlowHandle, type FlowStep, type SavedRequest } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EmptyState, Switch, Tooltip } from '@/components/ui/misc';
@@ -67,6 +67,8 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
   const [executionId, setExecutionId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState<'saved' | 'saving' | 'error'>('saved');
   const [varsOpen, setVarsOpen] = React.useState(false);
+  /** Node sizes reported by React Flow; without them it keeps nodes hidden. */
+  const [measured, setMeasured] = React.useState<Record<string, { width: number; height: number }>>({});
   const graphRef = React.useRef(graph);
   graphRef.current = graph;
   const saveTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -97,6 +99,11 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
       });
     return savePromise.current;
   }, [flowId, qc]);
+
+  // Keep the cached flow current, so reopening this tab shows the latest graph, not the one first loaded.
+  React.useEffect(() => {
+    qc.setQueryData<FlowDetail>(flowKeys.flow(flowId), (old) => (old ? { ...old, steps: graph.steps, connections: graph.connections } : old));
+  }, [graph, flowId, qc]);
 
   React.useEffect(() => {
     if (firstRender.current) {
@@ -190,6 +197,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
       id: s.id,
       type: s.kind,
       position: s.position,
+      measured: measured[s.id],
       selected: s.id === selected,
       data: { step: s, method: req?.method ?? null, requestName: req?.name ?? null, run: runs.get(s.id), issue: issueFor(s, graph.steps), paused: s.id === pausedAt },
     };
@@ -215,14 +223,21 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
   });
 
   const onNodesChange = (changes: NodeChange<StepNode>[]) => {
-    const moved = applyNodeChanges(changes.filter((c) => c.type === 'position' || c.type === 'dimensions'), nodes);
+    const sizes = changes.flatMap((c) => (c.type === 'dimensions' && c.dimensions ? [[c.id, c.dimensions] as const] : []));
+    if (sizes.length)
+      setMeasured((m) => {
+        const changed = sizes.filter(([id, d]) => m[id]?.width !== d.width || m[id]?.height !== d.height);
+        return changed.length ? { ...m, ...Object.fromEntries(changed) } : m;
+      });
+    const positions = changes.filter((c) => c.type === 'position' && c.position);
+    const moved = applyNodeChanges(positions, nodes);
     const removed = new Set(changes.filter((c) => c.type === 'remove').map((c) => c.id));
     const select = changes.find((c) => c.type === 'select' && c.selected);
     if (select && select.type === 'select') {
       setSelected(select.id);
       setSelectedEdge(null);
     }
-    if (changes.some((c) => c.type === 'position') || removed.size) {
+    if (positions.length || removed.size) {
       setGraph((g) => ({
         steps: g.steps.filter((s) => !removed.has(s.id)).map((s) => ({ ...s, position: moved.find((n) => n.id === s.id)?.position ?? s.position })),
         connections: g.connections.filter((c) => !removed.has(c.source) && !removed.has(c.target)),
@@ -274,6 +289,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
   const saveMeta = async (patch: { name?: string; settings?: { stopOnError: boolean } }) => {
     try {
       const f = await api('PATCH /flows/:id', { params: { id: flowId }, body: patch });
+      qc.setQueryData<FlowDetail>(flowKeys.flow(flowId), (old) => (old ? { ...old, name: f.name, settings: f.settings } : old));
       qc.invalidateQueries({ queryKey: flowKeys.list });
       if (patch.name) useTabs.getState().onFlowRenamed(flowId, f.name);
     } catch (e) {
