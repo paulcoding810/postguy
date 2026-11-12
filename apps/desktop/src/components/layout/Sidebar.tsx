@@ -21,6 +21,7 @@ import { EnvironmentList } from '@/features/environments/EnvironmentList';
 import { HistoryList } from '@/features/history/HistoryList';
 import { ApiSpecList } from '@/features/openapi/ApiSpecList';
 import { useImportDialog } from '@/features/openapi/ImportDialog';
+import { useCurlDialog } from '@/features/request/curl';
 
 const SECTIONS: { id: SidebarSection; label: string; icon: React.ElementType }[] = [
   { id: 'collections', label: 'Collections', icon: FolderTreeIcon },
@@ -95,6 +96,9 @@ export function SidebarPanel() {
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => useImportDialog.getState().setOpen(true)}>
                 <FileCode2Icon /> Import OpenAPI / Swagger…
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => useCurlDialog.getState().setOpen(true)}>
+                <UploadIcon /> Import cURL…
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

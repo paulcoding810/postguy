@@ -110,3 +110,19 @@ describe('POST /send', () => {
     expect(p.refs.find((r: any) => r.ref === 'password')).toMatchObject({ secret: true, preview: MASK, source: 'environment' });
   });
 });
+
+describe('cURL', () => {
+  it('imports a command and exports a runnable one with variables resolved', async () => {
+    const imp = await h.call('POST', '/import/curl', { command: `curl -X POST '${'{{baseUrl}}'}/auth/login' -H 'Content-Type: application/json' -d '{"username":"john","password":"{{password}}"}'` });
+    expect(imp.status).toBe(200);
+    expect(imp.body.request).toMatchObject({ method: 'POST', url: '{{baseUrl}}/auth/login', body: { mode: 'json' } });
+    expect((await h.call('POST', '/import/curl', { command: 'ls -la' })).status).toBe(422);
+
+    await setupEnv();
+    const exp = (await h.call('POST', '/export/curl', { request: imp.body.request })).body;
+    expect(exp.unresolved).toEqual([]);
+    expect(exp.containsSecrets).toBe(true);
+    expect(exp.command).toContain(`curl -X POST ${h.mockUrl}/auth/login`);
+    expect(exp.command).toContain(`--data-raw '{"username":"john","password":"secret"}'`);
+  });
+});

@@ -10,6 +10,7 @@ import { CollectionSettings } from '@/features/collections/CollectionSettings';
 import { EnvironmentManager } from '@/features/environments/EnvironmentManager';
 import { SaveDialog } from '@/features/request/SaveDialog';
 import { OpenApiImportDialog } from '@/features/openapi/ImportDialog';
+import { CurlDialog } from '@/features/request/CurlDialog';
 
 export function App() {
   useApplyTheme();
@@ -22,6 +23,7 @@ export function App() {
         <CollectionSettings />
         <SaveDialog />
         <OpenApiImportDialog />
+        <CurlDialog />
         <CommandPalette />
         <DialogHost />
         <Toaster theme={theme} position="bottom-right" richColors closeButton />

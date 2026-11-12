@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
-import { resolveTemplate, redactText, MASK, type RefResolution } from '@postguy/core';
-import { OAuthTokenInput, ResolvePreviewInput, SendInput, type ContextVariable, type ResolvedPreview } from '@postguy/shared';
+import { CurlParseError, parseCurl, resolveRequest, resolveTemplate, redactText, toCurl, MASK, type RefResolution } from '@postguy/core';
+import { CurlExportInput, CurlImportInput, OAuthTokenInput, ResolvePreviewInput, SendInput, type ContextVariable, type ResolvedPreview } from '@postguy/shared';
+import { HttpError } from '../lib/errors.ts';
+import { needsTokenExchange } from '../services/oauth.ts';
 import { badRequest } from '../lib/errors.ts';
 import { callbackPage, completeSignIn, exchangeToken, signInStatus, startSignIn, tokenSummary } from '../services/oauth.ts';
 import { effectiveAuth } from '../services/collections.ts';
@@ -31,6 +33,33 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
     if (auth.type !== 'oauth2') throw badRequest('This request does not use OAuth 2.0');
     const { ctx } = buildContext(db, { collectionId, requestId: saved?.id ?? null });
     return tokenSummary(await exchangeToken(auth, ctx, { refresh: input.refresh }));
+  });
+
+  app.post('/import/curl', async (req) => {
+    try {
+      return parseCurl(parse(CurlImportInput, req.body).command);
+    } catch (e) {
+      if (e instanceof CurlParseError) throw new HttpError(422, e.message, 'invalid_curl');
+      throw e;
+    }
+  });
+
+  /** The request as a cURL command with variables and auth resolved, so it runs outside Postguy. */
+  app.post('/export/curl', async (req) => {
+    const input = parse(CurlExportInput, req.body);
+    const saved = input.requestId ? getRequest(db, input.requestId) : null;
+    const collectionId = input.collectionId ?? saved?.collectionId ?? null;
+    const { ctx } = buildContext(db, { collectionId, requestId: saved?.id ?? null });
+    let auth = effectiveAuth(db, collectionId, input.request.auth);
+    if (needsTokenExchange(auth, ctx)) {
+      try {
+        auth = { ...auth, accessToken: (await exchangeToken(auth, ctx)).token };
+      } catch {
+        /* leave the Authorization header out */
+      }
+    }
+    const r = resolveRequest(input.request, ctx, auth);
+    return { command: toCurl(r.request, { insecure: input.request.settings.rejectUnauthorized === false }), containsSecrets: r.secrets.length > 0, unresolved: r.unresolved };
   });
 
   app.post('/oauth/authorize', async (req) => {

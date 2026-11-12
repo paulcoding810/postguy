@@ -9,6 +9,7 @@ import { useTabs } from '@/stores/tabs';
 import { useUi } from '@/stores/ui';
 import { allRequests } from '@/features/collections/treeUtils';
 import { useFlows } from '@/features/flows/queries';
+import { useCurlDialog } from '@/features/request/curl';
 
 interface Item {
   id: string;
@@ -69,6 +70,7 @@ export function CommandPalette() {
       }));
     const actions: Item[] = [
       { id: 'a:new', group: 'Actions', label: 'New request', icon: <FilePlusIcon className="size-3.5" />, run: () => useTabs.getState().newRequest() },
+      { id: 'a:curl', group: 'Actions', label: 'Import cURL…', icon: <FilePlusIcon className="size-3.5" />, run: () => useCurlDialog.getState().setOpen(true) },
       { id: 'a:env', group: 'Actions', label: 'Manage environments', icon: <SettingsIcon className="size-3.5" />, run: () => openEnvManager() },
       {
         id: 'a:theme',

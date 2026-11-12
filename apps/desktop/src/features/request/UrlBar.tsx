@@ -1,4 +1,6 @@
-import { LoaderIcon, SaveIcon, SendIcon, XIcon } from 'lucide-react';
+import { ChevronDownIcon, LoaderIcon, SaveIcon, SendIcon, TerminalIcon, XIcon } from 'lucide-react';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/menu';
+import { applyCurlToTab, copyAsCurl, looksLikeCurl, useCurlDialog } from './curl';
 import { HTTP_METHODS, type HttpMethod } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
 import { Kbd, Tooltip } from '@/components/ui/misc';
@@ -46,7 +48,13 @@ export function UrlBar({ tab }: { tab: RequestTab }) {
           value={displayUrl(draft.url, draft.params)}
           onChange={onUrl}
           fieldLabel="URL"
-          placeholder="Enter URL or paste text, e.g. {{baseUrl}}/users/:id"
+          placeholder="Enter a URL or paste a cURL command, e.g. {{baseUrl}}/users/:id"
+          onPaste={(e) => {
+            const text = e.clipboardData.getData('text');
+            if (!looksLikeCurl(text)) return;
+            e.preventDefault();
+            void applyCurlToTab(tab, text);
+          }}
           onEnter={(e) => {
             e.preventDefault();
             void send(tab);
@@ -65,12 +73,32 @@ export function UrlBar({ tab }: { tab: RequestTab }) {
           </Button>
         </Tooltip>
       )}
-      <Tooltip content={<span>Save <Kbd className="ml-1">{modKey}S</Kbd></span>}>
-        <Button variant="outline" onClick={() => save(tab)} aria-label="Save request">
-          <SaveIcon />
-          {isDirty(tab) && <span className="size-1.5 rounded-full bg-primary" />}
-        </Button>
-      </Tooltip>
+      <div className="flex">
+        <Tooltip content={<span>Save <Kbd className="ml-1">{modKey}S</Kbd></span>}>
+          <Button variant="outline" className="rounded-r-none" onClick={() => save(tab)} aria-label="Save request">
+            <SaveIcon />
+            {isDirty(tab) && <span className="size-1.5 rounded-full bg-primary" />}
+          </Button>
+        </Tooltip>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="icon" className="-ml-px w-7 rounded-l-none" aria-label="More request actions">
+              <ChevronDownIcon />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => save(tab, { saveAs: true })}>
+              <SaveIcon /> Save as…
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => copyAsCurl(tab)}>
+              <TerminalIcon /> Copy as cURL
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => useCurlDialog.getState().setOpen(true)}>
+              <TerminalIcon /> Import cURL…
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }

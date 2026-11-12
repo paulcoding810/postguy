@@ -214,6 +214,23 @@ export interface OAuthSignInStatus {
   token: OAuthTokenResult | null;
 }
 
+export const CurlImportInput = z.object({ command: z.string().min(1).max(1_000_000) });
+export interface CurlImportResult {
+  request: z.output<typeof RequestDefinition>;
+  warnings: string[];
+}
+export const CurlExportInput = z.object({
+  request: RequestDefinition,
+  collectionId: z.string().nullable().optional(),
+  requestId: z.string().nullable().optional(),
+});
+export type CurlExportInput = z.input<typeof CurlExportInput>;
+export interface CurlExportResult {
+  command: string;
+  containsSecrets: boolean;
+  unresolved: string[];
+}
+
 export interface ReferenceSource {
   requestId: string;
   name: string;
@@ -282,6 +299,8 @@ export interface ApiRoutes {
   'POST /oauth/token': { body: OAuthTokenInput; response: OAuthTokenResult };
   'POST /oauth/authorize': { body: OAuthTokenInput; response: OAuthAuthorizeResult };
   'GET /oauth/authorize/:state': { response: OAuthSignInStatus };
+  'POST /import/curl': { body: { command: string }; response: CurlImportResult };
+  'POST /export/curl': { body: CurlExportInput; response: CurlExportResult };
   'POST /resolve-preview': { body: ResolvePreviewInput; response: ResolvedPreview[] };
   'GET /context-variables': { query: { collectionId?: string; requestId?: string; flowId?: string }; response: ContextVariable[] };
 

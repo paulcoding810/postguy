@@ -16,6 +16,7 @@ export interface TemplateInputProps {
   autoFocus?: boolean;
   disabled?: boolean;
   borderless?: boolean;
+  onPaste?: (e: React.ClipboardEvent<HTMLInputElement>) => void;
 }
 
 function triggerAt(value: string, caret: number): { start: number; query: string } | null {
@@ -35,6 +36,7 @@ export function TemplateInput({
   autoFocus,
   disabled,
   borderless,
+  onPaste,
 }: TemplateInputProps) {
   const ctx = useTemplateCtx();
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -172,6 +174,7 @@ export function TemplateInput({
               updateMenu(e.target.value, e.target.selectionStart ?? e.target.value.length);
             }}
             onKeyDown={onKeyDown}
+            onPaste={onPaste}
             onBlur={() => setTimeout(() => setMenu(null), 150)}
             onScroll={(e) => {
               if (layerRef.current) layerRef.current.scrollLeft = e.currentTarget.scrollLeft;
