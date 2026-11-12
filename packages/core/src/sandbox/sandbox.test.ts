@@ -183,3 +183,33 @@ describe('Postman compatibility', () => {
     expect(r.error).toMatch(/pm.sendRequest is not available/);
   });
 });
+
+describe('pm.request.body.update', () => {
+  const pre = (source: string, body: string | null = null) =>
+    runScript({ phase: 'pre', host: host(), request: { method: 'POST', url: 'http://x/a', headers: {}, body }, source });
+
+  it('sets raw bodies from a string, an object or JSON.stringify', async () => {
+    const r = await pre(`const body = { name: 'Ann', tags: [1] }; pm.request.body.update({ mode: "raw", raw: JSON.stringify(body) });`);
+    expect(r.request).toMatchObject({ body: '{"name":"Ann","tags":[1]}', bodyMode: 'raw' });
+    expect((await pre(`pm.request.body.update('plain text')`)).request!.body).toBe('plain text');
+    expect((await pre(`pm.request.body.update({ mode: 'raw', raw: { a: 1 } })`)).request!.body).toBe('{"a":1}');
+    const xml = await pre(`pm.request.body.update({ mode: 'raw', raw: '<a/>', options: { raw: { language: 'xml' } } })`);
+    expect(xml.request).toMatchObject({ body: '<a/>', headers: { 'Content-Type': 'application/xml' } });
+  });
+
+  it('reads and edits the current body', async () => {
+    const r = await pre(`const b = JSON.parse(pm.request.body.raw); b.n += 1; pm.request.body.update({ mode: 'raw', raw: JSON.stringify(b) }); flow.log(pm.request.body.mode, pm.request.body.isEmpty());`, '{"n":1}');
+    expect(r.request!.body).toBe('{"n":2}');
+    expect(r.logs[0]!.message).toBe('raw false');
+  });
+
+  it('builds urlencoded and GraphQL bodies and rejects form-data', async () => {
+    const form = await pre(`pm.request.body.update({ mode: 'urlencoded', urlencoded: [{ key: 'a b', value: 'c&d' }, { key: 'off', value: 'x', disabled: true }, { key: 'n', value: 2 }] })`);
+    expect(form.request).toMatchObject({ body: 'a%20b=c%26d&n=2', bodyMode: 'urlencoded' });
+    const gql = await pre(`pm.request.body.update({ mode: 'graphql', graphql: { query: '{ me { id } }', variables: '{"x":1}' } })`);
+    expect(JSON.parse(gql.request!.body!)).toEqual({ query: '{ me { id } }', variables: { x: 1 } });
+    expect(gql.request!.headers['Content-Type']).toBe('application/json');
+    const bad = await pre(`pm.request.body.update({ mode: 'formdata', formdata: [] })`);
+    expect(bad.error).toMatch(/formdata bodies cannot be set from a script/);
+  });
+});

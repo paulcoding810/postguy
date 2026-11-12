@@ -81,7 +81,7 @@ declare const pm: {
   test(name: string, fn: () => void): void;
   expect: { (value: unknown): any; fail(message?: string): never; fail(actual: unknown, expected: unknown, message?: string, operator?: string): never };
   response: { code: number; status: string; responseTime: number; json(): any; text(): string; headers: { get(name: string): string | undefined; has(name: string): boolean }; to: any };
-  request: { url: { toString(): string }; method: string; headers: { add(h: { key: string; value: unknown }): void; upsert(h: { key: string; value: unknown }): void; remove(name: string): void; get(name: string): string | undefined }; body: { raw: string | null } };
+  request: { url: { toString(): string }; method: string; headers: { add(h: { key: string; value: unknown }): void; upsert(h: { key: string; value: unknown }): void; remove(name: string): void; get(name: string): string | undefined }; body: { raw: string | null; readonly mode: 'none' | 'raw' | 'urlencoded'; readonly urlencoded: { key: string; value: string }[]; isEmpty(): boolean; update(o: string | null | { mode: 'raw' | 'urlencoded' | 'graphql'; raw?: unknown; urlencoded?: { key: string; value: unknown; disabled?: boolean }[] | Record<string, unknown>; graphql?: { query: string; variables?: unknown }; options?: { raw?: { language?: 'json' | 'text' | 'xml' | 'html' | 'javascript' } } }): void } };
   environment: PmScope; globals: PmScope; collectionVariables: PmScope; variables: PmScope;
 };
 interface PmScope { get(key: string): any; set(key: string, value: unknown): void; unset(key: string): void; has(key: string): boolean; replaceIn(text: string): string }

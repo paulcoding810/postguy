@@ -102,7 +102,48 @@ const __pmRequest = request ? {
   get method() { return request.method; },
   set method(v) { request.method = String(v).toUpperCase(); },
   headers: __headers(request.headers),
-  body: { get raw() { return request.body; }, set raw(v) { request.body = v; }, mode: 'raw' },
+  body: {
+    get raw() { return request.body; },
+    set raw(v) { request.body = v == null ? null : typeof v === 'string' ? v : JSON.stringify(v); request.bodyMode = 'raw'; },
+    get mode() { return request.body == null ? 'none' : (request.bodyMode || 'raw'); },
+    get urlencoded() {
+      return request.bodyMode === 'urlencoded' && request.body ? String(request.body).split('&').filter(Boolean).map((p) => { const i = p.indexOf('='); return { key: decodeURIComponent(i < 0 ? p : p.slice(0, i)), value: i < 0 ? '' : decodeURIComponent(p.slice(i + 1)) }; }) : [];
+    },
+    isEmpty() { return request.body == null || request.body === ''; },
+    toString() { return request.body ?? ''; },
+    toJSON() { return { mode: this.mode, raw: request.body }; },
+    update(o) {
+      const contentType = (type) => { if (!__headers(request.headers).has('content-type')) request.headers['Content-Type'] = type; };
+      if (o == null) { request.body = null; request.bodyMode = undefined; return; }
+      if (typeof o === 'string') { request.body = o; request.bodyMode = 'raw'; return; }
+      const mode = o.mode ?? 'raw';
+      if (mode === 'raw') {
+        request.body = o.raw == null ? '' : typeof o.raw === 'string' ? o.raw : JSON.stringify(o.raw);
+        request.bodyMode = 'raw';
+        const lang = o.options && o.options.raw && o.options.raw.language;
+        const types = { json: 'application/json', xml: 'application/xml', html: 'text/html', text: 'text/plain', javascript: 'application/javascript' };
+        if (lang && types[lang]) contentType(types[lang]);
+        return;
+      }
+      if (mode === 'urlencoded') {
+        const list = Array.isArray(o.urlencoded) ? o.urlencoded : Object.entries(o.urlencoded || {}).map(([key, value]) => ({ key, value }));
+        request.body = list.filter((p) => p && !p.disabled && p.key != null).map((p) => encodeURIComponent(p.key) + '=' + encodeURIComponent(p.value == null ? '' : String(p.value))).join('&');
+        request.bodyMode = 'urlencoded';
+        return;
+      }
+      if (mode === 'graphql') {
+        const g = o.graphql || {};
+        let variables = g.variables || {};
+        if (typeof variables === 'string') { try { variables = JSON.parse(variables || '{}'); } catch (e) { throw new Error('pm.request.body.update: graphql variables are not valid JSON'); } }
+        request.body = JSON.stringify({ query: g.query || '', variables });
+        request.bodyMode = 'raw';
+        contentType('application/json');
+        return;
+      }
+      if (mode === 'formdata' || mode === 'file') throw new Error('pm.request.body.update: ' + mode + ' bodies cannot be set from a script; use raw or urlencoded');
+      throw new Error('pm.request.body.update: unknown mode ' + JSON.stringify(mode));
+    },
+  },
 } : undefined;
 /** chai's expect, plus expect.fail(message) and expect.fail(actual, expected, message, operator). */
 const __pmExpect = (v) => __expect(v, false);

@@ -131,3 +131,21 @@ describe('Postman scripts', () => {
     expect((await h.call('POST', '/send', { requestId: me.id, request: me })).body.status).toBe(200);
   });
 });
+
+describe('pm.request.body.update when sending', () => {
+  it('sends the body a pre-request script set, as JSON or form-encoded', async () => {
+    const send = (pre: string, body: Record<string, unknown> = { mode: 'none' }) =>
+      h.call('POST', '/send', { request: { name: 'echo', method: 'POST', url: `${h.mockUrl}/echo`, body, scripts: { pre, post: '' } } }).then((r) => JSON.parse(r.body.body));
+    const json = await send(`const body = { user: 'ann', n: 1 }; pm.request.body.update({ mode: "raw", raw: JSON.stringify(body) });`);
+    expect(json.body).toEqual({ user: 'ann', n: 1 });
+    expect(json.headers['content-type']).toBe('application/json');
+    const form = await send(`pm.request.body.update({ mode: 'urlencoded', urlencoded: [{ key: 'a', value: 'x y' }] })`);
+    expect(form.headers['content-type']).toBe('application/x-www-form-urlencoded');
+    expect(form.body).toEqual({ a: 'x y' });
+    const edited = await send(`const f = pm.request.body.urlencoded; pm.request.body.update({ mode: 'urlencoded', urlencoded: [...f, { key: 'added', value: '1' }] })`, {
+      mode: 'urlencoded',
+      form: [{ id: '1', key: 'kept', value: 'yes', enabled: true }],
+    });
+    expect(edited.body).toEqual({ kept: 'yes', added: '1' });
+  });
+});

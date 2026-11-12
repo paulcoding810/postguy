@@ -167,6 +167,8 @@ export interface ScriptRequest {
   url: string;
   headers: Record<string, string>;
   body: string | null;
+  /** Set by pm.request.body.update / .raw: how the body string should be sent. */
+  bodyMode?: 'raw' | 'urlencoded';
 }
 
 export interface ScriptResponse {

@@ -66,7 +66,13 @@ function toScriptRequest(def: RequestDefinition): ScriptRequest {
     method: def.method,
     url: qs ? `${def.url}${def.url.includes('?') ? '&' : '?'}${qs}` : def.url,
     headers,
-    body: def.body.mode === 'json' || def.body.mode === 'text' ? (def.body.raw ?? '') : null,
+    body:
+      def.body.mode === 'json' || def.body.mode === 'text'
+        ? (def.body.raw ?? '')
+        : def.body.mode === 'urlencoded'
+          ? (def.body.form ?? []).filter((f) => f.enabled && f.key).map((f) => `${encodeURIComponent(f.key)}=${encodeURIComponent(f.value)}`).join('&')
+          : null,
+    ...(def.body.mode === 'urlencoded' && { bodyMode: 'urlencoded' as const }),
   };
 }
 
@@ -87,9 +93,25 @@ function applyScriptRequest(def: RequestDefinition, before: ScriptRequest, after
       enabled: true,
     }));
   }
-  if (after.body !== before.body) {
+  if (after.body !== before.body || (after.bodyMode ?? 'raw') !== (before.bodyMode ?? 'raw')) {
     if (after.body === null || after.body === undefined) next.body = { mode: 'none' };
-    else {
+    else if (after.bodyMode === 'urlencoded') {
+      const decode = (s: string) => {
+        try {
+          return decodeURIComponent(s.replace(/\+/g, ' '));
+        } catch {
+          return s;
+        }
+      };
+      const form = String(after.body)
+        .split('&')
+        .filter(Boolean)
+        .map((pair) => {
+          const i = pair.indexOf('=');
+          return { id: newId(8), key: decode(i < 0 ? pair : pair.slice(0, i)), value: i < 0 ? '' : decode(pair.slice(i + 1)), enabled: true };
+        });
+      next.body = { mode: 'urlencoded', form };
+    } else {
       const raw = typeof after.body === 'string' ? after.body : JSON.stringify(after.body);
       const mode = def.body.mode === 'json' || def.body.mode === 'text' ? def.body.mode : /^\s*[[{]/.test(raw) ? 'json' : 'text';
       next.body = { ...def.body, mode, raw };
