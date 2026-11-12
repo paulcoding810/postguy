@@ -60,7 +60,7 @@ Open the Smart Data panel (⌘J), pick a remembered response and double-click a 
 
 ## Flows
 
-A flow chains saved requests on a canvas (Flows in the sidebar). Add a step and it is connected to the previous one; Postguy maps its inputs from earlier responses, such as `:id` from `Login.data.user.id` and a bearer token from `Login.data.access_token`. Use **Auto-map inputs** after a first run to map values that only exist then.
+A flow chains saved requests on a canvas (Flows in the sidebar). In **Add step**, tick several requests to add them as a chain in the order ticked, or right-click a collection or folder and choose **Create flow from folder**. New steps connect to the previous one; Postguy maps its inputs from earlier responses, such as `:id` from `Login.data.user.id` and a bearer token from `Login.data.access_token`. Use **Auto-map inputs** after a first run to map values that only exist then.
 
 - Step names are reference names: `{{Login.data.access_token}}` reads the Login step's response from the current run only, never a stale one. A step with an unresolved reference fails instead of sending.
 - Condition steps branch on expressions such as `{{$res.Login.status}} == 200 && {{Login.data.user.role}} != 'admin'`.

@@ -12,7 +12,9 @@ import {
   PencilIcon,
   SettingsIcon,
   Trash2Icon,
+  WorkflowIcon,
 } from 'lucide-react';
+import { usePendingSteps } from '@/features/flows/pending';
 import * as React from 'react';
 import { toast } from 'sonner';
 import type { CollectionTreeNode } from '@postguy/shared';
@@ -108,6 +110,18 @@ export function useTreeActions() {
         const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
         await downloadText(`${node.name}.openapi.${format}`, text, format === 'json' ? 'application/json' : 'application/yaml');
       }),
+    flowFromFolder: (node: CollectionTreeNode) =>
+      run(async () => {
+        const choices = collectRequests(node).map((r) => ({ kind: 'request' as const, requestId: r.id, name: r.name }));
+        if (!choices.length) {
+          toast.message('This folder has no requests yet');
+          return;
+        }
+        const flow = await api('POST /flows', { body: { name: node.name, collectionId: node.id } });
+        usePendingSteps.getState().queue(flow.id, choices);
+        await qc.invalidateQueries({ queryKey: ['flows'] });
+        useTabs.getState().openFlow(flow);
+      }),
     renameRequest: (id: string, current: string) =>
       run(async () => {
         const name = await prompt({ title: 'Rename request', initial: current });
@@ -135,6 +149,11 @@ export function useTreeActions() {
         }
       }),
   };
+}
+
+/** Requests in the order the sidebar shows them: sub-folders first, then the folder's own. */
+function collectRequests(node: CollectionTreeNode): CollectionTreeNode['requests'] {
+  return [...node.children.flatMap(collectRequests), ...node.requests];
 }
 
 function collectRequestIds(node: CollectionTreeNode): string[] {
@@ -202,6 +221,9 @@ function FolderNode({
       </Item>
       <Item onSelect={() => actions.newFolder(node.id)}>
         <FolderPlusIcon /> New folder
+      </Item>
+      <Item onSelect={() => actions.flowFromFolder(node)}>
+        <WorkflowIcon /> Create flow from {node.kind === 'collection' ? 'collection' : 'folder'}
       </Item>
       <Sep />
       <Item onSelect={() => openSettings(node.id)}>

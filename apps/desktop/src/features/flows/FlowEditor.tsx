@@ -16,7 +16,7 @@ import {
 import { BugIcon, LoaderIcon, PlayIcon, SkipForwardIcon, SquareIcon, StepForwardIcon, VariableIcon, WorkflowIcon } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
-import { newId, type FlowConnection, type FlowDetail, type FlowGraph, type FlowHandle, type FlowStep, type SavedRequest } from '@postguy/shared';
+import { newId, type FlowConnection, type FlowDetail, type FlowGraph, type FlowHandle, type FlowStep, type MappingSuggestion, type SavedRequest } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { EmptyState, Switch, Tooltip } from '@/components/ui/misc';
@@ -28,6 +28,7 @@ import { useTabs } from '@/stores/tabs';
 import { allRequests } from '@/features/collections/treeUtils';
 import { VariablesTable } from '@/features/environments/VariablesTable';
 import { AddStepMenu, type AddChoice } from './AddStepMenu';
+import { usePendingSteps } from './pending';
 import { applySuggestions, describeMappings, uniqueStepName } from './automap';
 import { ExecutionPanel } from './ExecutionPanel';
 import { nodeTypes, type StepNode } from './nodes';
@@ -128,11 +129,12 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
   const updateStep = (id: string, patch: Partial<FlowStep>) =>
     setGraph((g) => ({ ...g, steps: g.steps.map((s) => (s.id === id ? { ...s, ...patch } : s)) }));
 
+  /** Maps a step's inputs from earlier responses; `quiet` skips the toasts and returns what was mapped. */
   const autoMap = React.useCallback(
-    async (stepId: string, quiet = false) => {
+    async (stepId: string, quiet = false): Promise<MappingSuggestion[]> => {
       await saveNow();
       const step = graphRef.current.steps.find((s) => s.id === stepId);
-      if (!step?.requestId) return;
+      if (!step?.requestId) return [];
       try {
         const [suggestions, req] = await Promise.all([
           api('POST /flows/:id/suggest-mappings', { params: { id: flowId }, body: { stepId } }),
@@ -140,13 +142,17 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
         ]);
         if (!suggestions.length) {
           if (!quiet) toast.message('Nothing to map', { description: 'Inputs already have values, or previous steps have no remembered response yet. Run the flow once and try again.' });
-          return;
+          return [];
         }
         const current = graphRef.current.steps.find((s) => s.id === stepId)!;
-        updateStep(stepId, { overrides: applySuggestions(current, req, suggestions) });
-        toast.success(`Mapped ${suggestions.length} input${suggestions.length > 1 ? 's' : ''} in "${current.name}"`, { description: describeMappings(suggestions) });
+        const overrides = applySuggestions(current, req, suggestions);
+        graphRef.current = { ...graphRef.current, steps: graphRef.current.steps.map((s) => (s.id === stepId ? { ...s, overrides } : s)) };
+        updateStep(stepId, { overrides });
+        if (!quiet) toast.success(`Mapped ${suggestions.length} input${suggestions.length > 1 ? 's' : ''} in "${current.name}"`, { description: describeMappings(suggestions) });
+        return suggestions;
       } catch (e) {
         toast.error(errorMessage(e));
+        return [];
       }
     },
     [flowId, qc, saveNow],
@@ -158,38 +164,77 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
     const conn: FlowConnection = { id: newId(8), source, target, handle };
     setGraph((g) => ({ ...g, connections: [...g.connections, conn] }));
     const targetStep = graphRef.current.steps.find((s) => s.id === target);
-    if (targetStep?.kind === 'request') setTimeout(() => void autoMap(target, true), 0);
+    if (targetStep?.kind === 'request')
+      setTimeout(async () => {
+        const mapped = await autoMap(target, true);
+        if (mapped.length) toast.success(`Mapped ${mapped.length} input${mapped.length > 1 ? 's' : ''} in "${targetStep.name}"`, { description: describeMappings(mapped) });
+      }, 0);
   };
 
-  const addStep = (choice: AddChoice) => {
+  /** Adds steps as a chain after the selected step (or the flow's only end), then maps their inputs in order. */
+  const addSteps = (choices: AddChoice[]) => {
+    if (!choices.length) return;
     const g = graphRef.current;
-    const from = g.steps.find((s) => s.id === selected) ?? sinkOf(g);
-    const id = newId(8);
+    let from = g.steps.find((s) => s.id === selected) ?? sinkOf(g);
     const taken = g.steps.map((s) => s.name);
-    const desired = from
-      ? { x: from.position.x + (from.kind === 'condition' ? -150 : 0), y: from.position.y + (from.kind === 'condition' ? 150 : 130) }
-      : rf.screenToFlowPosition({ x: window.innerWidth / 3, y: window.innerHeight / 3 });
-    const step: FlowStep = {
-      id,
-      name: uniqueStepName(choice.kind === 'request' ? choice.name : 'Condition', taken),
-      kind: choice.kind,
-      requestId: choice.kind === 'request' ? choice.requestId : null,
-      overrides: {},
-      expression: '',
-      failOnHttpError: true,
-      breakpoint: false,
-      scripts: { pre: '', post: '' },
-      position: freeSpot(desired, g.steps),
-    };
-    setGraph((cur) => ({ ...cur, steps: [...cur.steps, step] }));
-    setSelected(id);
-    setInspectorTab('inputs');
-    if (from) {
-      const handle: FlowHandle = from.kind === 'condition' ? 'true' : 'out';
-      setTimeout(() => connect(from.id, id, handle), 0);
+    const placed = [...g.steps];
+    const added: FlowStep[] = [];
+    const links: FlowConnection[] = [];
+    for (const choice of choices) {
+      const desired = from
+        ? { x: from.position.x + (from.kind === 'condition' ? -150 : 0), y: from.position.y + (from.kind === 'condition' ? 150 : 130) }
+        : rf.screenToFlowPosition({ x: window.innerWidth / 3, y: window.innerHeight / 3 });
+      const step: FlowStep = {
+        id: newId(8),
+        name: uniqueStepName(choice.kind === 'request' ? choice.name : 'Condition', taken),
+        kind: choice.kind,
+        requestId: choice.kind === 'request' ? choice.requestId : null,
+        overrides: {},
+        expression: '',
+        failOnHttpError: true,
+        breakpoint: false,
+        scripts: { pre: '', post: '' },
+        position: freeSpot(desired, placed),
+      };
+      if (from) links.push({ id: newId(8), source: from.id, target: step.id, handle: from.kind === 'condition' ? 'true' : 'out' });
+      taken.push(step.name);
+      placed.push(step);
+      added.push(step);
+      from = step;
     }
+    const next = { steps: [...g.steps, ...added], connections: [...g.connections, ...links] };
+    graphRef.current = next;
+    setGraph(next);
+    setSelected(added.at(-1)!.id);
+    setInspectorTab('inputs');
     setTimeout(() => rf.fitView({ padding: 0.2, maxZoom: 1, duration: 300 }), 50);
+    void (async () => {
+      const results: string[] = [];
+      for (const step of added) {
+        if (step.kind !== 'request' || !g.steps.length && step === added[0]) continue;
+        const mapped = await autoMap(step.id, true);
+        if (mapped.length) results.push(`${step.name}: ${describeMappings(mapped)}`);
+      }
+      const what = added.length > 1 ? `Added ${added.length} steps` : `Added "${added[0]!.name}"`;
+      if (results.length) toast.success(`${what} and mapped their inputs`, { description: results.join('\n') });
+      else if (added.length > 1) toast.success(what);
+    })();
   };
+
+  // Steps queued by "Create flow from folder": taken inside the timer so a re-run effect adds them once.
+  const addStepsRef = React.useRef(addSteps);
+  addStepsRef.current = addSteps;
+  const pending = usePendingSteps((st) => st.byFlow[flowId]);
+  React.useEffect(() => {
+    if (!pending?.length) return;
+    const timer = setTimeout(() => {
+      const steps = usePendingSteps.getState().byFlow[flowId];
+      if (!steps?.length) return;
+      usePendingSteps.getState().take(flowId);
+      addStepsRef.current(steps);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [pending, flowId]);
 
   const nodes: StepNode[] = graph.steps.map((s) => {
     const req = s.requestId ? requests.get(s.requestId) : undefined;
@@ -312,7 +357,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
         />
         <span className="text-[11px] text-muted-foreground">{saving === 'saving' ? 'Saving…' : saving === 'error' ? 'Not saved' : 'Saved'}</span>
         <div className="ml-auto flex items-center gap-2">
-          <AddStepMenu onAdd={addStep} />
+          <AddStepMenu onAdd={addSteps} />
           <Tooltip content="Flow variables, available to every step">
             <Button variant="ghost" size="sm" onClick={() => setVarsOpen(true)}>
               <VariableIcon /> Variables
@@ -390,9 +435,9 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
                       <WorkflowIcon className="size-6 text-primary" />
                       <div className="text-sm font-medium">Build a flow from saved requests</div>
                       <p className="max-w-xs text-xs text-muted-foreground">
-                        Add a request, then add the next one. Steps connect automatically and their inputs are mapped from earlier responses.
+                        Tick the requests to run, in order. They are connected into a chain and their inputs are mapped from earlier responses. You can also right-click a folder and choose Create flow.
                       </p>
-                      <AddStepMenu onAdd={addStep} label="Add first step" variant="default" />
+                      <AddStepMenu onAdd={addSteps} label="Add first step" variant="default" />
                     </div>
                   </div>
                 )}
