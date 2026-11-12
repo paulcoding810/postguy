@@ -202,6 +202,18 @@ export interface OAuthTokenResult {
   cached: boolean;
 }
 
+export interface OAuthAuthorizeResult {
+  state: string;
+  authorizationUrl: string;
+  redirectUri: string;
+}
+
+export interface OAuthSignInStatus {
+  status: 'pending' | 'done' | 'error';
+  error: string | null;
+  token: OAuthTokenResult | null;
+}
+
 export interface ReferenceSource {
   requestId: string;
   name: string;
@@ -268,6 +280,8 @@ export interface ApiRoutes {
 
   'POST /send': { body: SendInput; response: SendResult };
   'POST /oauth/token': { body: OAuthTokenInput; response: OAuthTokenResult };
+  'POST /oauth/authorize': { body: OAuthTokenInput; response: OAuthAuthorizeResult };
+  'GET /oauth/authorize/:state': { response: OAuthSignInStatus };
   'POST /resolve-preview': { body: ResolvePreviewInput; response: ResolvedPreview[] };
   'GET /context-variables': { query: { collectionId?: string; requestId?: string; flowId?: string }; response: ContextVariable[] };
 

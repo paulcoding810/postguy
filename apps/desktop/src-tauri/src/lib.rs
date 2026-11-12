@@ -114,6 +114,7 @@ pub fn run() {
     let sidecar = Arc::new(Sidecar::default());
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(sidecar.clone())
         .setup({
             let sidecar = sidecar.clone();

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { resolveTemplate, redactText, MASK, type RefResolution } from '@postguy/core';
 import { OAuthTokenInput, ResolvePreviewInput, SendInput, type ContextVariable, type ResolvedPreview } from '@postguy/shared';
 import { badRequest } from '../lib/errors.ts';
-import { exchangeToken, tokenSummary } from '../services/oauth.ts';
+import { callbackPage, completeSignIn, exchangeToken, signInStatus, startSignIn, tokenSummary } from '../services/oauth.ts';
 import { effectiveAuth } from '../services/collections.ts';
 import { z } from 'zod';
 import type { Db } from '../db/client.ts';
@@ -31,6 +31,25 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
     if (auth.type !== 'oauth2') throw badRequest('This request does not use OAuth 2.0');
     const { ctx } = buildContext(db, { collectionId, requestId: saved?.id ?? null });
     return tokenSummary(await exchangeToken(auth, ctx, { refresh: input.refresh }));
+  });
+
+  app.post('/oauth/authorize', async (req) => {
+    const input = parse(OAuthTokenInput, req.body);
+    const saved = input.requestId ? getRequest(db, input.requestId) : null;
+    const collectionId = input.collectionId ?? saved?.collectionId ?? null;
+    const auth = effectiveAuth(db, collectionId, input.auth);
+    if (auth.type !== 'oauth2') throw badRequest('This request does not use OAuth 2.0');
+    const { ctx } = buildContext(db, { collectionId, requestId: saved?.id ?? null });
+    const address = app.server.address();
+    const port = typeof address === 'object' && address ? address.port : Number((req.headers.host ?? '').split(':')[1] || 80);
+    return startSignIn(auth, ctx, `http://127.0.0.1:${port}`);
+  });
+
+  app.get('/oauth/authorize/:state', async (req) => signInStatus(parse(z.object({ state: z.string() }), req.params).state));
+
+  app.get('/oauth/callback', async (req, reply) => {
+    const result = await completeSignIn(req.query as Record<string, string | undefined>);
+    return reply.code(result.ok ? 200 : 400).type('text/html; charset=utf-8').send(callbackPage(result.ok, result.message));
   });
 
   app.get('/context-variables', async (req): Promise<ContextVariable[]> => {

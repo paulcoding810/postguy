@@ -88,6 +88,8 @@ Pre-request scripts run before variables are resolved and can edit `request.url`
 
 Bearer, Basic, API key and OAuth 2.0. For the client-credentials and password grants, leave the access token empty: Postguy fetches a token from the token URL, reuses it until it expires, and masks it everywhere.
 
+For the authorization-code grant, choose **Sign in with OAuth 2.0**. Postguy opens the provider in your browser with PKCE, receives the redirect on `http://127.0.0.1:<port>/oauth/callback` (the loopback redirect recommended for native apps), exchanges the code, and refreshes the token with the refresh token when it expires. The port is the local server's, which changes between launches of the packaged app, so the provider must accept any loopback port. Tokens are held in memory, so you sign in again after restarting.
+
 ## OpenAPI sync
 
 Open a spec under OpenAPI and choose **Sync & versions**. Postguy compares the new version operation by operation, shows the effect on your requests, and on apply creates requests for new operations, regenerates the ones you have not edited, keeps edited ones, and leaves requests of removed operations in place. Any two stored versions can be compared.

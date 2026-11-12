@@ -1,4 +1,6 @@
-import { InfoIcon, KeyRoundIcon, LoaderIcon } from 'lucide-react';
+import { InfoIcon, KeyRoundIcon, LoaderIcon, LogInIcon } from 'lucide-react';
+import { Switch } from '@/components/ui/misc';
+import { openExternal } from '@/lib/openExternal';
 import * as React from 'react';
 import { toast } from 'sonner';
 import type { OAuthTokenResult } from '@postguy/shared';
@@ -131,6 +133,11 @@ export function AuthEditor({
               </SelectContent>
             </Select>
           </Field>
+          {auth.grantType === 'authorization_code' && (
+            <Field label="Authorization URL">
+              <TemplateInput value={auth.authUrl ?? ''} onChange={(v) => set('authUrl', v)} fieldLabel="Authorization URL" placeholder="https://provider.example/oauth/authorize" />
+            </Field>
+          )}
           <Field label="Token URL">
             <TemplateInput value={auth.tokenUrl} onChange={(v) => set('tokenUrl', v)} fieldLabel="Token URL" />
           </Field>
@@ -172,11 +179,15 @@ export function AuthEditor({
               placeholder="Paste a token or reference {{Login.data.access_token}}"
             />
           </Field>
-          {auth.grantType === 'authorization_code' ? (
-            <p className="text-xs text-muted-foreground">The authorization code grant needs a browser sign-in. Paste or reference an access token above.</p>
-          ) : (
-            <TokenButton auth={auth} context={tokenContext} />
+          {auth.grantType === 'authorization_code' && (
+            <Field label="PKCE">
+              <div className="flex items-center gap-2">
+                <Switch checked={auth.usePkce !== false} onCheckedChange={(v) => onChange({ ...auth, usePkce: v })} />
+                <span className="text-xs text-muted-foreground">Recommended; required by most providers for desktop apps</span>
+              </div>
+            </Field>
           )}
+          {auth.grantType === 'authorization_code' ? <SignInButton auth={auth} context={tokenContext} /> : <TokenButton auth={auth} context={tokenContext} />}
         </>
       )}
     </div>
@@ -215,6 +226,71 @@ function TokenButton({ auth, context }: { auth: Auth; context?: { collectionId: 
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+function SignInButton({ auth, context }: { auth: Auth; context?: { collectionId: string | null; requestId: string | null } }) {
+  const [state, setState] = React.useState<'idle' | 'waiting'>('idle');
+  const [token, setToken] = React.useState<OAuthTokenResult | null>(null);
+  const [redirect, setRedirect] = React.useState<string | null>(null);
+  const cancelled = React.useRef(false);
+  React.useEffect(() => {
+    cancelled.current = false;
+    return () => {
+      cancelled.current = true;
+    };
+  }, []);
+
+  const signIn = async () => {
+    try {
+      const start = await api('POST /oauth/authorize', { body: { auth, collectionId: context?.collectionId ?? null, requestId: context?.requestId ?? null } });
+      setRedirect(start.redirectUri);
+      setState('waiting');
+      await openExternal(start.authorizationUrl);
+      const deadline = Date.now() + 5 * 60_000;
+      while (!cancelled.current && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const s = await api('GET /oauth/authorize/:state', { params: { state: start.state } });
+        if (s.status === 'done') {
+          setToken(s.token);
+          toast.success('Signed in');
+          break;
+        }
+        if (s.status === 'error') {
+          toast.error(s.error ?? 'Sign-in failed');
+          break;
+        }
+      }
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setState('idle');
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border p-3 text-xs">
+      <p className="text-muted-foreground">
+        Sign in opens the provider in your browser. After you approve, it returns to Postguy and the token is used for this request,
+        refreshed when it expires.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="outline" onClick={signIn} disabled={state === 'waiting'}>
+          {state === 'waiting' ? <LoaderIcon className="animate-spin" /> : <LogInIcon />} {state === 'waiting' ? 'Waiting for the browser…' : 'Sign in with OAuth 2.0'}
+        </Button>
+        {token && (
+          <span className="font-mono">
+            {token.tokenType} {token.tokenPreview}
+            <span className="ml-2 font-sans text-muted-foreground">{token.expiresAt ? `expires ${new Date(token.expiresAt).toLocaleTimeString()}` : 'no expiry'}</span>
+          </span>
+        )}
+      </div>
+      {redirect && (
+        <p className="text-muted-foreground">
+          Redirect URI: <span className="font-mono select-text">{redirect}</span>. Register http://127.0.0.1 loopback redirects with your provider.
+        </p>
+      )}
     </div>
   );
 }

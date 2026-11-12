@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,6 +58,33 @@ export function buildMockApi(opts: MockApiOptions = {}) {
   });
 
   let tokenRequests = 0;
+  const codes = new Map<string, { clientId: string; redirectUri: string; challenge: string | null; userId: number }>();
+  const refreshTokens = new Map<string, number>();
+  const issue = (userId: number, scope = '', withRefresh = false) => {
+    const token = `oat_${randomBytes(12).toString('hex')}`;
+    tokens.set(token, { userId, expiresAt: Date.now() + ttl * 1000 });
+    const out: Record<string, unknown> = { access_token: token, token_type: 'Bearer', expires_in: ttl, scope };
+    if (withRefresh) {
+      const rt = `ort_${randomBytes(12).toString('hex')}`;
+      refreshTokens.set(rt, userId);
+      out.refresh_token = rt;
+    }
+    return out;
+  };
+
+  /** OAuth 2.0 authorization endpoint that signs in "john" automatically and redirects back with a code. */
+  app.get<{ Querystring: Record<string, string> }>('/oauth/authorize', async (req, reply) => {
+    const q = req.query;
+    if (q.response_type !== 'code' || !q.redirect_uri || !['postguy', 'postguy-public'].includes(q.client_id ?? ''))
+      return reply.code(400).send({ error: 'invalid_request' });
+    if (q.client_id === 'postguy-public' && !q.code_challenge) return reply.code(400).send({ error: 'invalid_request', error_description: 'PKCE required' });
+    const code = `code_${randomBytes(8).toString('hex')}`;
+    codes.set(code, { clientId: q.client_id!, redirectUri: q.redirect_uri, challenge: q.code_challenge ?? null, userId: users[0]!.id });
+    const target = new URL(q.redirect_uri);
+    target.searchParams.set('code', code);
+    if (q.state) target.searchParams.set('state', q.state);
+    return reply.redirect(target.toString());
+  });
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) =>
     done(null, Object.fromEntries(new URLSearchParams(body as string))),
   );
@@ -69,7 +96,25 @@ export function buildMockApi(opts: MockApiOptions = {}) {
     let clientSecret = body.client_secret;
     const basic = /^Basic\s+(.+)$/i.exec(req.headers.authorization ?? '');
     if (basic) [clientId, clientSecret] = Buffer.from(basic[1]!, 'base64').toString().split(':');
-    if (clientId !== 'postguy' || clientSecret !== 'shh') return reply.code(401).send({ error: 'invalid_client' });
+    const publicClient = clientId === 'postguy-public' && !clientSecret;
+    if (!publicClient && (clientId !== 'postguy' || clientSecret !== 'shh')) return reply.code(401).send({ error: 'invalid_client' });
+    if (body.grant_type === 'authorization_code') {
+      const c = codes.get(body.code ?? '');
+      codes.delete(body.code ?? '');
+      if (!c || c.clientId !== clientId || c.redirectUri !== body.redirect_uri) return reply.code(400).send({ error: 'invalid_grant' });
+      if (c.challenge) {
+        const hash = createHash('sha256').update(body.code_verifier ?? '').digest('base64url');
+        if (hash !== c.challenge) return reply.code(400).send({ error: 'invalid_grant', error_description: 'PKCE verification failed' });
+      }
+      return issue(c.userId, body.scope ?? '', true);
+    }
+    if (body.grant_type === 'refresh_token') {
+      const userId = refreshTokens.get(body.refresh_token ?? '');
+      if (!userId) return reply.code(400).send({ error: 'invalid_grant' });
+      refreshTokens.delete(body.refresh_token!);
+      return issue(userId, body.scope ?? '', true);
+    }
+    if (publicClient) return reply.code(401).send({ error: 'invalid_client' });
     let user = users[0]!;
     if (body.grant_type === 'password') {
       const u = users.find((x) => x.username === body.username && x.password === body.password);

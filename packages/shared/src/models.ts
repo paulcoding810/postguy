@@ -41,6 +41,7 @@ export const Auth = z.discriminatedUnion('type', [
     username: z.string().optional(),
     password: z.string().optional(),
     clientAuth: z.enum(['header', 'body']).optional(),
+    usePkce: z.boolean().optional(),
     accessToken: z.string().optional(),
   }),
 ]);

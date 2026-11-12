@@ -197,7 +197,8 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
       const t = await exchangeToken(auth, ctx, { signal: opts.signal });
       auth = { ...auth, accessToken: t.token };
     } catch (e) {
-      return failure(def, { code: 'OAUTH_ERROR', message: (e as Error).message }, [], scripts);
+      const code = (e as { code?: string }).code === 'oauth_sign_in_required' ? 'OAUTH_SIGN_IN_REQUIRED' : 'OAUTH_ERROR';
+      return failure(def, { code, message: (e as Error).message }, [], scripts);
     }
   }
   const resolution = resolveRequest(def, ctx, auth);

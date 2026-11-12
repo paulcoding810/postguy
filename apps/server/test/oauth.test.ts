@@ -46,3 +46,54 @@ describe('OAuth 2.0', () => {
     expect(res.historyId).toBeNull();
   });
 });
+
+describe('OAuth 2.0 authorization code', () => {
+  it('signs in through the browser redirect with PKCE, then sends and refreshes', async () => {
+    const auth = {
+      type: 'oauth2',
+      grantType: 'authorization_code',
+      authUrl: `${h.mockUrl}/oauth/authorize`,
+      tokenUrl: `${h.mockUrl}/oauth/token`,
+      clientId: 'postguy-public',
+      clientSecret: '',
+      scope: 'profile',
+    };
+    const request = { name: 'Me', method: 'GET', url: `${h.mockUrl}/users/1001`, auth };
+    const before = (await h.call('POST', '/send', { request })).body;
+    expect(before.error.code).toBe('OAUTH_SIGN_IN_REQUIRED');
+
+    const start = (await h.call('POST', '/oauth/authorize', { auth })).body;
+    const url = new URL(start.authorizationUrl);
+    expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(url.searchParams.get('redirect_uri')).toBe(start.redirectUri);
+    expect(start.redirectUri).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/oauth\/callback$/);
+    expect((await h.call('GET', `/oauth/authorize/${start.state}`)).body.status).toBe('pending');
+
+    const provider = await fetch(start.authorizationUrl, { redirect: 'manual' });
+    const back = new URL(provider.headers.get('location')!);
+    expect(back.searchParams.get('state')).toBe(start.state);
+    const cb = await h.app.inject({ url: `/oauth/callback${back.search}` });
+    expect(cb.statusCode).toBe(200);
+    expect(cb.body).toContain('Signed in');
+
+    const status = (await h.call('GET', `/oauth/authorize/${start.state}`)).body;
+    expect(status).toMatchObject({ status: 'done', error: null, token: { tokenType: 'Bearer', scope: 'profile' } });
+    expect((await h.call('POST', '/send', { request })).body.status).toBe(200);
+
+    const replay = await h.app.inject({ url: `/oauth/callback${back.search}` });
+    expect(replay.statusCode).toBe(400);
+
+    const refreshed = (await h.call('POST', '/oauth/token', { auth, refresh: true })).body;
+    expect(refreshed.cached).toBe(false);
+    expect((await h.call('POST', '/send', { request })).body.status).toBe(200);
+  });
+
+  it('rejects unknown state and reports provider errors', async () => {
+    expect((await h.app.inject({ url: '/oauth/callback?state=nope&code=x' })).statusCode).toBe(400);
+    const auth = { type: 'oauth2', grantType: 'authorization_code', authUrl: `${h.mockUrl}/oauth/authorize`, tokenUrl: `${h.mockUrl}/oauth/token`, clientId: 'postguy', clientSecret: 'shh' };
+    const start = (await h.call('POST', '/oauth/authorize', { auth })).body;
+    const denied = await h.app.inject({ url: `/oauth/callback?state=${start.state}&error=access_denied&error_description=User%20said%20no` });
+    expect(denied.body).toContain('access_denied: User said no');
+    expect((await h.call('GET', `/oauth/authorize/${start.state}`)).body).toMatchObject({ status: 'error', error: 'access_denied: User said no' });
+  });
+});

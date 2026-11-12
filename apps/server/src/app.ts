@@ -35,7 +35,7 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
   registerErrorHandler(app);
 
   app.addHook('onRequest', async (req, reply) => {
-    if (req.method === 'OPTIONS' || req.url === '/health') return;
+    if (req.method === 'OPTIONS' || req.url === '/health' || req.url.startsWith('/oauth/callback?')) return;
     if (!tokenMatches(req.headers.authorization, opts.token)) {
       return reply.code(401).send({ error: { code: 'unauthorized', message: 'Invalid server token' } });
     }
