@@ -1,4 +1,9 @@
-import { HistoryIcon } from 'lucide-react';
+import { FileDownIcon, HistoryIcon } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/menu';
+import { api, errorMessage } from '@/lib/api';
+import { downloadText } from '@/features/collections/transfer';
 import type { FlowExecution, FlowExecutionDetail } from '@postguy/shared';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/misc';
@@ -52,6 +57,40 @@ export function ExecutionPanel({
             <Badge variant={TONE[detail.status]} className="capitalize">{detail.status}</Badge>
             {detail.finishedAt && <span className="text-muted-foreground">{formatMs(detail.finishedAt - detail.startedAt)}</span>}
             {detail.error && <span className="truncate text-destructive">{detail.error}</span>}
+            {detail.status !== 'running' && detail.status !== 'paused' && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="xs" className="ml-auto">
+                    <FileDownIcon /> Report
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {(
+                    [
+                      ['md', 'Markdown', 'text/markdown'],
+                      ['html', 'HTML', 'text/html'],
+                      ['json', 'JSON', 'application/json'],
+                    ] as const
+                  ).map(([format, label, type]) => (
+                    <DropdownMenuItem
+                      key={format}
+                      onSelect={async () => {
+                        try {
+                          const data = await api('GET /executions/:id/report', { params: { id: detail.id }, query: { format } });
+                          const text = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+                          const stamp = new Date(detail.startedAt).toISOString().slice(0, 19).replace(/[:T]/g, '-');
+                          await downloadText(`flow-report-${stamp}.${format}`, text, type);
+                        } catch (e) {
+                          toast.error(errorMessage(e));
+                        }
+                      }}
+                    >
+                      {label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </>
         )}
       </div>

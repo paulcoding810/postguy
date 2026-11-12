@@ -235,3 +235,24 @@ describe('flow debugging', () => {
     expect(done.steps.map((s: any) => s.status)).toEqual(['skipped']);
   });
 });
+
+describe('execution reports', () => {
+  it('exports markdown, html and json with credentials masked', async () => {
+    const { req, flow } = await setup();
+    await h.call('PUT', `/flows/${flow.id}/graph`, {
+      steps: [step('s1', 'Login', req('Login'), { scripts: { pre: '', post: 'flow.assert(response.status === 200, "logged in")' } })],
+      connections: [],
+    });
+    const exec = await run(flow.id);
+    const token = exec.steps[0].response.body.data.access_token;
+    const json = (await h.call('GET', `/executions/${exec.id}/report?format=json`)).body;
+    expect(json).toMatchObject({ flow: 'Checkout', status: 'success', summary: { steps: 1, succeeded: 1, assertions: { passed: 1, failed: 0 } } });
+    for (const format of ['md', 'html']) {
+      const res = await h.app.inject({ url: `/executions/${exec.id}/report?format=${format}`, headers: { authorization: 'Bearer test-token' } });
+      expect(res.body).toContain('Login');
+      expect(res.body).not.toContain(token);
+    }
+    expect(JSON.stringify(json)).not.toContain(token);
+    expect(json.steps[0].response.body).toContain('"access_token": "••••••"');
+  });
+});

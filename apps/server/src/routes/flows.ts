@@ -4,6 +4,7 @@ import { CreateFlowInput, FlowGraphInput, UpdateFlowInput } from '@postguy/share
 import type { Db } from '../db/client.ts';
 import { parse } from '../lib/errors.ts';
 import * as flows from '../services/flows.ts';
+import { buildReport, reportHtml, reportMarkdown } from '../services/report.ts';
 
 const IdParams = z.object({ id: z.string().min(1) });
 const StepParams = z.object({ id: z.string().min(1), stepId: z.string().min(1) });
@@ -34,6 +35,13 @@ export function flowRoutes(app: FastifyInstance, db: Db) {
   app.post('/executions/:id/continue', async (req) => {
     flows.continueExecution(id(req.params), parse(z.object({ mode: z.enum(['continue', 'step']) }), req.body).mode);
     return { ok: true };
+  });
+  app.get('/executions/:id/report', async (req, reply) => {
+    const { format } = parse(z.object({ format: z.enum(['json', 'md', 'html']).default('md') }), req.query);
+    const report = buildReport(db, id(req.params));
+    if (format === 'json') return report;
+    if (format === 'html') return reply.type('text/html; charset=utf-8').send(reportHtml(report));
+    return reply.type('text/markdown; charset=utf-8').send(reportMarkdown(report));
   });
   app.post('/executions/:id/stop', async (req) => {
     flows.stopExecution(id(req.params));

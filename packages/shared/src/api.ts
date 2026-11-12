@@ -302,6 +302,7 @@ export interface ApiRoutes {
   'GET /flows/:id/sources': { query: { stepId: string }; response: FlowSource[] };
   'POST /flows/:id/suggest-mappings': { body: { stepId: string }; response: MappingSuggestion[] };
   'GET /executions/:id': { response: FlowExecutionDetail };
+  'GET /executions/:id/report': { query: { format?: 'json' | 'md' | 'html' }; response: unknown };
   'POST /executions/:id/stop': { body: Record<string, never>; response: { ok: true } };
   'POST /executions/:id/steps/:stepId/rerun': { body: Record<string, never>; response: FlowExecution };
 }

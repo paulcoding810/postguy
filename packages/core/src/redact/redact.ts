@@ -63,3 +63,19 @@ export function redactAuth(auth: Auth): Auth {
 export function redactUrl(url: string, secrets: Iterable<string>): string {
   return redactText(url, secrets);
 }
+
+const SENSITIVE_KEY = /(token|secret|password|passwd|authorization|api[-_]?key|cookie|session|credential|private[-_]?key)/i;
+
+/** Masks values under credential-like keys anywhere in a JSON value. */
+export function redactJson(value: unknown, secrets: Iterable<string> = [], depth = 0): unknown {
+  const list = [...secrets];
+  if (depth > 50) return value;
+  if (typeof value === 'string') return redactText(value, list);
+  if (Array.isArray(value)) return value.map((v) => redactJson(v, list, depth + 1));
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) out[k] = SENSITIVE_KEY.test(k) && v !== null && typeof v !== 'object' ? MASK : redactJson(v, list, depth + 1);
+    return out;
+  }
+  return value;
+}
