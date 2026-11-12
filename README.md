@@ -94,7 +94,7 @@ Open a spec under OpenAPI and choose **Sync & versions**. Postguy compares the n
 
 ## Import
 
-Collections import from a Postguy export or a Postman v2.0/v2.1 file. Postman scripts are kept as comments because the `pm.*` API is not available.
+Collections import from a Postguy export or a Postman v2.0/v2.1 file. Postman scripts run as they are through a `pm.*` compatibility layer: `pm.test`, `pm.expect` (chai-style), `pm.response`, `pm.request`, `pm.environment`, `pm.globals`, `pm.collectionVariables`, `pm.variables`, and the legacy `postman.*` and `tests[...]` forms. `pm.sendRequest` is not available; chain requests in a flow instead.
 
 ## Secrets
 

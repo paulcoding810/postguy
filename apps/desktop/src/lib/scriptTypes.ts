@@ -76,6 +76,16 @@ declare const flow: {
 };
 /** Reads or saves variables in the active environment (globals when none is active) */
 declare const env: { get(key: string): any; set(key: string, value: unknown): void };
+/** Postman compatibility: pm.test, pm.expect, pm.response, pm.request, pm.environment, pm.globals, pm.collectionVariables, pm.variables */
+declare const pm: {
+  test(name: string, fn: () => void): void;
+  expect(value: unknown): any;
+  response: { code: number; status: string; responseTime: number; json(): any; text(): string; headers: { get(name: string): string | undefined; has(name: string): boolean }; to: any };
+  request: { url: { toString(): string }; method: string; headers: { add(h: { key: string; value: unknown }): void; upsert(h: { key: string; value: unknown }): void; remove(name: string): void; get(name: string): string | undefined }; body: { raw: string | null } };
+  environment: PmScope; globals: PmScope; collectionVariables: PmScope; variables: PmScope;
+};
+interface PmScope { get(key: string): any; set(key: string, value: unknown): void; unset(key: string): void; has(key: string): boolean; replaceIn(text: string): string }
+declare const tests: Record<string, boolean>;
 declare const console: { log(...v: unknown[]): void; info(...v: unknown[]): void; warn(...v: unknown[]): void; error(...v: unknown[]): void };
 ${input.phase === 'pre' ? '/** The outgoing request; edit it to change what is sent */\ndeclare const request: PgRequest;' : '/** The response of this request */\ndeclare const response: ' + selfType + ';'}
 `;

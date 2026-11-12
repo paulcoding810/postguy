@@ -1,5 +1,6 @@
 import { getQuickJS, type QuickJSContext, type QuickJSHandle } from 'quickjs-emscripten';
 import type { ScriptAssertion, ScriptRequest, ScriptResponse, ScriptRun, StepLog } from '@postguy/shared';
+import { PM_PRELUDE } from './pm.ts';
 
 export interface ScriptHost {
   /** A named response visible to this script, or undefined. */
@@ -7,7 +8,8 @@ export interface ScriptHost {
   get(key: string): unknown;
   set(key: string, value: unknown): void;
   envGet(key: string): unknown;
-  envSet(key: string, value: unknown): void;
+  /** Saves a variable; `scope` is where Postman scripts asked for it (environment by default). */
+  envSet(key: string, value: unknown, scope?: 'environment' | 'globals' | 'collection'): void;
 }
 
 export interface ScriptInput {
@@ -38,7 +40,7 @@ const env = Object.freeze({
 const console = Object.freeze({ log: __log('info'), info: __log('info'), warn: __log('warn'), error: __log('error'), debug: __log('info') });
 const request = __call('request');
 const response = __call('currentResponse');
-`;
+${PM_PRELUDE}`;
 const PRELUDE_LINES = PRELUDE.split('\n').length;
 
 let warm: ReturnType<typeof getQuickJS> | null = null;
@@ -105,7 +107,7 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
           out = input.host.envGet(String(args[0]));
           break;
         case 'envSet':
-          input.host.envSet(String(args[0]), args[1]);
+          input.host.envSet(String(args[0]), args[1], (args[2] as 'environment' | 'globals' | 'collection' | undefined) ?? undefined);
           break;
         case 'assert':
           assertions.push({ ok: !!args[0], message: String(args[1]) });

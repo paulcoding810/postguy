@@ -170,6 +170,7 @@ export interface ScriptRequest {
 
 export interface ScriptResponse {
   status: number;
+  statusText?: string;
   headers: Record<string, string>;
   body: unknown;
   timeMs?: number;

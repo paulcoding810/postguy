@@ -23,7 +23,7 @@ import {
 import type { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { requestHistory } from '../db/schema.ts';
-import { effectiveAuth } from './collections.ts';
+import { effectiveAuth, rootOf } from './collections.ts';
 import { buildContext } from './context.ts';
 import { globalEnvironment } from './environments.ts';
 import { executeHttp, isTextual } from './http.ts';
@@ -31,7 +31,7 @@ import { recordSnapshot, validateResponse } from './memory.ts';
 import { afterSend } from './maintenance.ts';
 import { exchangeToken, needsTokenExchange } from './oauth.ts';
 import { getRequest } from './requests.ts';
-import { setVariable } from './variables.ts';
+import { listVariables, replaceVariables, setVariable } from './variables.ts';
 
 export const HISTORY_BODY_LIMIT = 5 * 1024 * 1024;
 export const SCRIPT_TIMEOUT_MS = 2000;
@@ -156,9 +156,17 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
       else runtime.set(key, value);
     },
     envGet: (key) => (ctx.variables.has(key) ? resolveValue(`{{${key}}}`, ctx).value : undefined),
-    envSet: (key, value) => {
-      const t = envTarget();
-      setVariable(db, t.scope, t.ownerId, key, typeof value === 'string' ? value : JSON.stringify(value));
+    envSet: (key, value, scope) => {
+      const root = scope === 'collection' ? rootOf(db, collectionId) : null;
+      const t = root
+        ? { scope: 'collection' as const, ownerId: root.id }
+        : scope === 'globals'
+          ? { scope: 'global' as const, ownerId: globalEnvironment(db).id }
+          : envTarget();
+      if (value === null) {
+        const rest = listVariables(db, t.scope, t.ownerId, true).filter((v) => v.key !== key);
+        replaceVariables(db, t.scope, t.ownerId, rest.map(({ key: k, value: val, isSecret, enabled }) => ({ key: k, value: val, isSecret, enabled })));
+      } else setVariable(db, t.scope, t.ownerId, key, typeof value === 'string' ? value : JSON.stringify(value));
     },
   });
 
@@ -250,6 +258,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
   if (raw.status !== null) {
     const response: ScriptResponse = {
       status: raw.status,
+      statusText: raw.statusText ?? undefined,
       headers: raw.headers,
       body: textual ? parseBody(bodyText, contentType) : null,
       timeMs: raw.timing.totalMs,

@@ -101,19 +101,16 @@ function tryJson(s: unknown): unknown {
   }
 }
 
-/** Postman scripts use the pm.* API, which is not available; they are kept as comments. */
+/** Postman scripts run through the sandbox's pm.* compatibility layer. */
 function scripts(events: unknown): { pre: string; post: string } {
   const out = { pre: '', post: '' };
   if (!Array.isArray(events)) return out;
   for (const e of events as Obj[]) {
     const exec = Array.isArray(e.script?.exec) ? e.script.exec.join('\n') : typeof e.script?.exec === 'string' ? e.script.exec : '';
     if (!exec.trim()) continue;
-    const commented = `// Imported from Postman. The pm.* API is not available; rewrite with flow.* (see Snippets).\n${exec
-      .split('\n')
-      .map((l: string) => `// ${l}`)
-      .join('\n')}\n`;
-    if (e.listen === 'prerequest') out.pre = commented;
-    else if (e.listen === 'test') out.post = commented;
+    const script = `// Imported from Postman; runs with Postguy's pm.* compatibility layer.\n${exec}\n`;
+    if (e.listen === 'prerequest') out.pre = script;
+    else if (e.listen === 'test') out.post = script;
   }
   return out;
 }

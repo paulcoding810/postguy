@@ -105,3 +105,29 @@ describe('scripts in flows', () => {
     expect(after.steps.at(-1).request.url).toBe(`${h.mockUrl}/users/1001`);
   });
 });
+
+describe('Postman scripts', () => {
+  it('runs an imported Postman test script and stores collection variables', async () => {
+    const res = await h.call('POST', '/collections/import', {
+      data: {
+        info: { name: 'PM', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+        variable: [{ key: 'baseUrl', value: h.mockUrl }],
+        item: [
+          {
+            name: 'Login',
+            event: [{ listen: 'test', script: { exec: ["pm.test('status 200', () => pm.response.to.have.status(200));", "pm.collectionVariables.set('token', pm.response.json().data.access_token);"] } }],
+            request: { method: 'POST', url: '{{baseUrl}}/auth/login', body: { mode: 'raw', raw: '{"username":"john","password":"secret"}', options: { raw: { language: 'json' } } } },
+          },
+          { name: 'Me', request: { method: 'GET', url: '{{baseUrl}}/users/1001', auth: { type: 'bearer', bearer: [{ key: 'token', value: '{{token}}' }] } } },
+        ],
+      },
+    });
+    const root = (await h.call('GET', '/collections/tree')).body.find((c: any) => c.id === res.body.id);
+    const [loginRow, meRow] = root.requests;
+    const login = (await h.call('GET', `/requests/${loginRow.id}`)).body;
+    const sent = (await h.call('POST', '/send', { requestId: login.id, request: login })).body;
+    expect(sent.scripts[0].assertions).toEqual([{ ok: true, message: 'status 200' }]);
+    const me = (await h.call('GET', `/requests/${meRow.id}`)).body;
+    expect((await h.call('POST', '/send', { requestId: me.id, request: me })).body.status).toBe(200);
+  });
+});

@@ -17,7 +17,8 @@ describe('Postman import', () => {
     ]);
     const login = c.folders[0]!.requests[0]!;
     expect(login).toMatchObject({ name: 'Login', method: 'POST', url: '{{baseUrl}}/auth/login', auth: { type: 'none' }, body: { mode: 'json' } });
-    expect(login.scripts.post).toContain("// pm.test('ok'");
+    expect(login.scripts.post).toContain("pm.test('ok', () => pm.response.to.have.status(200));");
+    expect(login.scripts.post).not.toContain("// pm.test");
     const orders = c.requests[0]!;
     expect(orders.url).toBe('{{baseUrl}}/users/:id/orders');
     expect(orders.auth).toEqual({ type: 'inherit' });

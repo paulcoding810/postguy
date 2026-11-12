@@ -87,3 +87,75 @@ describe('runScript', () => {
     expect(r.logs[0]!.message).toBe('undefined');
   });
 });
+
+describe('Postman compatibility', () => {
+  const login = { status: 200, statusText: 'OK', headers: { 'Content-Type': 'application/json' }, body: { data: { access_token: 'abc', user: { id: 1001, tags: ['a'] } } }, timeMs: 12 };
+
+  it('runs typical Postman tests and variable calls', async () => {
+    const env: Record<string, unknown> = {};
+    const scopes: string[] = [];
+    const h: ScriptHost = {
+      response: () => undefined,
+      get: () => undefined,
+      set: () => undefined,
+      envGet: (k) => env[k],
+      envSet: (k, v, scope) => {
+        env[k] = v;
+        scopes.push(`${k}:${scope ?? 'environment'}`);
+      },
+    };
+    const r = await runScript({
+      phase: 'post',
+      host: h,
+      response: login,
+      source: `
+        pm.test("Status code is 200", function () { pm.response.to.have.status(200); });
+        pm.test("Body has token", () => {
+          const json = pm.response.json();
+          pm.expect(json.data.access_token).to.be.a('string').and.not.be.empty;
+          pm.expect(json.data.user).to.have.property('id', 1001);
+          pm.expect(json.data.user.tags).to.include('a');
+          pm.expect(pm.response.headers.get('content-type')).to.include('json');
+          pm.expect(pm.response.responseTime).to.be.below(500);
+        });
+        pm.test("Fails", () => pm.expect(pm.response.code).to.eql(201));
+        pm.collectionVariables.set("token", pm.response.json().data.access_token);
+        pm.environment.set("userId", pm.response.json().data.user.id);
+        pm.globals.set("g", 1);
+        postman.setEnvironmentVariable("legacy", "x");
+        tests["legacy test"] = responseCode.code === 200;
+        pm.response.to.be.ok;
+      `,
+    });
+    expect(r.error).toBeNull();
+    expect(r.assertions).toEqual([
+      { ok: true, message: 'Status code is 200' },
+      { ok: true, message: 'Body has token' },
+      { ok: false, message: 'Fails: expected 200 to deeply equal 201' },
+      { ok: true, message: 'legacy test' },
+    ]);
+    expect(env).toEqual({ token: 'abc', userId: 1001, g: 1, legacy: 'x' });
+    expect(scopes).toEqual(['token:collection', 'userId:environment', 'g:globals', 'legacy:environment']);
+  });
+
+  it('edits the request through pm.request in pre-request scripts', async () => {
+    const r = await runScript({
+      phase: 'pre',
+      host: host(),
+      request: { method: 'GET', url: 'http://x/a', headers: { A: '1' }, body: null },
+      source: `
+        pm.request.headers.add({ key: 'X-Ts', value: 42 });
+        pm.request.headers.upsert({ key: 'a', value: '2' });
+        pm.variables.set('local', pm.variables.replaceIn('{{missing}}'));
+        if (pm.info.eventName !== 'prerequest') throw new Error('wrong event');
+      `,
+    });
+    expect(r.error).toBeNull();
+    expect(r.request!.headers).toEqual({ A: '2', 'X-Ts': '42' });
+  });
+
+  it('explains unsupported pm.sendRequest', async () => {
+    const r = await runScript({ phase: 'post', host: host(), response: login, source: 'pm.sendRequest("http://x", () => {})' });
+    expect(r.error).toMatch(/pm.sendRequest is not available/);
+  });
+});
