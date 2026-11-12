@@ -4,7 +4,16 @@
     "beforeBuildCommand": "pnpm --filter @postguy/server bundle && pnpm build"
   },
   "bundle": {
-    "externalBin": ["binaries/node"],
-    "resources": { "resources/server/": "server/" }
+    "externalBin": [
+      "binaries/node"
+    ],
+    "resources": {
+      "resources/server/": "server/"
+    },
+    "macOS": {
+      "entitlements": "Entitlements.plist",
+      "minimumSystemVersion": "11.0",
+      "hardenedRuntime": true
+    }
   }
 }

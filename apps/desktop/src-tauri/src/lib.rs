@@ -55,7 +55,14 @@ fn start_sidecar(app: &tauri::AppHandle, script: PathBuf, state: Arc<Sidecar>) -
     let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
     let log = std::fs::File::create(data_dir.join("server.log")).map_err(|e| e.to_string())?;
-    let mut child = Command::new(&node)
+    let mut command = Command::new(&node);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NO_WINDOW: no console window for the background server.
+        command.creation_flags(0x0800_0000);
+    }
+    let mut child = command
         .arg(&script)
         .args(["--port", "0", "--parent-pid", &std::process::id().to_string(), "--data-dir"])
         .arg(&data_dir)

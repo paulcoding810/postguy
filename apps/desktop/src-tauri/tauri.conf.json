@@ -29,6 +29,27 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"]
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "publisher": "Postguy",
+    "copyright": "Copyright \u00a9 2026 Postguy",
+    "category": "DeveloperTool",
+    "shortDescription": "Local-first API workspace",
+    "longDescription": "Postguy imports OpenAPI specs, sends requests, remembers responses, and chains requests into automated flows. Everything stays on your machine.",
+    "linux": {
+      "deb": {
+        "section": "devel"
+      }
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
   }
 }

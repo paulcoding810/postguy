@@ -106,7 +106,9 @@ Variables marked secret, and auth credentials, are masked in history, previews a
 
 ## Packaging
 
-`pnpm build:app` bundles the server with esbuild into `src-tauri/resources/server` (with the native SQLite module, QuickJS WebAssembly and migrations) and ships Node as a Tauri sidecar. If the local Node links shared libraries (Homebrew's does), the official build of the same version is downloaded from nodejs.org and verified against its published SHA-256 checksums. The app starts the server on a free port with a random token, stores data in the OS app-data folder (`server.log` sits there too), and stops it on exit. Code signing and notarization are not configured.
+`pnpm build:app` bundles the server with esbuild into `src-tauri/resources/server` (with the native SQLite module, QuickJS WebAssembly and migrations) and ships Node as a Tauri sidecar. If the local Node links shared libraries (Homebrew's does), the official build of the same version is downloaded from nodejs.org and verified against its published SHA-256 checksums. The app starts the server on a free port with a random token, stores data in the OS app-data folder (`server.log` sits there too), and stops it on exit.
+
+Releases for macOS (Apple Silicon and Intel), Windows and Linux are built by GitHub Actions, with macOS signing and notarization when Apple credentials are configured. See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Status
 
