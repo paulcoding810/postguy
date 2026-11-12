@@ -37,6 +37,7 @@ export function buildMockApi(opts: MockApiOptions = {}) {
   app.get('/health', async () => ({ status: 'ok', time: new Date().toISOString() }));
 
   app.get('/openapi.yaml', async (_req, reply) => reply.type('application/yaml').send(fixture('mock-api.openapi.yaml')));
+  app.get('/openapi.v2.yaml', async (_req, reply) => reply.type('application/yaml').send(fixture('mock-api.openapi.v2.yaml')));
   app.get('/openapi.json', async (_req, reply) => reply.type('application/json').send(fixture('mock-api.openapi-3.1.json')));
 
   app.post<{ Body: { username?: string; password?: string } }>('/auth/login', async (req, reply) => {

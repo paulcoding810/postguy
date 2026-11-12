@@ -19,3 +19,4 @@ export * from './flow/expression.ts';
 export * from './flow/executor.ts';
 export * from './flow/mapping.ts';
 export * from './sandbox/sandbox.ts';
+export * from './openapi/diff.ts';

@@ -148,6 +148,44 @@ export interface ContextVariable {
   preview: string;
 }
 
+export interface OperationSummary {
+  id: string;
+  method: string;
+  path: string;
+  summary?: string;
+}
+
+export interface SpecDiffSummary {
+  added: OperationSummary[];
+  removed: OperationSummary[];
+  changed: (OperationSummary & { changes: string[] })[];
+  unchanged: number;
+  servers: { before: string[]; after: string[] } | null;
+  info: { before: string; after: string } | null;
+}
+
+export type SyncAction = 'create' | 'update' | 'keep-edited' | 'orphaned' | 'unchanged';
+
+export interface SyncPlan {
+  upToDate: boolean;
+  fromVersion: string;
+  toVersion: string;
+  diff: SpecDiffSummary;
+  requests: { requestId: string | null; name: string; operation: string; label: string; action: SyncAction; changes?: string[] }[];
+  warnings: string[];
+}
+
+export interface SyncResult extends SyncPlan {
+  versionId: string | null;
+}
+
+export const SyncInput = z.object({
+  sourceType: z.enum(['file', 'paste', 'url']).optional(),
+  content: z.string().optional(),
+  url: z.string().url().optional(),
+});
+export type SyncInput = z.input<typeof SyncInput>;
+
 export interface ReferenceSource {
   requestId: string;
   name: string;
@@ -224,6 +262,9 @@ export interface ApiRoutes {
   'POST /openapi/import': { body: OpenApiImportInput; response: OpenApiImportResult };
   'GET /openapi/:id': { response: OpenApiSpecDetail };
   'DELETE /openapi/:id': { response: { ok: true } };
+  'POST /openapi/:id/sync/preview': { body: SyncInput; response: SyncPlan };
+  'POST /openapi/:id/sync': { body: SyncInput; response: SyncResult };
+  'GET /openapi/:id/compare': { query: { from: string; to: string }; response: SpecDiffSummary };
   'GET /requests/:id/operation': { response: { model: Pick<ApiModel, 'title' | 'version'>; operation: OpenApiOperation } | null };
 
   'GET /reference-sources': { query: { collectionId?: string }; response: ReferenceSource[] };

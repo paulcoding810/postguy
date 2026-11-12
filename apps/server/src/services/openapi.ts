@@ -30,7 +30,7 @@ import { replaceVariables } from './variables.ts';
 
 const MAX_SPEC_BYTES = 15 * 1024 * 1024;
 
-async function fetchSpec(url: string): Promise<string> {
+export async function fetchSpec(url: string): Promise<string> {
   let parsed: URL;
   try {
     parsed = new URL(url);

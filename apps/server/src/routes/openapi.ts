@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { OpenApiImportInput } from '@postguy/shared';
+import { OpenApiImportInput, SyncInput } from '@postguy/shared';
 import type { Db } from '../db/client.ts';
 import { parse } from '../lib/errors.ts';
 import * as openapi from '../services/openapi.ts';
+import * as sync from '../services/openapiSync.ts';
 
 const IdParams = z.object({ id: z.string().min(1) });
 const ExportQuery = z.object({ format: z.enum(['json', 'yaml']).default('json') });
@@ -15,6 +16,12 @@ export function openapiRoutes(app: FastifyInstance, db: Db) {
   app.delete('/openapi/:id', async (req) => {
     openapi.deleteSpec(db, parse(IdParams, req.params).id);
     return { ok: true };
+  });
+  app.post('/openapi/:id/sync/preview', async (req) => sync.previewSync(db, parse(IdParams, req.params).id, parse(SyncInput, req.body ?? {})));
+  app.post('/openapi/:id/sync', async (req) => sync.applySync(db, parse(IdParams, req.params).id, parse(SyncInput, req.body ?? {})));
+  app.get('/openapi/:id/compare', async (req) => {
+    const q = parse(z.object({ from: z.string(), to: z.string() }), req.query);
+    return sync.compareVersions(db, parse(IdParams, req.params).id, q.from, q.to);
   });
   app.get('/requests/:id/operation', async (req) => openapi.operationForRequest(db, parse(IdParams, req.params).id));
   app.get('/collections/:id/export/openapi', async (req, reply) => {

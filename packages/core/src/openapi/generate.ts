@@ -156,11 +156,16 @@ export function requestFromOperation(
   return { def, description, operationId: op.id, fingerprint: fingerprintRequest(def) };
 }
 
+/** The security scheme used as the collection's default auth. */
+export function collectionSchemeOf(model: ApiModel): string | null {
+  const used = [...model.globalSecurity, ...model.operations.flatMap((o) => o.security)];
+  return model.globalSecurity[0] ?? used[0] ?? (model.securitySchemes.length === 1 ? model.securitySchemes[0]!.name : null);
+}
+
 /** Builds a collection with one folder per tag from a normalized spec. */
 export function generateCollection(model: ApiModel): GeneratedCollection {
   const usedSchemes = [...model.globalSecurity, ...model.operations.flatMap((o) => o.security)];
-  const collectionScheme =
-    model.globalSecurity[0] ?? usedSchemes[0] ?? (model.securitySchemes.length === 1 ? model.securitySchemes[0]!.name : null);
+  const collectionScheme = collectionSchemeOf(model);
   const { auth, variables } = authForScheme(model.securitySchemes.find((s) => s.name === collectionScheme));
   const extraVars = new Map(variables.map((v) => [v.key, v]));
   for (const name of new Set(usedSchemes)) {
