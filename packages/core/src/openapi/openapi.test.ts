@@ -102,7 +102,7 @@ describe('Swagger 2.0', () => {
 describe('errors and helpers', () => {
   it('rejects invalid input', async () => {
     expect(() => parseSpecText('')).toThrow(SpecError);
-    expect(() => parseSpecText('foo: bar')).toThrow(/Missing/);
+    expect(() => parseSpecText('foo: bar')).toThrow(/not an OpenAPI or Swagger file/);
     await expect(loadSpec('openapi: 4.0.0\ninfo: {}\npaths: {}')).rejects.toThrow(/Unsupported/);
   });
 
