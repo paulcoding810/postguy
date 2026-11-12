@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { newId, type RequestDefinition, type SavedRequest, type SendResult } from '@postguy/shared';
+import { newId, RequestDefinition, type SavedRequest, type SendResult } from '@postguy/shared';
 
 export interface RequestTab {
   kind?: 'request';
@@ -54,6 +54,32 @@ export function toDefinition(r: SavedRequest | RequestDefinition): RequestDefini
     body: r.body ?? { mode: 'none' },
     settings: r.settings ?? {},
     scripts: { pre: r.scripts?.pre ?? '', post: r.scripts?.post ?? '' },
+  };
+}
+
+/** Fills fields added in later versions so tabs saved by an older version still open. */
+export function normalizeDefinition(value: unknown): RequestDefinition {
+  const parsed = RequestDefinition.safeParse(value);
+  if (parsed.success) return parsed.data;
+  const name = value && typeof value === 'object' && typeof (value as { name?: unknown }).name === 'string' ? (value as { name: string }).name : 'Recovered request';
+  const fixed = RequestDefinition.safeParse({ ...blankRequest(name), ...(value as object), name: name || 'Recovered request' });
+  return fixed.success ? fixed.data : blankRequest(name || 'Recovered request');
+}
+
+function normalizeTab(t: unknown): Tab | null {
+  if (!t || typeof t !== 'object') return null;
+  const tab = t as Partial<RequestTab> & Partial<FlowTab>;
+  if (typeof tab.id !== 'string') return null;
+  if (tab.kind === 'flow') return typeof tab.flowId === 'string' ? { kind: 'flow', id: tab.id, flowId: tab.flowId, name: tab.name ?? 'Flow' } : null;
+  return {
+    id: tab.id,
+    requestId: tab.requestId ?? null,
+    collectionId: tab.collectionId ?? null,
+    draft: normalizeDefinition(tab.draft),
+    saved: tab.saved ? normalizeDefinition(tab.saved) : null,
+    response: null,
+    sending: false,
+    preview: !!tab.preview,
   };
 }
 
@@ -188,7 +214,14 @@ export const useTabs = create<TabsState>()(
     }),
     {
       name: 'postguy.tabs',
-      version: 1,
+      version: 2,
+      migrate: (state) => state as never,
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as { tabs?: unknown[]; activeId?: string | null };
+        const tabs = (Array.isArray(p.tabs) ? p.tabs : []).map(normalizeTab).filter((t): t is Tab => t !== null);
+        const activeId = tabs.some((t) => t.id === p.activeId) ? (p.activeId ?? null) : (tabs[0]?.id ?? null);
+        return { ...current, tabs, activeId };
+      },
       partialize: (s) => ({
         activeId: s.activeId,
         tabs: s.tabs.map((t) => (isRequestTab(t) ? { ...t, response: null, sending: false } : t)),

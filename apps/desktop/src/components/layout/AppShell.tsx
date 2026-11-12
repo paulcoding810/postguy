@@ -13,6 +13,7 @@ import { SmartPanel } from '@/features/memory/SmartPanel';
 import { SidebarPanel, SidebarRail } from './Sidebar';
 import { closeTab, TabBar } from './TabBar';
 import { TopBar } from './TopBar';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 function useShortcuts() {
   const send = useSendRequest();
@@ -67,8 +68,11 @@ function Workspace() {
       </EmptyState>
     );
   }
-  if (!isRequestTab(tab)) return <FlowEditor key={tab.id} flowId={tab.flowId} />;
-  return <RequestEditor key={tab.id} tab={tab} />;
+  return (
+    <ErrorBoundary key={tab.id} label="This tab" resetLabel="Close tab" onReset={() => useTabs.getState().close(tab.id)}>
+      {isRequestTab(tab) ? <RequestEditor tab={tab} /> : <FlowEditor flowId={tab.flowId} />}
+    </ErrorBoundary>
+  );
 }
 
 export function AppShell() {
@@ -81,7 +85,9 @@ export function AppShell() {
         <SidebarRail />
         <ResizableGroup id={smartPanel ? 'main-smart' : 'main'} className="min-w-0 flex-1">
           <ResizablePanel id="sidebar" defaultSize="22%" minSize={200} maxSize="40%">
-            <SidebarPanel />
+            <ErrorBoundary label="The sidebar">
+              <SidebarPanel />
+            </ErrorBoundary>
           </ResizablePanel>
           <ResizableHandle />
           <ResizablePanel id="workspace" minSize="30%">
@@ -96,7 +102,9 @@ export function AppShell() {
             <>
               <ResizableHandle />
               <ResizablePanel id="smart" defaultSize="26%" minSize={260} maxSize="45%">
-                <SmartPanel />
+                <ErrorBoundary label="The data panel">
+                  <SmartPanel />
+                </ErrorBoundary>
               </ResizablePanel>
             </>
           )}
