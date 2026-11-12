@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import axios from 'axios';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, inArray } from 'drizzle-orm';
 import { stringify as toYaml } from 'yaml';
 import {
+  isPostmanCollection,
   collectionToOpenApi,
   generateCollection,
   loadSpec,
@@ -21,11 +22,11 @@ import {
 } from '@postguy/shared';
 import type { z } from 'zod';
 import type { Db } from '../db/client.ts';
-import { collections, openapiSpecs, openapiVersions } from '../db/schema.ts';
+import { collections, openapiSpecs, openapiVersions, requests } from '../db/schema.ts';
 import { badRequest, HttpError, notFound } from '../lib/errors.ts';
-import { createCollection, rootOf } from './collections.ts';
+import { createCollection, rootOf, subtreeIds, updateCollection } from './collections.ts';
 import { createRequest, getRequest } from './requests.ts';
-import { exportCollection } from './transfer.ts';
+import { exportCollection, importCollection } from './transfer.ts';
 import { replaceVariables } from './variables.ts';
 
 const MAX_SPEC_BYTES = 15 * 1024 * 1024;
@@ -58,6 +59,20 @@ function sha256(text: string): string {
   return createHash('sha256').update(text).digest('hex');
 }
 
+/** Recognizes a Postman or Postguy collection export, so either import entry point accepts it. */
+function asCollectionExport(text: string): { kind: 'postman' | 'postguy'; data: unknown } | null {
+  if (!/^\s*\{/.test(text)) return null;
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (isPostmanCollection(data)) return { kind: 'postman', data };
+  if ((data as { format?: unknown })?.format === 'postguy-collection') return { kind: 'postguy', data };
+  return null;
+}
+
 export async function importOpenApi(db: Db, input: z.output<typeof OpenApiImportInput>): Promise<OpenApiImportResult> {
   let text: string;
   if (input.sourceType === 'url') {
@@ -67,6 +82,14 @@ export async function importOpenApi(db: Db, input: z.output<typeof OpenApiImport
     if (!input.content?.trim()) throw badRequest('content is required');
     if (input.content.length > MAX_SPEC_BYTES) throw badRequest('Specification is too large');
     text = input.content;
+  }
+
+  const collection = asCollectionExport(text);
+  if (collection) {
+    let root = importCollection(db, collection.data);
+    if (input.name?.trim()) root = updateCollection(db, root.id, { name: input.name.trim() });
+    const count = db.select({ id: requests.id }).from(requests).where(inArray(requests.collectionId, subtreeIds(db, root.id))).all().length;
+    return { kind: collection.kind, name: root.name, spec: null, collectionId: root.id, requestCount: count, warnings: [] };
   }
 
   let loaded: Awaited<ReturnType<typeof loadSpec>>;
@@ -125,7 +148,7 @@ export async function importOpenApi(db: Db, input: z.output<typeof OpenApiImport
       .run();
   });
 
-  return { spec, collectionId, requestCount: count, warnings: loaded.warnings };
+  return { kind: 'openapi', name: spec.name, spec, collectionId, requestCount: count, warnings: loaded.warnings };
 }
 
 export function listSpecs(db: Db): OpenApiSpec[] {

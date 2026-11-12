@@ -72,3 +72,20 @@ describe('OpenAPI import', () => {
     expect((await h.call('GET', `/collections/${res.body.collectionId}`)).body.openapiSpecId).toBeNull();
   });
 });
+
+describe('import detection', () => {
+  it('imports a Postman collection given to the OpenAPI import, and explains unknown files', async () => {
+    const res = await h.call('POST', '/openapi/import', { sourceType: 'file', content: fixture('shop.postman_collection.json') });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ kind: 'postman', name: 'Shop (Postman)', spec: null, requestCount: 3 });
+    expect((await h.call('GET', '/openapi')).body).toEqual([]);
+
+    const exported = (await h.call('GET', `/collections/${res.body.collectionId}/export`)).body;
+    const again = (await h.call('POST', '/openapi/import', { sourceType: 'paste', content: JSON.stringify(exported), name: 'Copy' })).body;
+    expect(again).toMatchObject({ kind: 'postguy', name: 'Copy', requestCount: 3 });
+
+    const bad = await h.call('POST', '/openapi/import', { sourceType: 'paste', content: '{"hello":"world"}' });
+    expect(bad.status).toBe(422);
+    expect(bad.body.error.message).toMatch(/not an OpenAPI or Swagger file.*Postman/);
+  });
+});

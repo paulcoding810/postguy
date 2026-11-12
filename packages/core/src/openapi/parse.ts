@@ -15,7 +15,10 @@ export function parseSpecText(text: string): Record<string, unknown> {
   }
   if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new SpecError('The specification must be an object');
   const d = doc as Record<string, unknown>;
-  if (!d.openapi && !d.swagger) throw new SpecError('Missing "openapi" or "swagger" version field');
+  if (!d.openapi && !d.swagger)
+    throw new SpecError(
+      'This is not an OpenAPI or Swagger file (it has no "openapi" or "swagger" version field). Postman and Postguy collections can be imported here too.',
+    );
   return d;
 }
 

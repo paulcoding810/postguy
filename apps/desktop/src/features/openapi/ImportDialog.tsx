@@ -53,7 +53,8 @@ export function OpenApiImportDialog() {
         body: mode === 'url' ? { sourceType: 'url', url, name: name || undefined } : { sourceType: mode, content, name: name || undefined },
       });
       await Promise.all([qc.invalidateQueries({ queryKey: keys.tree }), qc.invalidateQueries({ queryKey: ['openapi'] })]);
-      toast.success(`Imported ${res.requestCount} requests from "${res.spec.name}"`);
+      const what = res.kind === 'postman' ? 'Postman collection' : res.kind === 'postguy' ? 'collection' : 'spec';
+      toast.success(`Imported ${res.requestCount} requests from the ${what} "${res.name}"`);
       res.warnings.forEach((w) => toast.warning(w));
       useUi.getState().setSidebar('collections');
       setOpen(false);
@@ -71,8 +72,10 @@ export function OpenApiImportDialog() {
       <DialogContent className="sm:max-w-2xl">
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>Import OpenAPI / Swagger</DialogTitle>
-            <DialogDescription>OpenAPI 3.0, 3.1 and Swagger 2.0 in JSON or YAML. Requests are grouped into folders by tag.</DialogDescription>
+            <DialogTitle>Import</DialogTitle>
+            <DialogDescription>
+              OpenAPI 3.0, 3.1 and Swagger 2.0 in JSON or YAML, grouped into folders by tag. Postman (v2.0, v2.1) and Postguy collection exports work here too.
+            </DialogDescription>
           </DialogHeader>
           <Tabs value={mode} onValueChange={(v) => setMode(v as OpenApiSourceType)}>
             <TabsList className="px-0">

@@ -135,7 +135,10 @@ export const OpenApiImportInput = z.object({
 export type OpenApiImportInput = z.input<typeof OpenApiImportInput>;
 
 export interface OpenApiImportResult {
-  spec: OpenApiSpec;
+  /** What the file turned out to be; collections are imported without a spec. */
+  kind: 'openapi' | 'postman' | 'postguy';
+  name: string;
+  spec: OpenApiSpec | null;
   collectionId: string;
   requestCount: number;
   warnings: string[];
