@@ -89,7 +89,10 @@ export function StepInspector(props: StepInspectorProps) {
           <TabsTrigger value="data">Data</TabsTrigger>
           {step.kind === 'request' && (
             <TabsTrigger value="scripts">
-              Scripts {(step.scripts.pre.trim() || step.scripts.post.trim()) && <span className="size-1.5 rounded-full bg-success" />}
+              Scripts{' '}
+              {(step.scripts.pre.trim() || step.scripts.post.trim() || request?.scripts?.pre.trim() || request?.scripts?.post.trim()) && (
+                <span className="size-1.5 rounded-full bg-success" />
+              )}
             </TabsTrigger>
           )}
           <TabsTrigger value="result">
@@ -194,8 +197,10 @@ export function StepInspector(props: StepInspectorProps) {
         </TabsContent>
 
         <TabsContent value="scripts" className="flex min-h-0 flex-col">
+          <RequestScripts request={request} />
           <p className="border-b px-3 py-1.5 text-[11px] text-muted-foreground">
-            Step scripts run after the request’s own scripts. Use flow.set() to pass values to later steps.
+            <span className="font-semibold text-foreground">This step’s scripts</span> run after the request’s own, only in this flow. Use flow.set()
+            to pass values to later steps.
           </p>
           <ResizableGroup id="step-scripts" orientation="vertical" className="min-h-0 flex-1">
             <ResizablePanel id="step-pre" defaultSize="40%" minSize="15%">
@@ -322,6 +327,43 @@ function StepResult({ run, onRerun }: { run: ExecutionStep | undefined; onRerun:
         </div>
       )}
       <div className="min-h-40 flex-1">{r && <CodeEditor readOnly value={body} language={r.body !== null && r.body !== undefined ? 'json' : 'plaintext'} />}</div>
+    </div>
+  );
+}
+
+/** The saved request's own scripts, read-only: they run first in every flow that uses the request. */
+function RequestScripts({ request }: { request: SavedRequest | undefined }) {
+  const [open, setOpen] = React.useState(true);
+  if (!request) return null;
+  const pre = request.scripts?.pre.trim() ?? '';
+  const post = request.scripts?.post.trim() ?? '';
+  return (
+    <div className="shrink-0 border-b">
+      <div className="flex items-center gap-2 px-3 py-1.5 text-[11px]">
+        <button type="button" onClick={() => setOpen(!open)} className="flex items-center gap-1 font-semibold text-foreground">
+          <span className={cn('inline-block transition-transform', open && 'rotate-90')}>›</span> Request’s own scripts
+        </button>
+        <span className="text-muted-foreground">{pre || post ? 'run first' : 'none'}</span>
+        <Button variant="ghost" size="xs" className="ml-auto" onClick={() => useTabs.getState().openRequest(request, { pin: true })}>
+          <ExternalLinkIcon /> Edit in request
+        </Button>
+      </div>
+      {open && (pre || post) && (
+        <div className="flex max-h-44 flex-col gap-1 overflow-auto px-3 pb-2">
+          {pre && (
+            <div>
+              <div className="text-[10px] text-muted-foreground uppercase">Pre-request</div>
+              <pre className="rounded bg-muted/60 p-2 font-mono text-[11px] whitespace-pre-wrap select-text">{pre}</pre>
+            </div>
+          )}
+          {post && (
+            <div>
+              <div className="text-[10px] text-muted-foreground uppercase">Post-response</div>
+              <pre className="rounded bg-muted/60 p-2 font-mono text-[11px] whitespace-pre-wrap select-text">{post}</pre>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

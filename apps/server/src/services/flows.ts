@@ -338,11 +338,15 @@ async function runStep(
   );
   c.db.update(flowExecutions).set({ runtime: Object.fromEntries(c.runtime) }).where(eq(flowExecutions.id, c.executionId)).run();
   sink.scripts = res.scripts.length ? res.scripts : null;
-  for (const s of res.scripts) {
-    logs.push(...s.logs);
-    for (const a of s.assertions) log(a.ok ? 'info' : 'error', `${a.ok ? '✓' : '✗'} ${a.message}`);
-    if (s.error && s.phase === 'post') log('error', `Post-response script (${s.source}): ${s.error}`);
-  }
+  /** Script output in execution order: pre-request scripts before the request line, post-response after. */
+  const scriptLogs = (phase: 'pre' | 'post') => {
+    for (const s of res.scripts.filter((x) => x.phase === phase)) {
+      logs.push(...s.logs);
+      for (const a of s.assertions) log(a.ok ? 'info' : 'error', `${a.ok ? '✓' : '✗'} ${a.message}`);
+      if (s.error && phase === 'post') log('error', `Post-response script (${s.source}): ${s.error}`);
+    }
+  };
+  scriptLogs('pre');
   sink.request = res.request;
   sink.validation = res.validation;
   sink.historyId = res.historyId;
@@ -362,6 +366,7 @@ async function runStep(
     return { ok: false, error: res.error.message };
   }
   log('info', `${res.request.method} ${res.request.url} → ${res.status} ${res.statusText ?? ''} in ${Math.round(res.timing.totalMs)} ms`);
+  scriptLogs('post');
   if (res.validation && !res.validation.ok)
     log('warn', `Schema: ${res.validation.errors.slice(0, 3).map((e) => `${e.path} ${e.message}`).join('; ')}`);
   const record: ResponseRecord = { name: step.name, status: res.status!, headers: res.headers, body, source: 'execution', requestId: saved.id };

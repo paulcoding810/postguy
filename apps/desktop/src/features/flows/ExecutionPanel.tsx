@@ -103,7 +103,7 @@ export function ExecutionPanel({
           <table className="w-full text-xs">
             <tbody>
               {detail.steps.map((s) => {
-                const first = s.logs.find((l) => l.level !== 'info') ?? s.logs.at(-1);
+                const first = s.logs.find((l) => l.level !== 'info') ?? s.logs.find((l) => / → \d{3}\b/.test(l.message)) ?? s.logs.at(-1);
                 return (
                   <tr
                     key={s.id}
