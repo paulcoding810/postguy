@@ -1,2 +1,5 @@
 /target/
 /gen/schemas
+/resources/
+/binaries/
+/.node-cache/

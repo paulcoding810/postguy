@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
@@ -10,7 +10,9 @@ import * as schema from './schema.ts';
 
 export type Db = BetterSQLite3Database<typeof schema>;
 
-export const MIGRATIONS_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'drizzle');
+const here = dirname(fileURLToPath(import.meta.url));
+/** Next to the bundled server.mjs in the app, or the package's drizzle folder in development. */
+export const MIGRATIONS_DIR = [join(here, 'drizzle'), join(here, '..', '..', 'drizzle')].find((d) => existsSync(join(d, 'meta'))) ?? join(here, '..', '..', 'drizzle');
 
 export function openDatabase(file: string): { db: Db; close: () => void } {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });

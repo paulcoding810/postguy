@@ -8,6 +8,7 @@
     "dev:web": "concurrently -k -n mock,server,web -c yellow,cyan,magenta \"pnpm dev:mock\" \"pnpm dev:server\" \"pnpm --filter @postguy/desktop dev\"",
     "dev:mock": "pnpm --filter @postguy/mock-api dev",
     "dev:server": "pnpm --filter @postguy/server dev",
+    "build:app": "pnpm --filter @postguy/desktop tauri build --config src-tauri/tauri.bundle.conf.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "pnpm -r --parallel typecheck",

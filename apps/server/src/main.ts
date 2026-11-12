@@ -11,6 +11,7 @@ const { values } = parseArgs({
     token: { type: 'string', default: process.env.POSTGUY_TOKEN },
     'data-dir': { type: 'string', default: process.env.POSTGUY_DATA_DIR ?? '.data' },
     verbose: { type: 'boolean', default: false },
+    'parent-pid': { type: 'string' },
   },
 });
 
@@ -32,3 +33,15 @@ const shutdown = async () => {
 };
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+/** Exits when the desktop app that started this server is gone, even after a crash. */
+const parentPid = Number(values['parent-pid']);
+if (parentPid) {
+  setInterval(() => {
+    try {
+      process.kill(parentPid, 0);
+    } catch {
+      void shutdown();
+    }
+  }, 2000).unref();
+}

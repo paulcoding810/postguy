@@ -14,6 +14,7 @@ pnpm dev        # mock API (4780) + server (4777) + Tauri desktop window
 pnpm dev:web    # same, but the UI runs in the browser at http://localhost:1420
 pnpm test       # unit and integration tests
 pnpm typecheck
+pnpm build:app  # packaged desktop app with its own server (see Packaging)
 ```
 
 Data is stored in `.data/postguy.db`. The bundled mock shop API runs on `http://127.0.0.1:4780` and serves its own spec at `/openapi.yaml` (user `john` / password `secret`).
@@ -42,7 +43,7 @@ Templates use double braces anywhere in a request: URL, params, path variables, 
 
 **Variable precedence, highest first:**
 
-1. Runtime values set by scripts during a flow (planned)
+1. Runtime values set by scripts with `flow.set`
 2. Request variables
 3. Flow variables
 4. Collection variables, innermost folder first
@@ -65,11 +66,44 @@ A flow chains saved requests on a canvas (Flows in the sidebar). Add a step and 
 - Condition steps branch on expressions such as `{{$res.Login.status}} == 200 && {{Login.data.user.role}} != 'admin'`.
 - A request step's red output runs when it fails; otherwise **Stop on error** decides whether the flow continues.
 - The execution log streams each step's status, timing and logs; any step can be rerun with the responses of that run.
+- **Debug** pauses before every step; breakpoints pause before chosen steps. While paused you can edit the next step's inputs, then Step or Continue.
+- **Report** exports a run as Markdown, HTML or JSON with credentials masked.
+
+## Scripts
+
+Requests and flow steps have pre-request and post-response scripts, run in a QuickJS WebAssembly sandbox with no filesystem, network or process access, a 2-second limit and a memory cap.
+
+```js
+// post-response
+const login = flow.response('Login');          // this run's response, or the remembered one
+flow.set('token', login.body.data.access_token); // {{token}} for later steps
+flow.assert(response.status === 200, 'status is 200');
+env.set('userId', response.body.data.user.id);   // saved to the active environment
+flow.log('user', response.body.data.user.name);
+```
+
+Pre-request scripts run before variables are resolved and can edit `request.url`, `request.headers` and `request.body`. A script error stops the request; a failed assertion fails it. The editor autocompletes response fields from remembered responses.
+
+## Auth
+
+Bearer, Basic, API key and OAuth 2.0. For the client-credentials and password grants, leave the access token empty: Postguy fetches a token from the token URL, reuses it until it expires, and masks it everywhere.
+
+## OpenAPI sync
+
+Open a spec under OpenAPI and choose **Sync & versions**. Postguy compares the new version operation by operation, shows the effect on your requests, and on apply creates requests for new operations, regenerates the ones you have not edited, keeps edited ones, and leaves requests of removed operations in place. Any two stored versions can be compared.
+
+## Import
+
+Collections import from a Postguy export or a Postman v2.0/v2.1 file. Postman scripts are kept as comments because the `pm.*` API is not available.
 
 ## Secrets
 
 Variables marked secret, and auth credentials, are masked in history, previews and logs. Collection exports and OpenAPI exports never contain secret values. The local server only accepts requests carrying its per-session token.
 
-## Roadmap
+## Packaging
 
-Phases 1–4 are implemented: API client, OpenAPI integration, smart response memory and the flow builder. Next are the sandboxed script engine, OpenAPI sync and diff, and production packaging of the Node server as a Tauri sidecar.
+`pnpm build:app` bundles the server with esbuild into `src-tauri/resources/server` (with the native SQLite module, QuickJS WebAssembly and migrations) and ships Node as a Tauri sidecar. If the local Node links shared libraries (Homebrew's does), the official build of the same version is downloaded from nodejs.org and verified against its published SHA-256 checksums. The app starts the server on a free port with a random token, stores data in the OS app-data folder (`server.log` sits there too), and stops it on exit. Code signing and notarization are not configured.
+
+## Status
+
+All six roadmap phases are implemented: API client, OpenAPI integration, smart response memory, flow builder, script engine, and sync, OAuth, debugging, reports, Postman import and packaging.

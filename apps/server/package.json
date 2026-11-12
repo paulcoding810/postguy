@@ -8,6 +8,7 @@
     "dev": "tsx watch --clear-screen=false src/main.ts --port 4777 --token dev-token --data-dir ../../.data",
     "start": "tsx src/main.ts",
     "db:generate": "drizzle-kit generate",
+    "bundle": "node scripts/bundle.mjs",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@postguy/mock-api": "workspace:*",
     "@types/better-sqlite3": "^9.6.0",
-    "drizzle-kit": "^0.31.11"
+    "drizzle-kit": "^0.31.11",
+    "esbuild": "^0.28.2"
   }
 }
