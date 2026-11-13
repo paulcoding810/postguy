@@ -86,10 +86,11 @@ export async function importOpenApi(db: Db, input: z.output<typeof OpenApiImport
 
   const collection = asCollectionExport(text);
   if (collection) {
-    let root = importCollection(db, collection.data);
+    const imported = importCollection(db, collection.data);
+    let root = imported.root;
     if (input.name?.trim()) root = updateCollection(db, root.id, { name: input.name.trim() });
     const count = db.select({ id: requests.id }).from(requests).where(inArray(requests.collectionId, subtreeIds(db, root.id))).all().length;
-    return { kind: collection.kind, name: root.name, spec: null, collectionId: root.id, requestCount: count, warnings: [] };
+    return { kind: collection.kind, name: root.name, spec: null, collectionId: root.id, requestCount: count, warnings: imported.warnings };
   }
 
   let loaded: Awaited<ReturnType<typeof loadSpec>>;
@@ -148,7 +149,9 @@ export async function importOpenApi(db: Db, input: z.output<typeof OpenApiImport
       .run();
   });
 
-  return { kind: 'openapi', name: spec.name, spec, collectionId, requestCount: count, warnings: loaded.warnings };
+  const baseUrl = generated.variables.find((v) => v.key === 'baseUrl')?.value;
+  const baseUrlNote = `baseUrl is set on the collection to ${baseUrl} (the spec's first server). Collection variables win over environments, so an environment's baseUrl is ignored for these requests; change or untick it in the collection's Variables.`;
+  return { kind: 'openapi', name: spec.name, spec, collectionId, requestCount: count, warnings: [...loaded.warnings, baseUrlNote] };
 }
 
 export function listSpecs(db: Db): OpenApiSpec[] {

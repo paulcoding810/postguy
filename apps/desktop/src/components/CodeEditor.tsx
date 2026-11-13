@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useResolvedTheme } from '@/hooks/useTheme';
 import { monaco } from '@/lib/monaco';
 import { useInsertTarget, useTemplateCtx } from '@/features/template/TemplateContext';
+import { scopeLabel, shadowNotes } from '@/features/template/scopeNote';
 
 export interface CodeEditorProps {
   value: string;
@@ -51,7 +52,9 @@ export function CodeEditor({
         range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
         options: {
           inlineClassName: status === 'bad' ? 'monaco-tpl-bad' : 'monaco-tpl-ok',
-          hoverMessage: { value: `\`${m[1]}\` → ${p ? (p.preview ?? '') : '…'}` },
+          hoverMessage: {
+            value: [`\`${m[1]}\` → ${p ? (p.preview ?? '') : '…'}${p?.resolved && scopeLabel(p.source) ? ` (${scopeLabel(p.source)})` : ''}`, ...shadowNotes(p).map((n) => `⚠ ${n}`)].join('\n\n'),
+          },
         },
       });
     }

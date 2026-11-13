@@ -1,7 +1,8 @@
 import { getAtPath, parsePath, PathSyntaxError, type PathSegment } from '../path.ts';
 import { queryJsonPath, isJsonPathQuery } from '../jsonpath/query.ts';
+import { dynamicVariable } from './dynamic.ts';
 import { parseTemplate, soleRef } from './parse.ts';
-import type { ResolutionContext, VarSource } from './context.ts';
+import type { ResolutionContext, VarEntry, VarSource } from './context.ts';
 
 const MAX_DEPTH = 6;
 
@@ -9,10 +10,11 @@ export interface RefResolution {
   ref: string;
   found: boolean;
   value: unknown;
-  source: VarSource | 'response' | null;
+  source: VarSource | 'response' | 'dynamic' | null;
   secret: boolean;
   responseName?: string;
   error?: string;
+  shadowed?: VarEntry['shadowed'];
 }
 
 export interface ResolveResult<T> {
@@ -103,8 +105,12 @@ export function resolveRef(ref: string, ctx: ResolutionContext, depth = 0): RefR
       source: direct.source,
       secret: direct.secret || inner.secrets.length > 0,
       error: inner.unresolved.length ? `Nested unresolved: ${inner.unresolved.join(', ')}` : undefined,
+      ...(direct.shadowed && { shadowed: direct.shadowed }),
     };
   }
+
+  const generated = dynamicVariable(ref);
+  if (generated !== undefined) return { ref, found: true, value: generated, source: 'dynamic', secret: false };
 
   let parsed: ParsedRef;
   try {

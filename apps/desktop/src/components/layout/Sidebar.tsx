@@ -71,6 +71,7 @@ export function SidebarPanel() {
       const c = await api('POST /collections/import', { body: { data: JSON.parse(file.text) } });
       await qc.invalidateQueries({ queryKey: keys.tree });
       toast.success(`Imported "${c.name}"`);
+      c.warnings.forEach((w) => toast.warning(w));
     } catch (e) {
       toast.error(errorMessage(e));
     }

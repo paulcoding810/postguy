@@ -1,5 +1,5 @@
 import { asc, eq } from 'drizzle-orm';
-import { isPostmanCollection, postmanToCollection, redactAuth } from '@postguy/core';
+import { compatibilityWarnings, isPostmanCollection, postmanDroppedScripts, postmanToCollection, redactAuth } from '@postguy/core';
 import {
   Auth,
   RequestDefinition,
@@ -72,14 +72,16 @@ const ExportSchema = z.object({
 });
 
 /** Imports a Postguy export or a Postman v2.0/v2.1 collection. */
-export function importCollection(db: Db, data: unknown): Collection {
-  const parsed = ExportSchema.safeParse(isPostmanCollection(data) ? postmanToCollection(data) : data);
+export function importCollection(db: Db, data: unknown): { root: Collection; warnings: string[] } {
+  const postman = isPostmanCollection(data);
+  const parsed = ExportSchema.safeParse(postman ? postmanToCollection(data) : data);
   if (!parsed.success) throw badRequest('Not a Postguy or Postman collection', parsed.error.issues.slice(0, 5));
   let root: Collection | null = null;
   db.transaction(() => {
     root = importNode(db, parsed.data.collection, null);
   });
-  return root!;
+  const warnings = [...(postman ? postmanDroppedScripts(data) : []), ...compatibilityWarnings(parsed.data.collection as ExportedCollection)];
+  return { root: root!, warnings };
 }
 
 function importNode(db: Db, node: ExportedCollection, parentId: string | null): Collection {

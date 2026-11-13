@@ -140,5 +140,6 @@ function toPreviewRef(r: RefResolution): ResolvedPreview['refs'][number] {
     source: r.source === 'response' ? `response:${r.responseName}` : r.source,
     secret: r.secret,
     preview: preview ?? r.error ?? null,
+    ...(r.shadowed?.length && { shadowed: r.shadowed.map((s) => ({ source: s.source, preview: s.secret ? MASK : truncatePreview(s.value) })) }),
   };
 }

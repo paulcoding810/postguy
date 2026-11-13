@@ -2,6 +2,7 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { inputClass } from '@/components/ui/input';
 import { Tooltip } from '@/components/ui/misc';
+import { scopeLabel, shadowNotes } from './scopeNote';
 import { parseTokens } from './tokens';
 import { useInsertTarget, useTemplateCtx, type Suggestion } from './TemplateContext';
 
@@ -124,11 +125,20 @@ export function TemplateInput({
     <div className="flex flex-col gap-0.5 font-mono text-[11px]">
       {refs.map((r, i) => {
         const p = ctx.preview(r.ref);
+        const scope = p?.resolved ? scopeLabel(p.source) : null;
         return (
-          <div key={i} className="flex gap-2">
-            <span className="opacity-70">{r.ref}</span>
-            <span>→</span>
-            <span className={p?.resolved ? '' : 'text-red-300'}>{p ? (p.preview ?? '') : '…'}</span>
+          <div key={i} className="flex flex-col">
+            <div className="flex gap-2">
+              <span className="opacity-70">{r.ref}</span>
+              <span>→</span>
+              <span className={p?.resolved ? '' : 'text-red-300'}>{p ? (p.preview ?? '') : '…'}</span>
+              {scope && <span className="opacity-60">({scope})</span>}
+            </div>
+            {shadowNotes(p).map((n) => (
+              <span key={n} className="pl-3 text-amber-300 dark:text-amber-700">
+                {n}
+              </span>
+            ))}
           </div>
         );
       })}

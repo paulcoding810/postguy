@@ -1,5 +1,7 @@
 import { getQuickJS, type QuickJSContext, type QuickJSHandle } from 'quickjs-emscripten';
 import type { ScriptAssertion, ScriptRequest, ScriptResponse, ScriptRun, StepLog } from '@postguy/shared';
+import { dynamicVariable } from '../template/dynamic.ts';
+import { CRYPTO_PRELUDE, hostCrypto } from './crypto.ts';
 import { PM_PRELUDE } from './pm.ts';
 
 export interface ScriptHost {
@@ -44,6 +46,7 @@ if (request) {
   Object.defineProperty(request, 'body', { enumerable: true, get: () => __body, set: (v) => { __body = v; request.bodyMode = 'raw'; delete request.formdata; } });
 }
 const response = __call('currentResponse');
+${CRYPTO_PRELUDE}
 ${PM_PRELUDE}`;
 const PRELUDE_LINES = PRELUDE.split('\n').length;
 
@@ -121,6 +124,12 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
           break;
         case 'request':
           out = request ?? null;
+          break;
+        case 'crypto':
+          out = hostCrypto(String(args[0]), args.slice(1));
+          break;
+        case 'dynamic':
+          out = dynamicVariable(String(args[0]));
           break;
         case 'currentResponse':
           out = input.response ?? null;

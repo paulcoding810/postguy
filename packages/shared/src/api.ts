@@ -116,7 +116,15 @@ export interface ResolvedPreview {
   template: string;
   value: string;
   unresolved: string[];
-  refs: { ref: string; resolved: boolean; source: string | null; secret: boolean; preview: string | null }[];
+  refs: {
+    ref: string;
+    resolved: boolean;
+    source: string | null;
+    secret: boolean;
+    preview: string | null;
+    /** Values of the same name in lower-precedence scopes, which this one hides. */
+    shadowed?: { source: string; preview: string }[];
+  }[];
 }
 
 export const HistoryQuery = z.object({
@@ -280,7 +288,7 @@ export interface ApiRoutes {
   'GET /collections/:id': { response: Collection };
   'GET /collections/:id/export': { response: CollectionExport };
   'GET /collections/:id/export/openapi': { query: { format?: 'json' | 'yaml' }; response: string };
-  'POST /collections/import': { body: { data: unknown }; response: Collection };
+  'POST /collections/import': { body: { data: unknown }; response: Collection & { warnings: string[] } };
 
   'GET /requests/:id': { response: SavedRequest };
   'POST /requests': { body: CreateRequestInput; response: SavedRequest };

@@ -15,7 +15,8 @@ describe('OpenAPI import', () => {
   it('imports pasted YAML into a tagged collection with variables and operation links', async () => {
     const res = await h.call('POST', '/openapi/import', { sourceType: 'paste', content: fixture('mock-api.openapi.yaml') });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ requestCount: 6, warnings: [] });
+    expect(res.body).toMatchObject({ requestCount: 6 });
+    expect(res.body.warnings).toEqual([expect.stringMatching(/^baseUrl is set on the collection to .+ environment's baseUrl is ignored/)]);
     const tree = (await h.call('GET', '/collections/tree')).body;
     const root = tree.find((c: any) => c.id === res.body.collectionId);
     expect(root).toMatchObject({ name: 'Postguy Mock Shop API', openapiSpecId: res.body.spec.id, auth: { type: 'bearer' } });

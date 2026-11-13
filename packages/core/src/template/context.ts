@@ -6,6 +6,8 @@ export interface VarEntry {
   value: string;
   secret: boolean;
   source: VarSource;
+  /** Lower-precedence values for the same key, highest first. */
+  shadowed?: { value: string; secret: boolean; source: VarSource }[];
 }
 
 export type VarMap = Record<string, { value: string; secret?: boolean }>;
@@ -48,7 +50,9 @@ export function mergeScopes(scopes: ScopeMaps): Map<string, VarEntry> {
     if (!entry) continue;
     for (const map of Array.isArray(entry) ? entry : [entry]) {
       for (const [key, v] of Object.entries(map)) {
-        if (!merged.has(key)) merged.set(key, { value: v.value, secret: !!v.secret, source });
+        const winner = merged.get(key);
+        if (!winner) merged.set(key, { value: v.value, secret: !!v.secret, source });
+        else (winner.shadowed ??= []).push({ value: v.value, secret: !!v.secret, source });
       }
     }
   }

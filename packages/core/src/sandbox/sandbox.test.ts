@@ -75,8 +75,9 @@ describe('runScript', () => {
       `,
     });
     expect(r.error).toMatch(/SyntaxError/);
-    const ok = await runScript({ phase: 'post', host: host(), source: `flow.log(typeof process, typeof require, typeof fetch, typeof setTimeout)` });
-    expect(ok.logs[0]!.message).toBe('undefined undefined undefined undefined');
+    const ok = await runScript({ phase: 'post', host: host(), source: `flow.log(typeof process, typeof fetch, typeof setTimeout)` });
+    expect(ok.logs[0]!.message).toBe('undefined undefined undefined');
+    expect((await runScript({ phase: 'post', host: host(), source: `require('fs')` })).error).toMatch(/not available/);
     const esc = await runScript({ phase: 'post', host: host(), source: `flow.log(String(this.constructor.constructor("return typeof process")()))` });
     expect(esc.logs[0]?.message ?? esc.error).toMatch(/undefined|TypeError/);
   });
@@ -211,5 +212,40 @@ describe('pm.request.body.update', () => {
     expect(gql.request!.headers['Content-Type']).toBe('application/json');
     const bad = await pre(`pm.request.body.update({ mode: 'formdata', formdata: [] })`);
     expect(bad.error).toMatch(/formdata bodies cannot be set from a script/);
+  });
+});
+
+describe('CryptoJS and base64 in scripts', () => {
+  const run = (source: string) => runScript({ phase: 'post', host: host(), response: { status: 200, headers: {}, body: {} }, source });
+  it('hashes, signs and encodes like CryptoJS', async () => {
+    const r = await run(`
+      flow.log(CryptoJS.SHA256('abc').toString());
+      flow.log(CryptoJS.MD5('abc').toString(CryptoJS.enc.Hex));
+      flow.log(CryptoJS.HmacSHA256('msg', 'key').toString(CryptoJS.enc.Base64));
+      flow.log(CryptoJS.enc.Base64.stringify(CryptoJS.enc.Utf8.parse('héllo')));
+      flow.log(CryptoJS.enc.Base64.parse('aMOpbGxv').toString(CryptoJS.enc.Utf8));
+      flow.log('' + require('crypto-js').SHA1('abc'));
+      flow.log(btoa('user:pass') + ' ' + atob('dXNlcjpwYXNz'));
+      flow.log(CryptoJS.lib.WordArray.random(16).toString().length);
+    `);
+    expect(r.error).toBeNull();
+    expect(r.logs.map((l) => l.message)).toEqual([
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+      '900150983cd24fb0d6963f7d28e17f72',
+      'LZPLwb4We8sWN6SiPL/wGnh48MUO6DOVTqUiG7G4xig=',
+      'aMOpbGxv',
+      'héllo',
+      'a9993e364706816aba3e25717850c26c9cd0d89d',
+      'dXNlcjpwYXNz user:pass',
+      '32',
+    ]);
+  });
+  it('explains what is missing', async () => {
+    expect((await run(`CryptoJS.AES.encrypt('a', 'k')`)).error).toMatch(/CryptoJS.AES is not available/);
+    expect((await run(`require('moment')`)).error).toMatch(/require\('moment'\) is not available/);
+  });
+  it('replaces built-in variables in pm.variables.replaceIn', async () => {
+    const r = await run(`flow.log(pm.variables.replaceIn('{{$guid}}|{{$timestamp}}|{{$nope}}'))`);
+    expect(r.logs[0]!.message).toMatch(/^[0-9a-f-]{36}\|\d{10}\|\{\{\$nope\}\}$/);
   });
 });

@@ -66,7 +66,7 @@ const __scope = (scope) => ({
   set: (k, v) => { if (scope === 'variables') flow.set(k, v); else __call('envSet', String(k), v === undefined ? null : v, scope); },
   unset: (k) => { if (scope === 'variables') flow.set(k, null); else __call('envSet', String(k), null, scope); },
   has: (k) => (scope === 'variables' ? flow.get(k) : __call('envGet', String(k))) !== undefined,
-  replaceIn: (s) => String(s).replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (m, k) => { const v = scope === 'variables' ? flow.get(k) : __call('envGet', k); return v === undefined ? m : String(v); }),
+  replaceIn: (s) => String(s).replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (m, k) => { const d = k[0] === '$' ? __call('dynamic', k) : undefined; const v = d !== undefined ? d : scope === 'variables' ? flow.get(k) : __call('envGet', k); return v === undefined ? m : String(v); }),
 });
 const __pmResponse = response ? (() => {
   const r = response;

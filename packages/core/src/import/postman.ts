@@ -101,14 +101,13 @@ function tryJson(s: unknown): unknown {
   }
 }
 
-/** Postman scripts run through the sandbox's pm.* compatibility layer. */
 function scripts(events: unknown): { pre: string; post: string } {
   const out = { pre: '', post: '' };
   if (!Array.isArray(events)) return out;
   for (const e of events as Obj[]) {
     const exec = Array.isArray(e.script?.exec) ? e.script.exec.join('\n') : typeof e.script?.exec === 'string' ? e.script.exec : '';
     if (!exec.trim()) continue;
-    const script = `// Imported from Postman; runs with Postguy's pm.* compatibility layer.\n${exec}\n`;
+    const script = `// Imported from Postman.\n${exec}\n`;
     if (e.listen === 'prerequest') out.pre = script;
     else if (e.listen === 'test') out.post = script;
   }
@@ -149,4 +148,18 @@ function folder(node: Obj, isRoot: boolean): ExportedCollection {
 /** Converts a Postman v2.0/v2.1 collection into Postguy's export format. */
 export function postmanToCollection(data: unknown): CollectionExport {
   return { format: 'postguy-collection', version: 1, collection: folder(data as Obj, true) };
+}
+
+/** Scripts on the collection or its folders, which have no place in Postguy and are dropped. */
+export function postmanDroppedScripts(data: unknown): string[] {
+  const out: string[] = [];
+  const walk = (node: Obj, name: string) => {
+    const events = Array.isArray(node.event) ? (node.event as Obj[]) : [];
+    if (events.some((e) => (Array.isArray(e.script?.exec) ? e.script.exec.join('') : String(e.script?.exec ?? '')).trim())) out.push(name);
+    for (const i of Array.isArray(node.item) ? (node.item as Obj[]) : []) if (Array.isArray(i.item)) walk(i, String(i.name ?? 'Folder'));
+  };
+  walk(data as Obj, String((data as Obj)?.info?.name ?? 'Collection'));
+  if (!out.length) return [];
+  const shown = out.slice(0, 3).map((n) => `"${n}"`).join(', ') + (out.length > 3 ? ` and ${out.length - 3} more` : '');
+  return [`Collection- and folder-level scripts were not imported (Postguy runs scripts per request): ${shown}.`];
 }

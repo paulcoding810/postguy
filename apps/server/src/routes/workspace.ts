@@ -38,7 +38,10 @@ export function workspaceRoutes(app: FastifyInstance, db: Db) {
     return { ok: true };
   });
   app.get('/collections/:id/export', async (req) => transfer.exportCollection(db, id(req.params)));
-  app.post('/collections/import', async (req) => transfer.importCollection(db, parse(ImportCollectionInput, req.body).data));
+  app.post('/collections/import', async (req) => {
+    const { root, warnings } = transfer.importCollection(db, parse(ImportCollectionInput, req.body).data);
+    return { ...root, warnings };
+  });
 
   app.get('/requests/:id', async (req) => reqs.getRequest(db, id(req.params)));
   app.post('/requests', async (req) => reqs.createRequest(db, parse(CreateRequestInput, req.body)));

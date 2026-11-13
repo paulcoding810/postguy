@@ -131,3 +131,28 @@ describe('resolveJsonTree', () => {
     expect(r.value).toEqual({ id: 1001, label: 'user-1001', tags: ['a', 'b'], n: 5 });
   });
 });
+
+describe('built-in dynamic variables', () => {
+  it('generates values for Postman $ variables and leaves unknown ones unresolved', () => {
+    const r = resolveTemplate('{{$guid}} {{$timestamp}} {{$isoTimestamp}} {{$randomInt}} {{$randomEmail}} {{$madeUp}}', createContext({}));
+    const [guid, ts, iso, n, email] = r.value.split(' ');
+    expect(guid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    expect(Math.abs(Number(ts) - Date.now() / 1000)).toBeLessThan(5);
+    expect(new Date(iso!).toISOString()).toBe(iso);
+    expect(Number(n)).toBeGreaterThanOrEqual(0);
+    expect(email).toMatch(/^[a-z.]+\d+@example\.com$/);
+    expect(r.unresolved).toEqual(['$madeUp']);
+  });
+  it('lets a variable of the same name win', () => {
+    expect(resolveTemplate('{{$guid}}', createContext({ environment: { $guid: { value: 'fixed' } } })).value).toBe('fixed');
+  });
+});
+
+describe('shadowed values', () => {
+  it('reports lower-precedence values a variable hides', () => {
+    const ctx = createContext({ collection: { baseUrl: { value: 'https://prod' } }, environment: { baseUrl: { value: 'http://local' } } });
+    const ref = resolveTemplate('{{baseUrl}}', ctx).refs[0]!;
+    expect(ref.source).toBe('collection');
+    expect(ref.shadowed).toEqual([{ value: 'http://local', secret: false, source: 'environment' }]);
+  });
+});
