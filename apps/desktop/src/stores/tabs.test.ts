@@ -13,4 +13,22 @@ describe('normalizeDefinition', () => {
     expect(normalizeDefinition({ name: 'X', method: 'BREW' }).method).toBe('GET');
     expect(normalizeDefinition(null).name).toBe('Recovered request');
   });
+  it('drops only the invalid field and keeps the rest of the draft', () => {
+    const draft = {
+      name: 'Create',
+      method: 'POST',
+      url: 'https://api.test/items',
+      params: [],
+      pathParams: [],
+      headers: [{ id: 'h1', key: 'X-Trace', value: '1', enabled: true }, { id: 'h2', key: 5, enabled: 'yes' }],
+      auth: { type: 'inherit' },
+      body: { mode: 'json', raw: '{"a":1}' },
+      settings: { timeoutMs: 700000, followRedirects: false },
+      scripts: { pre: 'console.log(1)', post: '' },
+    };
+    const d = normalizeDefinition(draft);
+    expect(d).toMatchObject({ method: 'POST', url: 'https://api.test/items', body: { mode: 'json', raw: '{"a":1}' }, scripts: { pre: 'console.log(1)' } });
+    expect(d.headers.map((h) => h.key)).toEqual(['X-Trace']);
+    expect(d.settings).toEqual({ followRedirects: false });
+  });
 });

@@ -32,6 +32,9 @@ export function AddStepMenu({ onAdd, label = 'Add step', variant = 'outline' }: 
     onAdd(choices);
   };
   const addPicked = () => add(picked.map((p) => ({ kind: 'request' as const, ...p })));
+  /** The two clicks of a double-click have toggled `r` on and off again; add it after whatever else is ticked. */
+  const addWith = (r: { id: string; name: string }) =>
+    add([...picked.filter((p) => p.requestId !== r.id), { requestId: r.id, name: r.name }].map((p) => ({ kind: 'request' as const, ...p })));
 
   return (
     <Popover open={open} onOpenChange={(o) => (o ? setOpen(true) : close())}>
@@ -72,7 +75,7 @@ export function AddStepMenu({ onAdd, label = 'Add step', variant = 'outline' }: 
                 role="checkbox"
                 aria-checked={order >= 0}
                 onClick={() => toggle(r)}
-                onDoubleClick={() => add([{ kind: 'request', requestId: r.id, name: r.name }])}
+                onDoubleClick={() => addWith(r)}
                 className={cn('flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs hover:bg-accent', order >= 0 && 'bg-primary/10')}
               >
                 <span

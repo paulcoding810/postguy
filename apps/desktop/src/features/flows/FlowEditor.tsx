@@ -61,6 +61,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
   const executions = useExecutions(flowId);
   const [graph, setGraph] = React.useState<FlowGraph>({ steps: initial.steps, connections: initial.connections });
   const [name, setName] = React.useState(initial.name);
+  React.useEffect(() => setName(initial.name), [initial.name]);
   const [stopOnError, setStopOnError] = React.useState(initial.settings.stopOnError);
   const [selected, setSelected] = React.useState<string | null>(initial.steps[0]?.id ?? null);
   const [selectedEdge, setSelectedEdge] = React.useState<string | null>(null);

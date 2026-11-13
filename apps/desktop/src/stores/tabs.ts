@@ -57,13 +57,32 @@ export function toDefinition(r: SavedRequest | RequestDefinition): RequestDefini
   };
 }
 
-/** Fills fields added in later versions so tabs saved by an older version still open. */
+/** Fills fields added in later versions and drops only the invalid parts, so a stored draft is never lost wholesale. */
 export function normalizeDefinition(value: unknown): RequestDefinition {
   const parsed = RequestDefinition.safeParse(value);
   if (parsed.success) return parsed.data;
-  const name = value && typeof value === 'object' && typeof (value as { name?: unknown }).name === 'string' ? (value as { name: string }).name : 'Recovered request';
-  const fixed = RequestDefinition.safeParse({ ...blankRequest(name), ...(value as object), name: name || 'Recovered request' });
-  return fixed.success ? fixed.data : blankRequest(name || 'Recovered request');
+  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  const name = typeof raw.name === 'string' && raw.name ? raw.name : 'Recovered request';
+  const blank = blankRequest(name) as unknown as Record<string, unknown>;
+  const work: Record<string, unknown> = structuredClone({ ...blank, ...raw, name });
+  const dropped = new Set<string>();
+  for (let i = 0; i < 50; i++) {
+    const res = RequestDefinition.safeParse(work);
+    if (res.success) return res.data;
+    let path = res.error.issues[0]!.path.map(String);
+    while (path.length > 1 && dropped.has(path.join('.'))) path = path.slice(0, -1);
+    dropped.add(path.join('.'));
+    if (path.length === 1) {
+      work[path[0]!] = blank[path[0]!];
+      continue;
+    }
+    const parent = path.slice(0, -1).reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], work);
+    const last = path[path.length - 1]!;
+    if (Array.isArray(parent)) parent.splice(Number(last), 1);
+    else if (parent && typeof parent === 'object') delete (parent as Record<string, unknown>)[last];
+    else work[path[0]!] = blank[path[0]!];
+  }
+  return blankRequest(name);
 }
 
 function normalizeTab(t: unknown): Tab | null {

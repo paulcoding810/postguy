@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { PencilIcon, PlusIcon, Trash2Icon, WorkflowIcon } from 'lucide-react';
 import { toast } from 'sonner';
+import type { FlowDetail } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/menu';
 import { EmptyState } from '@/components/ui/misc';
@@ -42,8 +43,9 @@ export function FlowList({ filter }: { filter: string }) {
     try {
       await api('PATCH /flows/:id', { params: { id }, body: { name } });
       useTabs.getState().onFlowRenamed(id, name);
+      // Patch the name only: refetching the flow would replace a graph the open editor hasn't saved yet.
+      qc.setQueryData<FlowDetail>(flowKeys.flow(id), (old) => (old ? { ...old, name } : old));
       await qc.invalidateQueries({ queryKey: flowKeys.list });
-      qc.invalidateQueries({ queryKey: flowKeys.flow(id) });
     } catch (e) {
       toast.error(errorMessage(e));
     }
