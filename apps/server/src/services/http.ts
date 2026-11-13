@@ -71,7 +71,7 @@ export async function executeHttp(
       url: req.url,
       method: req.method,
       headers: Object.keys(req.headers).some((h) => h.toLowerCase() === 'user-agent') ? req.headers : { 'User-Agent': `Postguy/${VERSION}`, ...req.headers },
-      data: req.body.content ?? undefined,
+      data: req.body.data ?? req.body.content ?? undefined,
       responseType: 'arraybuffer',
       transformResponse: (d) => d,
       transformRequest: (d) => d,

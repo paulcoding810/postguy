@@ -10,15 +10,20 @@ export const KeyValue = z.object({
   value: z.string(),
   enabled: z.boolean().default(true),
   description: z.string().optional(),
+  /** Form-data only: a file field sends the file at `src` instead of `value`. */
+  type: z.enum(['text', 'file']).optional(),
+  src: z.string().optional(),
 });
 export type KeyValue = z.infer<typeof KeyValue>;
 
-export const BODY_MODES = ['none', 'json', 'text', 'form', 'urlencoded'] as const;
+export const BODY_MODES = ['none', 'json', 'text', 'form', 'urlencoded', 'binary'] as const;
 export const Body = z.object({
   mode: z.enum(BODY_MODES),
   raw: z.string().optional(),
   form: z.array(KeyValue).optional(),
   contentType: z.string().optional(),
+  /** Binary mode: path of the file sent as the body. */
+  src: z.string().optional(),
 });
 export type Body = z.infer<typeof Body>;
 
@@ -190,10 +195,12 @@ export interface ScriptRequest {
   url: string;
   headers: Record<string, string>;
   body: string | null;
-  /** How the body string is sent; 'formdata' bodies are read-only and kept as they are. */
-  bodyMode?: 'raw' | 'urlencoded' | 'formdata';
-  /** The form-data fields when bodyMode is 'formdata'. */
-  formdata?: { key: string; value: string }[];
+  /** How the body string is sent; 'formdata' and 'file' bodies are read-only and kept as they are. */
+  bodyMode?: 'raw' | 'urlencoded' | 'formdata' | 'file';
+  /** The form-data fields when bodyMode is 'formdata'; file fields carry their path in `src`. */
+  formdata?: { key: string; value: string; type?: 'text' | 'file'; src?: string }[];
+  /** The file sent when bodyMode is 'file'. */
+  file?: { src: string };
 }
 
 export interface ScriptResponse {

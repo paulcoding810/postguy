@@ -45,9 +45,10 @@ function bodyContent(def: RequestDefinition): Obj | undefined {
     }
   }
   if (b.mode === 'text') return { [b.contentType ?? 'text/plain']: { schema: { type: 'string' } } };
+  if (b.mode === 'binary') return { [b.contentType ?? 'application/octet-stream']: { schema: { type: 'string', format: 'binary' } } };
   if (b.mode === 'urlencoded' || b.mode === 'form') {
     const properties: Obj = {};
-    for (const f of b.form ?? []) if (f.enabled && f.key) properties[f.key] = { type: 'string' };
+    for (const f of b.form ?? []) if (f.enabled && f.key) properties[f.key] = f.type === 'file' ? { type: 'string', format: 'binary' } : { type: 'string' };
     return { [b.mode === 'form' ? 'multipart/form-data' : 'application/x-www-form-urlencoded']: { schema: { type: 'object', properties } } };
   }
   return undefined;

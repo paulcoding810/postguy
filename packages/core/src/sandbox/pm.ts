@@ -109,7 +109,7 @@ const __pmRequest = request ? {
   body: {
     get raw() { return request.body; },
     set raw(v) { request.body = v == null ? null : typeof v === 'string' ? v : JSON.stringify(v); },
-    get mode() { return request.bodyMode === 'formdata' ? 'formdata' : request.body == null ? 'none' : (request.bodyMode || 'raw'); },
+    get mode() { return request.bodyMode === 'formdata' || request.bodyMode === 'file' ? request.bodyMode : request.body == null ? 'none' : (request.bodyMode || 'raw'); },
     get urlencoded() {
       const list = request.bodyMode === 'urlencoded' && request.body ? __formDecode(String(request.body)) : [];
       const save = () => { request.body = __formEncode(list); request.bodyMode = 'urlencoded'; };
@@ -134,13 +134,14 @@ const __pmRequest = request ? {
       return list;
     },
     get formdata() { return request.bodyMode === 'formdata' ? (request.formdata || []).map((p) => ({ ...p })) : []; },
-    isEmpty() { return request.bodyMode === 'formdata' ? !(request.formdata || []).length : request.body == null || request.body === ''; },
+    isEmpty() { return request.bodyMode === 'file' ? false : request.bodyMode === 'formdata' ? !(request.formdata || []).length : request.body == null || request.body === ''; },
     toString() { return request.body ?? ''; },
     toJSON() {
       const mode = this.mode;
       if (mode === 'none') return {};
       if (mode === 'urlencoded') return { mode, urlencoded: this.urlencoded.all() };
       if (mode === 'formdata') return { mode, formdata: this.formdata };
+      if (mode === 'file') return { mode, file: { src: request.file ? request.file.src : '' } };
       return { mode, raw: request.body };
     },
     update(o) {
@@ -175,6 +176,7 @@ const __pmRequest = request ? {
         return;
       }
       if (mode === 'formdata' && request.bodyMode === 'formdata' && JSON.stringify(o.formdata || []) === JSON.stringify(request.formdata || [])) return;
+      if (mode === 'file' && request.bodyMode === 'file' && o.file && request.file && o.file.src === request.file.src) return;
       if (mode === 'formdata' || mode === 'file') throw new Error('pm.request.body.update: ' + mode + ' bodies cannot be set from a script; use raw or urlencoded');
       throw new Error('pm.request.body.update: unknown mode ' + JSON.stringify(mode));
     },

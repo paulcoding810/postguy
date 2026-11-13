@@ -2,9 +2,18 @@ import type { Auth, KeyValue, RequestDefinition } from '@postguy/shared';
 import type { ResolutionContext } from '../template/context.ts';
 import { resolveJsonTree, resolveTemplate, type RefResolution } from '../template/resolve.ts';
 
+export type MultipartPart = { name: string; value: string } | { name: string; file: string; filename: string; contentType: string };
+
 export interface ResolvedBody {
+  /** The body as text; for bodies with files, a readable summary used for history and display. */
   content: string | null;
   contentType: string | null;
+  /** Multipart bodies with file fields; encode with `encodeBody`. */
+  multipart?: { boundary: string; parts: MultipartPart[] };
+  /** Binary bodies: the file sent as the whole body. */
+  file?: string;
+  /** Encoded bytes, set by the sender once files are read; sent instead of `content`. */
+  data?: Uint8Array;
 }
 
 export interface ResolvedRequest {
@@ -253,8 +262,23 @@ function resolveBody(
       );
       return { content: pairs.join('&'), contentType: 'application/x-www-form-urlencoded' };
     }
+    case 'binary': {
+      const file = str(b.src ?? '').trim();
+      if (!file) return { content: null, contentType: null };
+      return { content: `<file ${fileName(file)}>`, contentType: b.contentType ?? contentTypeFor(file), file };
+    }
     case 'form': {
       const boundary = `----postguy${Math.random().toString(16).slice(2)}`;
+      if (enabledPairs(b.form).some((kv) => kv.type === 'file')) {
+        const parts: MultipartPart[] = enabledPairs(b.form).map((kv) => {
+          const name = str(kv.key);
+          if (kv.type !== 'file') return { name, value: str(kv.value) };
+          const file = str(kv.src ?? '').trim();
+          return { name, file, filename: fileName(file), contentType: contentTypeFor(file) };
+        });
+        const summary = parts.map((p) => ('file' in p ? `${p.name}=<file ${p.filename}>` : `${p.name}=${p.value}`)).join('\n');
+        return { content: summary, contentType: `multipart/form-data; boundary=${boundary}`, multipart: { boundary, parts } };
+      }
       const parts = enabledPairs(b.form).map(
         (kv) =>
           `--${boundary}\r\nContent-Disposition: form-data; name="${str(kv.key).replace(/"/g, '%22')}"\r\n\r\n${str(kv.value)}\r\n`,
@@ -262,5 +286,59 @@ function resolveBody(
       return { content: parts.join('') + `--${boundary}--\r\n`, contentType: `multipart/form-data; boundary=${boundary}` };
     }
   }
+}
+
+const MIME: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', ico: 'image/x-icon',
+  pdf: 'application/pdf', zip: 'application/zip', gz: 'application/gzip', tar: 'application/x-tar',
+  json: 'application/json', xml: 'application/xml', csv: 'text/csv', txt: 'text/plain', html: 'text/html', htm: 'text/html',
+  js: 'application/javascript', css: 'text/css', md: 'text/markdown', yaml: 'application/yaml', yml: 'application/yaml',
+  mp3: 'audio/mpeg', wav: 'audio/wav', mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm',
+};
+
+export function fileName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? path;
+}
+
+/** Guesses a file's media type from its extension. */
+export function contentTypeFor(path: string): string {
+  const ext = /\.([A-Za-z0-9]+)$/.exec(fileName(path))?.[1]?.toLowerCase();
+  return (ext && MIME[ext]) || 'application/octet-stream';
+}
+
+const quoteName = (s: string) => s.replace(/"/g, '%22').replace(/\r|\n/g, ' ');
+
+/** The bytes to send: `readFile` loads file fields and binary bodies; text-only bodies stay strings. */
+export function encodeBody(body: ResolvedBody, readFile: (path: string) => Uint8Array): Uint8Array | string | null {
+  if (body.file) return readFile(body.file);
+  if (!body.multipart) return body.content;
+  const enc = new TextEncoder();
+  const chunks: Uint8Array[] = [];
+  const { boundary, parts } = body.multipart;
+  for (const p of parts) {
+    if ('file' in p)
+      chunks.push(
+        enc.encode(
+          `--${boundary}\r\nContent-Disposition: form-data; name="${quoteName(p.name)}"; filename="${quoteName(p.filename)}"\r\nContent-Type: ${p.contentType}\r\n\r\n`,
+        ),
+        readFile(p.file),
+        enc.encode('\r\n'),
+      );
+    else chunks.push(enc.encode(`--${boundary}\r\nContent-Disposition: form-data; name="${quoteName(p.name)}"\r\n\r\n${p.value}\r\n`));
+  }
+  chunks.push(enc.encode(`--${boundary}--\r\n`));
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.length;
+  }
+  return out;
+}
+
+/** Files a resolved body reads when it is sent. */
+export function bodyFiles(body: ResolvedBody): string[] {
+  if (body.file) return [body.file];
+  return body.multipart?.parts.flatMap((p) => ('file' in p ? [p.file] : [])) ?? [];
 }
 

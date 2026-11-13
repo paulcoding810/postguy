@@ -4,6 +4,7 @@ import { BODY_MODES, type Body } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { CodeEditor } from '@/components/CodeEditor';
+import { FilePathField } from './FilePathField';
 import { KeyValueEditor } from './KeyValueEditor';
 
 const MODE_LABELS: Record<Body['mode'], string> = {
@@ -12,6 +13,7 @@ const MODE_LABELS: Record<Body['mode'], string> = {
   text: 'Text',
   form: 'form-data',
   urlencoded: 'x-www-form-urlencoded',
+  binary: 'binary',
 };
 
 /** Pretty-prints JSON while leaving unquoted {{refs}} intact. */
@@ -73,7 +75,27 @@ export function BodyEditor({ body, onChange, editorPath }: { body: Body; onChang
         )}
         {(body.mode === 'form' || body.mode === 'urlencoded') && (
           <div className="h-full overflow-auto">
-            <KeyValueEditor label="Form field" items={body.form ?? []} onChange={(form) => onChange({ ...body, form })} />
+            <KeyValueEditor label="Form field" items={body.form ?? []} files={body.mode === 'form'} onChange={(form) => onChange({ ...body, form })} />
+          </div>
+        )}
+        {body.mode === 'binary' && (
+          <div className="flex max-w-2xl flex-col gap-3 p-4 text-xs">
+            <div className="flex flex-col gap-1.5">
+              <span className="font-medium">File</span>
+              <div className="rounded-md border">
+                <FilePathField borderless value={body.src ?? ''} label="Body file" onChange={(src) => onChange({ ...body, src })} />
+              </div>
+            </div>
+            <label className="flex flex-col gap-1.5">
+              <span className="font-medium">Content-Type</span>
+              <input
+                className="h-8 rounded-md border bg-transparent px-2.5 font-mono outline-none focus:border-ring"
+                placeholder="Detected from the file extension"
+                value={body.contentType ?? ''}
+                onChange={(e) => onChange({ ...body, contentType: e.target.value || undefined })}
+              />
+            </label>
+            <p className="text-muted-foreground">The file is read when the request is sent; history keeps only its name and size.</p>
           </div>
         )}
       </div>

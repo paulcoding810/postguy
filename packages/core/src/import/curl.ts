@@ -187,8 +187,10 @@ export function parseCurl(command: string): CurlParseResult {
 
   const dataParts: string[] = [];
   const raw = [...(opts.data ?? []), ...(opts['data-binary'] ?? [])];
+  let binaryFile: string | null = null;
   for (const d of raw) {
-    if (d.startsWith('@')) warnings.push(`Data file ${d.slice(1)} was not read`);
+    if (d.startsWith('@') && opts['data-binary']?.includes(d) && raw.length === 1) binaryFile = d.slice(1);
+    else if (d.startsWith('@')) warnings.push(`Data file ${d.slice(1)} was not read`);
     else dataParts.push(d.replace(/[\r\n]+/g, opts['data-binary']?.includes(d) ? '\n' : ''));
   }
   dataParts.push(...(opts['data-raw'] ?? []));
@@ -208,7 +210,7 @@ export function parseCurl(command: string): CurlParseResult {
 
   let method: string = (opts.request?.at(-1) ?? '').toUpperCase();
   const hasForm = (opts.form?.length ?? 0) + (opts['form-string']?.length ?? 0) > 0;
-  if (!method) method = flags.has('head') ? 'HEAD' : flags.has('get') ? 'GET' : dataParts.length || hasForm ? 'POST' : 'GET';
+  if (!method) method = flags.has('head') ? 'HEAD' : flags.has('get') ? 'GET' : dataParts.length || hasForm || binaryFile ? 'POST' : 'GET';
   if (!(HTTP_METHODS as readonly string[]).includes(method)) {
     warnings.push(`Method ${method} is not supported; using GET`);
     method = 'GET';
@@ -223,13 +225,19 @@ export function parseCurl(command: string): CurlParseResult {
   const contentType = header(headers, 'content-type')?.value ?? '';
   const data = dataParts.join('&');
   if (flags.has('get') && dataParts.length) params.push(...splitPairs(data));
-  else if (hasForm) {
+  else if (binaryFile && !dataParts.length) {
+    const ct = header(headers, 'content-type');
+    body = { mode: 'binary', src: binaryFile, ...(ct && { contentType: ct.value }) };
+    if (ct) headers.splice(headers.indexOf(ct), 1);
+  } else if (hasForm) {
     const form: KeyValue[] = [];
     for (const f of [...(opts.form ?? []), ...(opts['form-string'] ?? [])]) {
       const i = f.indexOf('=');
       if (i <= 0) continue;
       const value = f.slice(i + 1);
-      if (opts.form?.includes(f) && /^[@<]/.test(value)) warnings.push(`File field ${f.slice(0, i)} was not attached`);
+      if (opts.form?.includes(f) && value.startsWith('@'))
+        form.push({ ...kv(f.slice(0, i), ''), type: 'file', src: value.slice(1).replace(/;(type|filename|headers)=.*$/, '').replace(/^"(.*)"$/, '$1') });
+      else if (opts.form?.includes(f) && value.startsWith('<')) warnings.push(`File field ${f.slice(0, i)} was not attached`);
       else form.push(kv(f.slice(0, i), value.replace(/^"(.*)"$/, '$1')));
     }
     body = { mode: 'form', form };
@@ -303,8 +311,16 @@ export function toCurl(req: ResolvedRequest, opts: { insecure?: boolean } = {}):
   if (req.method === 'HEAD') first += ' -I';
   else if (req.method !== 'GET' || req.body.content !== null) first += ` -X ${req.method}`;
   groups.push(`${first} ${quote(req.url)}`);
-  for (const [k, v] of Object.entries(req.headers)) groups.push(`-H ${quote(`${k}: ${v}`)}`);
-  if (req.body.content !== null && req.body.content !== '') groups.push(`--data-raw ${quote(req.body.content)}`);
+  const { multipart, file } = req.body;
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (multipart && k.toLowerCase() === 'content-type') continue;
+    groups.push(`-H ${quote(`${k}: ${v}`)}`);
+  }
+  if (multipart)
+    for (const p of multipart.parts)
+      groups.push('file' in p ? `-F ${quote(`${p.name}=@${p.file}`)}` : `${/^[@<]/.test(p.value) ? '--form-string' : '-F'} ${quote(`${p.name}=${p.value}`)}`);
+  else if (file) groups.push(`--data-binary ${quote(`@${file}`)}`);
+  else if (req.body.content !== null && req.body.content !== '') groups.push(`--data-raw ${quote(req.body.content)}`);
   if (opts.insecure) groups.push('-k');
   return groups.join(' \\\n  ');
 }

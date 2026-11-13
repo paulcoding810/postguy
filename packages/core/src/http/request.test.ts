@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RequestDefinition, type KeyValue } from '@postguy/shared';
 import { createContext } from '../template/context.ts';
-import { extractPathParams, resolveRequest } from './request.ts';
+import { bodyFiles, contentTypeFor, encodeBody, extractPathParams, resolveRequest } from './request.ts';
 import { parseSetCookie } from './cookies.ts';
 
 const kv = (key: string, value: string, enabled = true): KeyValue => ({ id: key, key, value, enabled });
@@ -99,5 +99,52 @@ describe('parseSetCookie', () => {
       sameSite: 'Lax',
       maxAge: 60,
     });
+  });
+});
+
+describe('file bodies', () => {
+  const def = (body: RequestDefinition['body']) => RequestDefinition.parse({ name: 'up', method: 'POST', url: 'http://x.test/up', body });
+  const files: Record<string, Uint8Array> = { '/data/{{dir}}': new Uint8Array(), '/data/pic.png': new Uint8Array([0, 1, 2, 255]) };
+  const read = (p: string) => files[p] ?? (() => { throw new Error(`missing ${p}`); })();
+
+  it('encodes text and file parts with filename and type', () => {
+    const ctx = createContext({ environment: { dir: { value: '/data' } } });
+    const { request } = resolveRequest(
+      def({
+        mode: 'form',
+        form: [
+          { ...kv('name', 'Ann') },
+          { ...kv('pic', ''), type: 'file', src: '{{dir}}/pic.png' },
+        ],
+      }),
+      ctx,
+    );
+    expect(request.body.content).toBe('name=Ann\npic=<file pic.png>');
+    expect(bodyFiles(request.body)).toEqual(['/data/pic.png']);
+    const boundary = request.body.multipart!.boundary;
+    expect(request.headers['Content-Type']).toBe(`multipart/form-data; boundary=${boundary}`);
+    const bytes = encodeBody(request.body, read) as Uint8Array;
+    const text = Buffer.from(bytes).toString('latin1');
+    expect(text).toBe(
+      `--${boundary}\r\nContent-Disposition: form-data; name="name"\r\n\r\nAnn\r\n` +
+        `--${boundary}\r\nContent-Disposition: form-data; name="pic"; filename="pic.png"\r\nContent-Type: image/png\r\n\r\n\u0000\u0001\u0002\u00ff\r\n` +
+        `--${boundary}--\r\n`,
+    );
+  });
+
+  it('sends a binary body as the file bytes with a detected or chosen type', () => {
+    const ctx = createContext({});
+    const detected = resolveRequest(def({ mode: 'binary', src: '/data/pic.png' }), ctx).request;
+    expect(detected.headers['Content-Type']).toBe('image/png');
+    expect(encodeBody(detected.body, read)).toEqual(files['/data/pic.png']);
+    const chosen = resolveRequest(def({ mode: 'binary', src: '/data/blob', contentType: 'application/x-thing' }), ctx).request;
+    expect(chosen.headers['Content-Type']).toBe('application/x-thing');
+    expect(resolveRequest(def({ mode: 'binary' }), ctx).request.body).toEqual({ content: null, contentType: null });
+  });
+
+  it('keeps text-only forms as plain strings and guesses common types', () => {
+    const { request } = resolveRequest(def({ mode: 'form', form: [kv('a', '1')] }), createContext({}));
+    expect(typeof encodeBody(request.body, read)).toBe('string');
+    expect([contentTypeFor('a.JPG'), contentTypeFor('C:\\x\\r.csv'), contentTypeFor('noext')]).toEqual(['image/jpeg', 'text/csv', 'application/octet-stream']);
   });
 });
