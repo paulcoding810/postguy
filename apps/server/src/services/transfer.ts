@@ -1,8 +1,9 @@
 import { asc, eq, inArray } from 'drizzle-orm';
-import { compatibilityWarnings, isPostmanCollection, postmanDroppedScripts, postmanToCollection, redactAuth } from '@postguy/core';
+import { compatibilityWarnings, isPostmanCollection, postmanToCollection, redactAuth } from '@postguy/core';
 import {
   Auth,
   RequestDefinition,
+  Scripts,
   type Collection,
   type CollectionExport,
   type ExportedCollection,
@@ -69,6 +70,7 @@ function exportNode(db: Db, c: Collection): ExportedCollection {
       value: v.isSecret ? '' : v.value,
       isSecret: v.isSecret,
     })),
+    ...withScripts(loadScripts(db, 'collection', c.id)),
     folders: folders.map((f) => exportNode(db, f)),
     requests: reqs.map((r) => ({
       ref: r.id,
@@ -93,6 +95,7 @@ const ExportedCollectionSchema: z.ZodType<ExportedCollection> = z.lazy(() =>
     description: z.string().nullable().default(null),
     auth: Auth.default({ type: 'none' }),
     variables: z.array(z.object({ key: z.string(), value: z.string(), isSecret: z.boolean().default(false) })).default([]),
+    scripts: Scripts.optional(),
     folders: z.array(ExportedCollectionSchema).default([]),
     requests: z.array(RequestDefinition.extend({ description: z.string().nullable().default(null), ref: z.string().optional() })).default([]),
     flows: z
@@ -128,12 +131,17 @@ export function importCollection(db: Db, data: unknown): { root: Collection; war
     root = importNode(db, parsed.data.collection, null, refs);
     for (const f of parsed.data.collection.flows ?? []) flowWarnings.push(...importFlow(db, f, root.id, refs));
   });
-  const warnings = [...flowWarnings, ...(postman ? postmanDroppedScripts(data) : []), ...compatibilityWarnings(parsed.data.collection as ExportedCollection)];
+  const warnings = [...flowWarnings, ...compatibilityWarnings(parsed.data.collection as ExportedCollection)];
   return { root: root!, warnings };
 }
 
+/** Only non-empty scripts go into an export, so collections without any stay unchanged. */
+function withScripts(s: Scripts): { scripts?: Scripts } {
+  return s.pre.trim() || s.post.trim() ? { scripts: s } : {};
+}
+
 function importNode(db: Db, node: ExportedCollection, parentId: string | null, refs: Map<string, string>): Collection {
-  const c = createCollection(db, { name: node.name, parentId, description: node.description, auth: node.auth });
+  const c = createCollection(db, { name: node.name, parentId, description: node.description, auth: node.auth, scripts: node.scripts });
   if (node.variables.length) replaceVariables(db, 'collection', c.id, node.variables.map((v) => ({ ...v, enabled: true })));
   for (const r of node.requests) {
     const saved = createRequest(db, { ...RequestDefinition.parse(r), description: r.description, collectionId: c.id });

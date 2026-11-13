@@ -3,7 +3,7 @@ import { newId, type Scripts } from '@postguy/shared';
 import type { Db } from '../db/client.ts';
 import { scripts } from '../db/schema.ts';
 
-export type ScriptOwner = 'request' | 'flow_step';
+export type ScriptOwner = 'request' | 'flow_step' | 'collection';
 
 export function loadScripts(db: Db, ownerType: ScriptOwner, ownerId: string): Scripts {
   const rows = db.select().from(scripts).where(and(eq(scripts.ownerType, ownerType), eq(scripts.ownerId, ownerId))).all();

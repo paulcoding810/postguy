@@ -30,10 +30,12 @@ export function workspaceRoutes(app: FastifyInstance, db: Db) {
   const id = (p: unknown) => parse(IdParams, p).id;
 
   app.get('/collections/tree', async () => collections.getTree(db));
-  app.post('/collections', async (req) => collections.createCollection(db, parse(CreateCollectionInput, req.body)));
-  app.get('/collections/:id', async (req) => collections.getCollection(db, id(req.params)));
+  app.post('/collections', async (req) =>
+    collections.withScripts(db, collections.createCollection(db, parse(CreateCollectionInput, req.body))),
+  );
+  app.get('/collections/:id', async (req) => collections.withScripts(db, collections.getCollection(db, id(req.params))));
   app.patch('/collections/:id', async (req) =>
-    collections.updateCollection(db, id(req.params), parse(UpdateCollectionInput, req.body)),
+    collections.withScripts(db, collections.updateCollection(db, id(req.params), parse(UpdateCollectionInput, req.body))),
   );
   app.delete('/collections/:id', async (req) => {
     collections.deleteCollection(db, id(req.params));
