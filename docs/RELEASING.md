@@ -9,11 +9,22 @@ Installers are built by GitHub Actions (`.github/workflows/release.yml`) for:
 | Windows | `x86_64-pc-windows-msvc` | `.msi`, NSIS `.exe` |
 | Linux | `x86_64-unknown-linux-gnu` | `.deb`, `.rpm`, `.AppImage` |
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
+
+- **test**: `pnpm typecheck` and `pnpm test` on Linux.
+- **build**: after the tests pass, a debug build of the desktop app (server bundle, Node sidecar and Rust app, no installers) on macOS, Windows and Linux, so packaging breaks show up before a release.
+
+A newer push to the same branch cancels the run in progress.
+
 ## Cutting a release
 
-1. Bump `version` in `apps/desktop/src-tauri/tauri.conf.json` (and `Cargo.toml` if you track it there).
+1. Bump `version` in `apps/desktop/src-tauri/tauri.conf.json` (and `Cargo.toml` and `apps/desktop/package.json` if you track it there).
 2. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
-3. The workflow builds every platform and attaches the installers to a **draft** GitHub release. Review it and publish.
+3. The workflow checks that the tag matches the version in `tauri.conf.json` and runs the tests, then builds every platform and attaches the installers to a **draft** GitHub release. Review it and publish.
+
+A tag with a suffix, such as `v0.2.0-beta.1`, creates a pre-release.
 
 Running the workflow manually (Actions → Release → Run workflow) builds the same installers and uploads them as workflow artifacts instead of a release.
 

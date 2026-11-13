@@ -1,8 +1,8 @@
 name: Release
 
 # Builds installers for macOS (Apple Silicon and Intel), Windows and Linux.
-# A tag like v0.2.0 creates a draft GitHub release with all installers attached;
-# a manual run uploads them as workflow artifacts instead.
+# A tag like v0.2.0 creates a draft GitHub release with all installers attached (v0.2.0-beta.1 makes a
+# pre-release); the tag must match the version in tauri.conf.json. A manual run uploads workflow artifacts instead.
 on:
   push:
     tags: ['v*']
@@ -12,7 +12,30 @@ permissions:
   contents: write
 
 jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check that the tag matches the app version
+        if: github.ref_type == 'tag'
+        run: |
+          app=$(node -p "require('./apps/desktop/src-tauri/tauri.conf.json').version")
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$app" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $app in apps/desktop/src-tauri/tauri.conf.json"
+            exit 1
+          fi
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+
   build:
+    needs: check
     strategy:
       fail-fast: false
       matrix:
@@ -94,6 +117,7 @@ jobs:
           releaseName: Postguy ${{ github.ref_name }}
           releaseBody: See the commits since the previous release for changes.
           releaseDraft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
       - name: Upload installers
         if: github.ref_type != 'tag'
