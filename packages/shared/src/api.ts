@@ -96,6 +96,7 @@ export type VariableInput = z.input<typeof VariableInput>;
 
 export const ReplaceVariablesInput = z.object({ variables: z.array(VariableInput) });
 export const VariableOwnerParams = z.object({ scope: VariableScope, ownerId: z.string() });
+export const SetVariableInput = z.object({ value: z.string(), isSecret: z.boolean().optional() });
 
 export const SendInput = z.object({
   requestId: z.string().nullable().optional(),
@@ -125,8 +126,10 @@ export interface ResolvedPreview {
     source: string | null;
     secret: boolean;
     preview: string | null;
+    /** The collection, environment, flow or request that defines the variable. */
+    ownerId?: string;
     /** Values of the same name in lower-precedence scopes, which this one hides. */
-    shadowed?: { source: string; preview: string }[];
+    shadowed?: { source: string; preview: string; ownerId?: string }[];
   }[];
 }
 
@@ -332,6 +335,7 @@ export interface ApiRoutes {
 
   'GET /variables/:scope/:ownerId': { query: { reveal?: '1' }; response: Variable[] };
   'PUT /variables/:scope/:ownerId': { body: { variables: VariableInput[] }; response: Variable[] };
+  'PUT /variables/:scope/:ownerId/:key': { body: z.input<typeof SetVariableInput>; response: Variable };
 
   'POST /send': { body: SendInput; response: SendResult };
   'POST /oauth/token': { body: OAuthTokenInput; response: OAuthTokenResult };

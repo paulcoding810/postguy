@@ -1,8 +1,9 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { inputClass } from '@/components/ui/input';
-import { Tooltip } from '@/components/ui/misc';
-import { scopeLabel, shadowNotes } from './scopeNote';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/misc';
+import { useHoverPopup } from './useHoverPopup';
+import { VariableRow } from './VariableEditor';
 import { parseTokens } from './tokens';
 import { useInsertTarget, useTemplateCtx, type Suggestion } from './TemplateContext';
 
@@ -121,86 +122,81 @@ export function TemplateInput({
     if (e.key === 'Enter' && onEnter) onEnter(e);
   };
 
-  const tooltip = refs.length ? (
-    <div className="flex flex-col gap-0.5 font-mono text-[11px]">
-      {refs.map((r, i) => {
-        const p = ctx.preview(r.ref);
-        const scope = p?.resolved ? scopeLabel(p.source) : null;
-        return (
-          <div key={i} className="flex flex-col">
-            <div className="flex gap-2">
-              <span className="opacity-70">{r.ref}</span>
-              <span>→</span>
-              <span className={p?.resolved ? '' : 'text-red-300'}>{p ? (p.preview ?? '') : '…'}</span>
-              {scope && <span className="opacity-60">({scope})</span>}
-            </div>
-            {shadowNotes(p).map((n) => (
-              <span key={n} className="pl-3 text-amber-300 dark:text-amber-700">
-                {n}
-              </span>
-            ))}
-          </div>
-        );
-      })}
-    </div>
-  ) : null;
+  const names = [...new Set(refs.map((r) => r.ref))];
+  const hover = useHoverPopup(names.length > 0);
 
   return (
     <div className={cn('relative min-w-0', className)}>
-      <Tooltip content={tooltip} side="bottom">
-        <div className="relative">
-          <div
-            ref={layerRef}
-            aria-hidden
-            className={cn(
-              inputClass,
-              'pointer-events-none absolute inset-0 overflow-hidden border-transparent bg-transparent leading-[30px] whitespace-pre shadow-none dark:bg-transparent',
-              borderless && 'rounded-none',
-              inputClassName,
-            )}
-          >
-            {tokens.map((t, i) =>
-              t.kind === 'text' ? (
-                <span key={i}>{t.value}</span>
-              ) : (
-                <span key={i} className={cn('tpl-ref', `tpl-${ctx.status(t.ref)}`)}>
-                  {t.raw}
-                </span>
-              ),
-            )}
+      <Popover open={hover.open} onOpenChange={(o) => !o && hover.close()}>
+        <PopoverAnchor asChild>
+          <div className="relative" {...hover.triggerProps}>
+            <div
+              ref={layerRef}
+              aria-hidden
+              className={cn(
+                inputClass,
+                'pointer-events-none absolute inset-0 overflow-hidden border-transparent bg-transparent leading-[30px] whitespace-pre shadow-none dark:bg-transparent',
+                borderless && 'rounded-none',
+                inputClassName,
+              )}
+            >
+              {tokens.map((t, i) =>
+                t.kind === 'text' ? (
+                  <span key={i}>{t.value}</span>
+                ) : (
+                  <span key={i} className={cn('tpl-ref', `tpl-${ctx.status(t.ref)}`)}>
+                    {t.raw}
+                  </span>
+                ),
+              )}
+            </div>
+            <input
+              ref={inputRef}
+              value={value}
+              disabled={disabled}
+              autoFocus={autoFocus}
+              spellCheck={false}
+              autoComplete="off"
+              placeholder={placeholder}
+              aria-label={fieldLabel}
+              onFocus={register}
+              onChange={(e) => {
+                onChange(e.target.value);
+                updateMenu(e.target.value, e.target.selectionStart ?? e.target.value.length);
+              }}
+              onKeyDown={(e) => {
+                hover.close();
+                onKeyDown(e);
+              }}
+              onPaste={onPaste}
+              onBlur={() => setTimeout(() => setMenu(null), 150)}
+              onScroll={(e) => {
+                if (layerRef.current) layerRef.current.scrollLeft = e.currentTarget.scrollLeft;
+              }}
+              onSelect={(e) => {
+                if (layerRef.current) layerRef.current.scrollLeft = e.currentTarget.scrollLeft;
+              }}
+              className={cn(
+                inputClass,
+                'relative bg-transparent text-transparent caret-foreground selection:bg-primary/25 selection:text-transparent dark:bg-transparent',
+                borderless && 'rounded-none border-transparent shadow-none focus-visible:ring-0',
+                inputClassName,
+              )}
+            />
           </div>
-          <input
-            ref={inputRef}
-            value={value}
-            disabled={disabled}
-            autoFocus={autoFocus}
-            spellCheck={false}
-            autoComplete="off"
-            placeholder={placeholder}
-            aria-label={fieldLabel}
-            onFocus={register}
-            onChange={(e) => {
-              onChange(e.target.value);
-              updateMenu(e.target.value, e.target.selectionStart ?? e.target.value.length);
-            }}
-            onKeyDown={onKeyDown}
-            onPaste={onPaste}
-            onBlur={() => setTimeout(() => setMenu(null), 150)}
-            onScroll={(e) => {
-              if (layerRef.current) layerRef.current.scrollLeft = e.currentTarget.scrollLeft;
-            }}
-            onSelect={(e) => {
-              if (layerRef.current) layerRef.current.scrollLeft = e.currentTarget.scrollLeft;
-            }}
-            className={cn(
-              inputClass,
-              'relative bg-transparent text-transparent caret-foreground selection:bg-primary/25 selection:text-transparent dark:bg-transparent',
-              borderless && 'rounded-none border-transparent shadow-none focus-visible:ring-0',
-              inputClassName,
-            )}
-          />
-        </div>
-      </Tooltip>
+        </PopoverAnchor>
+        <PopoverContent
+          side="bottom"
+          className="flex w-[min(26rem,90vw)] flex-col gap-2.5 p-2.5"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onCloseAutoFocus={(e) => e.preventDefault()}
+          {...hover.contentProps}
+        >
+          {names.map((n) => (
+            <VariableRow key={n} name={n} preview={ctx.preview(n)} />
+          ))}
+        </PopoverContent>
+      </Popover>
       {menu && (
         <div className="absolute top-full left-0 z-50 mt-1 max-h-64 w-[min(28rem,100%)] min-w-64 overflow-y-auto rounded-md border bg-popover p-1 shadow-md">
           {menu.items.map((s, i) => (
@@ -216,7 +212,12 @@ export function TemplateInput({
                 i === menu.index && 'bg-accent',
               )}
             >
-              <span className={cn('size-1.5 shrink-0 rounded-full', s.kind === 'variable' ? 'bg-info' : 'bg-success')} />
+              <span
+                className={cn(
+                  'size-1.5 shrink-0 rounded-full',
+                  s.kind === 'variable' ? 'bg-info' : 'bg-success',
+                )}
+              />
               <span className="truncate font-mono">{s.label}</span>
               <span className="ml-auto max-w-[45%] truncate text-muted-foreground">{s.detail}</span>
             </button>

@@ -6,11 +6,13 @@ export interface VarEntry {
   value: string;
   secret: boolean;
   source: VarSource;
+  /** The collection, environment, flow or request that defines it. */
+  ownerId?: string;
   /** Lower-precedence values for the same key, highest first. */
-  shadowed?: { value: string; secret: boolean; source: VarSource }[];
+  shadowed?: { value: string; secret: boolean; source: VarSource; ownerId?: string }[];
 }
 
-export type VarMap = Record<string, { value: string; secret?: boolean }>;
+export type VarMap = Record<string, { value: string; secret?: boolean; ownerId?: string }>;
 
 export interface ResponseRecord {
   name: string;
@@ -51,8 +53,9 @@ export function mergeScopes(scopes: ScopeMaps): Map<string, VarEntry> {
     for (const map of Array.isArray(entry) ? entry : [entry]) {
       for (const [key, v] of Object.entries(map)) {
         const winner = merged.get(key);
-        if (!winner) merged.set(key, { value: v.value, secret: !!v.secret, source });
-        else (winner.shadowed ??= []).push({ value: v.value, secret: !!v.secret, source });
+        const entry = { value: v.value, secret: !!v.secret, source, ...(v.ownerId && { ownerId: v.ownerId }) };
+        if (!winner) merged.set(key, entry);
+        else (winner.shadowed ??= []).push(entry);
       }
     }
   }

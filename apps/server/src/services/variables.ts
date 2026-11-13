@@ -54,21 +54,22 @@ export function replaceVariables(
   return listVariables(db, scope, ownerId);
 }
 
-/** Sets one variable, keeping its secret flag and position when it exists. */
-export function setVariable(db: Db, scope: VariableScope, ownerId: string, key: string, value: string): void {
-  const current = listVariables(db, scope, ownerId, true);
-  const existing = current.find((v) => v.key === key);
-  const next = existing
-    ? current.map((v) => (v.key === key ? { ...v, value } : v))
-    : [...current, { key, value, isSecret: false, enabled: true }];
-  replaceVariables(db, scope, ownerId, next.map(({ key: k, value: val, isSecret, enabled }) => ({ key: k, value: val, isSecret, enabled })));
-}
-
 /** Enabled variables of an owner as a resolver map. */
 export function variableMap(db: Db, scope: VariableScope, ownerId: string) {
-  const out: Record<string, { value: string; secret: boolean }> = {};
+  const out: Record<string, { value: string; secret: boolean; ownerId: string }> = {};
   for (const v of listVariables(db, scope, ownerId, true)) {
-    if (v.enabled) out[v.key] = { value: v.value, secret: v.isSecret };
+    if (v.enabled) out[v.key] = { value: v.value, secret: v.isSecret, ownerId };
   }
   return out;
+}
+
+/** Sets one variable, keeping its secret flag and position when it exists, and enables it; others are untouched. */
+export function setVariable(db: Db, scope: VariableScope, ownerId: string, key: string, value: string, isSecret?: boolean): Variable {
+  const current = listVariables(db, scope, ownerId, true);
+  const prev = current.find((v) => v.key === key);
+  const next = prev
+    ? current.map((v) => (v.key === key ? { ...v, value, isSecret: isSecret ?? v.isSecret, enabled: true } : v))
+    : [...current, { key, value, isSecret: isSecret ?? false, enabled: true }];
+  replaceVariables(db, scope, ownerId, next.map((v) => ({ key: v.key, value: v.value, isSecret: v.isSecret, enabled: v.enabled })));
+  return listVariables(db, scope, ownerId, false).find((v) => v.key === key)!;
 }

@@ -10,6 +10,7 @@ import {
   UpdateCollectionInput,
   UpdateEnvironmentInput,
   UpdateRequestInput,
+  SetVariableInput,
   VariableOwnerParams,
 } from '@postguy/shared';
 import type { Db } from '../db/client.ts';
@@ -80,6 +81,12 @@ export function workspaceRoutes(app: FastifyInstance, db: Db) {
   app.put('/variables/:scope/:ownerId', async (req) => {
     const p = parse(VariableOwnerParams, req.params);
     return vars.replaceVariables(db, p.scope, p.ownerId, parse(ReplaceVariablesInput, req.body).variables);
+  });
+
+  app.put('/variables/:scope/:ownerId/:key', async (req) => {
+    const p = parse(VariableOwnerParams.extend({ key: z.string().min(1) }), req.params);
+    const body = parse(SetVariableInput, req.body);
+    return vars.setVariable(db, p.scope, p.ownerId, p.key, body.value, body.isSecret);
   });
 
   app.get('/reference-sources', async (req) =>

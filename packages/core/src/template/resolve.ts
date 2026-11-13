@@ -15,6 +15,7 @@ export interface RefResolution {
   responseName?: string;
   error?: string;
   shadowed?: VarEntry['shadowed'];
+  ownerId?: string;
 }
 
 export interface ResolveResult<T> {
@@ -106,6 +107,7 @@ export function resolveRef(ref: string, ctx: ResolutionContext, depth = 0): RefR
       secret: direct.secret || inner.secrets.length > 0,
       error: inner.unresolved.length ? `Nested unresolved: ${inner.unresolved.join(', ')}` : undefined,
       ...(direct.shadowed && { shadowed: direct.shadowed }),
+      ...(direct.ownerId && { ownerId: direct.ownerId }),
     };
   }
 

@@ -16,7 +16,28 @@ describe('variable scopes in previews', () => {
     const env = (await h.call('POST', '/environments', { name: 'Local' })).body;
     await h.call('PUT', `/variables/environment/${env.id}`, { variables: [{ key: 'baseUrl', value: 'http://127.0.0.1:4791' }] });
     const [p] = (await h.call('POST', '/resolve-preview', { collectionId: col.id, environmentId: env.id, templates: ['{{baseUrl}}/x'] })).body;
-    expect(p.refs[0]).toMatchObject({ source: 'collection', preview: 'https://prod.example.com', shadowed: [{ source: 'environment', preview: 'http://127.0.0.1:4791' }] });
+    expect(p.refs[0]).toMatchObject({
+      source: 'collection',
+      ownerId: col.id,
+      preview: 'https://prod.example.com',
+      shadowed: [{ source: 'environment', preview: 'http://127.0.0.1:4791', ownerId: env.id }],
+    });
+  });
+
+  it('sets one variable without touching the others', async () => {
+    const env = (await h.call('POST', '/environments', { name: 'Dev' })).body;
+    await h.call('PUT', `/variables/environment/${env.id}`, { variables: [{ key: 'a', value: '1' }, { key: 'token', value: 's3cret', isSecret: true }, { key: 'off', value: 'x', enabled: false }] });
+    const edited = await h.call('PUT', `/variables/environment/${env.id}/a`, { value: '2' });
+    expect(edited.body).toMatchObject({ key: 'a', value: '2', enabled: true });
+    await h.call('PUT', `/variables/environment/${env.id}/off`, { value: 'y' });
+    await h.call('PUT', `/variables/environment/${env.id}/added`, { value: 'new' });
+    const vars = (await h.call('GET', `/variables/environment/${env.id}?reveal=1`)).body;
+    expect(vars.map((v: any) => [v.key, v.value, v.isSecret, v.enabled])).toEqual([
+      ['a', '2', false, true],
+      ['token', 's3cret', true, true],
+      ['off', 'y', false, true],
+      ['added', 'new', false, true],
+    ]);
   });
 });
 

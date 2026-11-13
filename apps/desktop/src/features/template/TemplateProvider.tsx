@@ -61,6 +61,7 @@ export function TemplateProvider({
     const variables = vars.data ?? [];
     return {
       variables,
+      owner: { collectionId, requestId, flowId: flow?.flowId ?? null },
       preview: (ref) => map?.get(`{{${ref}}}`)?.refs[0],
       status: (ref) => {
         const p = map?.get(`{{${ref}}}`);
@@ -76,7 +77,7 @@ export function TemplateProvider({
         return [...fromVars, ...fromResponses];
       },
     };
-  }, [preview.data, vars.data, responseSuggestions]);
+  }, [preview.data, vars.data, responseSuggestions, collectionId, requestId, flow?.flowId]);
 
   return <TemplateContext.Provider value={value}>{children}</TemplateContext.Provider>;
 }

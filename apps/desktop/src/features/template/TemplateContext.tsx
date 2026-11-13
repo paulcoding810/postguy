@@ -14,6 +14,8 @@ export interface TemplateCtx {
   preview: (ref: string) => ResolvedPreview['refs'][number] | undefined;
   variables: ContextVariable[];
   suggestions: (query: string) => Suggestion[];
+  /** Where the edited request lives, for adding variables from the popup. */
+  owner: { collectionId: string | null; requestId: string | null; flowId: string | null };
 }
 
 const fallback: TemplateCtx = {
@@ -21,6 +23,7 @@ const fallback: TemplateCtx = {
   preview: () => undefined,
   variables: [],
   suggestions: () => [],
+  owner: { collectionId: null, requestId: null, flowId: null },
 };
 
 export const TemplateContext = React.createContext<TemplateCtx>(fallback);
