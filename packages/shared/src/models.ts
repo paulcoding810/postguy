@@ -96,6 +96,8 @@ export interface Collection {
   openapiSpecId: string | null;
   createdAt: number;
   updatedAt: number;
+  /** Run around every request inside it; filled on reads of a collection or the tree. */
+  scripts?: Scripts;
 }
 
 export interface SavedRequest extends RequestDefinition {

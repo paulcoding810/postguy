@@ -145,6 +145,11 @@ function request(item: Obj): RequestDefinition & { description: string | null } 
   };
 }
 
+function folderScripts(events: unknown): { scripts?: { pre: string; post: string } } {
+  const s = scripts(events);
+  return s.pre || s.post ? { scripts: s } : {};
+}
+
 function folder(node: Obj, isRoot: boolean): ExportedCollection {
   const items: Obj[] = Array.isArray(node.item) ? node.item : [];
   return {
@@ -152,6 +157,7 @@ function folder(node: Obj, isRoot: boolean): ExportedCollection {
     description: text(isRoot ? node.info?.description : node.description),
     auth: postmanAuth(node.auth, !isRoot),
     variables: isRoot && Array.isArray(node.variable) ? node.variable.filter((v: Obj) => v?.key).map((v: Obj) => ({ key: String(v.key), value: v.value === undefined || v.value === null ? '' : String(v.value), isSecret: v.type === 'secret' })) : [],
+    ...folderScripts(node.event),
     folders: items.filter((i) => Array.isArray(i.item)).map((i) => folder(i, false)),
     requests: items.filter((i) => !Array.isArray(i.item) && i.request !== undefined).map(request),
   };
@@ -160,18 +166,4 @@ function folder(node: Obj, isRoot: boolean): ExportedCollection {
 /** Converts a Postman v2.0/v2.1 collection into Postguy's export format. */
 export function postmanToCollection(data: unknown): CollectionExport {
   return { format: 'postguy-collection', version: 1, collection: folder(data as Obj, true) };
-}
-
-/** Scripts on the collection or its folders, which have no place in Postguy and are dropped. */
-export function postmanDroppedScripts(data: unknown): string[] {
-  const out: string[] = [];
-  const walk = (node: Obj, name: string) => {
-    const events = Array.isArray(node.event) ? (node.event as Obj[]) : [];
-    if (events.some((e) => (Array.isArray(e.script?.exec) ? e.script.exec.join('') : String(e.script?.exec ?? '')).trim())) out.push(name);
-    for (const i of Array.isArray(node.item) ? (node.item as Obj[]) : []) if (Array.isArray(i.item)) walk(i, String(i.name ?? 'Folder'));
-  };
-  walk(data as Obj, String((data as Obj)?.info?.name ?? 'Collection'));
-  if (!out.length) return [];
-  const shown = out.slice(0, 3).map((n) => `"${n}"`).join(', ') + (out.length > 3 ? ` and ${out.length - 3} more` : '');
-  return [`Collection- and folder-level scripts were not imported (Postguy runs scripts per request): ${shown}.`];
 }

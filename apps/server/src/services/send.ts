@@ -29,7 +29,7 @@ import {
 import type { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { requestHistory } from '../db/schema.ts';
-import { effectiveAuth, rootOf } from './collections.ts';
+import { ancestry, effectiveAuth, rootOf } from './collections.ts';
 import { loadBodyFiles } from './bodyFiles.ts';
 import { buildContext } from './context.ts';
 import { globalEnvironment } from './environments.ts';
@@ -39,6 +39,7 @@ import { recordSnapshot, referenceSources, snapshotLookup, validateResponse } fr
 import { afterSend } from './maintenance.ts';
 import { exchangeToken, needsTokenExchange } from './oauth.ts';
 import { getRequest } from './requests.ts';
+import { loadScripts } from './scripts.ts';
 import { listVariables, replaceVariables, setVariable } from './variables.ts';
 
 export const HISTORY_BODY_LIMIT = 5 * 1024 * 1024;
@@ -225,9 +226,14 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
 
   let def: RequestDefinition = structuredClone(input.request);
   const scripts: ScriptRun[] = [];
+  const outer = ancestry(db, collectionId)
+    .reverse()
+    .map((c) => [`${c.kind === 'folder' ? 'folder' : 'collection'} "${c.name}"`, loadScripts(db, 'collection', c.id)] as const);
+  /** Collection and folder scripts run outermost first, then the request's, then a flow step's (Postman's order). */
   const sources = (phase: 'pre' | 'post'): [string, string][] =>
     (
       [
+        ...outer.map(([label, s]) => [label, s[phase]]),
         ['request', def.scripts?.[phase] ?? ''],
         ['step', opts.extraScripts?.[phase] ?? ''],
       ] as [string, string][]

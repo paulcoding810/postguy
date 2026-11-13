@@ -8,9 +8,9 @@ import {
   type UpdateCollectionInput,
 } from '@postguy/shared';
 import type { Db } from '../db/client.ts';
-import { collections, requests, variables } from '../db/schema.ts';
+import { collections, requests, scripts as scriptsTable, variables } from '../db/schema.ts';
 import { badRequest, notFound } from '../lib/errors.ts';
-import { deleteScripts } from './scripts.ts';
+import { deleteScripts, loadScripts, saveScripts } from './scripts.ts';
 
 export function getCollection(db: Db, id: string): Collection {
   const row = db.select().from(collections).where(eq(collections.id, id)).get();
@@ -18,8 +18,18 @@ export function getCollection(db: Db, id: string): Collection {
   return row;
 }
 
+/** The collection with its pre-request and post-response scripts. */
+export function withScripts(db: Db, c: Collection): Collection {
+  return { ...c, scripts: loadScripts(db, 'collection', c.id) };
+}
+
 export function getTree(db: Db): CollectionTreeNode[] {
   const all = db.select().from(collections).orderBy(asc(collections.sortOrder), asc(collections.createdAt)).all();
+  const scriptRows = db.select().from(scriptsTable).where(eq(scriptsTable.ownerType, 'collection')).all();
+  const scriptsOf = (id: string) => ({
+    pre: scriptRows.find((r) => r.ownerId === id && r.phase === 'pre')?.source ?? '',
+    post: scriptRows.find((r) => r.ownerId === id && r.phase === 'post')?.source ?? '',
+  });
   const reqs = db
     .select({
       id: requests.id,
@@ -32,7 +42,7 @@ export function getTree(db: Db): CollectionTreeNode[] {
     .from(requests)
     .orderBy(asc(requests.sortOrder), asc(requests.createdAt))
     .all();
-  const nodes = new Map<string, CollectionTreeNode>(all.map((c) => [c.id, { ...c, children: [], requests: [] }]));
+  const nodes = new Map<string, CollectionTreeNode>(all.map((c) => [c.id, { ...c, scripts: scriptsOf(c.id), children: [], requests: [] }]));
   for (const r of reqs) nodes.get(r.collectionId)?.requests.push(r);
   const roots: CollectionTreeNode[] = [];
   for (const node of nodes.values()) {
@@ -70,6 +80,7 @@ export function createCollection(db: Db, input: CreateCollectionInput & { openap
     updatedAt: now,
   };
   db.insert(collections).values(row).run();
+  if (input.scripts) saveScripts(db, 'collection', row.id, { pre: input.scripts.pre ?? '', post: input.scripts.post ?? '' });
   return row;
 }
 
@@ -100,6 +111,10 @@ export function updateCollection(db: Db, id: string, input: UpdateCollectionInpu
     updatedAt: Date.now(),
   };
   db.update(collections).set(patch).where(eq(collections.id, id)).run();
+  if (input.scripts) {
+    const current = loadScripts(db, 'collection', id);
+    saveScripts(db, 'collection', id, { pre: input.scripts.pre ?? current.pre, post: input.scripts.post ?? current.post });
+  }
   return getCollection(db, id);
 }
 
@@ -113,6 +128,7 @@ export function deleteCollection(db: Db, id: string): void {
     tx.delete(collections).where(eq(collections.id, id)).run();
   });
   deleteScripts(db, 'request', reqIds);
+  deleteScripts(db, 'collection', ids);
 }
 
 /** The collection and its ancestors, innermost first. */

@@ -2,8 +2,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { create } from 'zustand';
-import type { Auth } from '@postguy/shared';
+import type { Auth, Scripts } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
+import { ScriptEditor, useRequestScriptTypes } from '@/components/ScriptEditor';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, Label, Textarea } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -42,19 +43,24 @@ export function CollectionSettings() {
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
   const [auth, setAuth] = React.useState<Auth>({ type: 'none' });
+  const [scripts, setScripts] = React.useState<Scripts>({ pre: '', post: '' });
+  const [phase, setPhase] = React.useState<'pre' | 'post'>('pre');
+  const preTypes = useRequestScriptTypes(node?.id ?? null, null, 'pre', '');
+  const postTypes = useRequestScriptTypes(node?.id ?? null, null, 'post', '');
 
   React.useEffect(() => {
     if (node) {
       setName(node.name);
       setDescription(node.description ?? '');
       setAuth(node.auth);
+      setScripts({ pre: node.scripts?.pre ?? '', post: node.scripts?.post ?? '' });
     }
   }, [node?.id]);
 
   const save = async () => {
     if (!node) return;
     try {
-      await api('PATCH /collections/:id', { params: { id: node.id }, body: { name, description: description || null, auth } });
+      await api('PATCH /collections/:id', { params: { id: node.id }, body: { name, description: description || null, auth, scripts } });
       await qc.invalidateQueries({ queryKey: keys.tree });
       invalidateVars();
       toast.success('Saved');
@@ -75,6 +81,9 @@ export function CollectionSettings() {
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="auth">Auth</TabsTrigger>
+              <TabsTrigger value="scripts">
+                Scripts {(scripts.pre.trim() || scripts.post.trim()) && <span className="size-1.5 rounded-full bg-success" />}
+              </TabsTrigger>
               <TabsTrigger value="variables">Variables</TabsTrigger>
             </TabsList>
             <TabsContent value="overview" className="flex flex-col gap-3 overflow-auto p-4">
@@ -103,6 +112,32 @@ export function CollectionSettings() {
               <div className="px-4 pb-4">
                 <Button onClick={save}>Save auth</Button>
                 <p className="mt-2 text-xs text-muted-foreground">Requests set to “Inherit” use this auth.</p>
+              </div>
+            </TabsContent>
+            <TabsContent value="scripts" className="flex min-h-0 flex-col">
+              <div className="flex items-center gap-2 border-b px-4 py-2">
+                {(['pre', 'post'] as const).map((p) => (
+                  <Button key={p} size="xs" variant={phase === p ? 'secondary' : 'ghost'} onClick={() => setPhase(p)}>
+                    {p === 'pre' ? 'Pre-request' : 'Post-response'}
+                    {scripts[p].trim() && <span className="size-1.5 rounded-full bg-success" />}
+                  </Button>
+                ))}
+                <p className="ml-2 min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                  Runs around every request in this {node.kind === 'collection' ? 'collection' : 'folder'}: outer collections and folders first, then the request.
+                </p>
+                <Button size="sm" onClick={save}>
+                  Save scripts
+                </Button>
+              </div>
+              <div className="min-h-0 flex-1">
+                <ScriptEditor
+                  key={`${node.id}:${phase}`}
+                  value={scripts[phase]}
+                  onChange={(v) => setScripts((s) => ({ ...s, [phase]: v }))}
+                  phase={phase}
+                  types={phase === 'pre' ? preTypes : postTypes}
+                  path={`collection-${node.id}-${phase}.js`}
+                />
               </div>
             </TabsContent>
             <TabsContent value="variables" className="flex min-h-0 flex-col p-4">

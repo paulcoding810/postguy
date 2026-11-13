@@ -6,6 +6,7 @@ import {
   KeyValue,
   RequestDefinition,
   RequestSettings,
+  Scripts,
   VariableScope,
   type ApiModel,
   type Collection,
@@ -45,6 +46,7 @@ export const CreateCollectionInput = z.object({
   kind: z.enum(['collection', 'folder']).optional(),
   description: z.string().nullable().optional(),
   auth: Auth.optional(),
+  scripts: Scripts.optional(),
 });
 export type CreateCollectionInput = z.input<typeof CreateCollectionInput>;
 
@@ -54,6 +56,7 @@ export const UpdateCollectionInput = z.object({
   auth: Auth.optional(),
   parentId: z.string().nullable().optional(),
   sortOrder: z.number().int().optional(),
+  scripts: z.object({ pre: z.string().max(100_000).optional(), post: z.string().max(100_000).optional() }).optional(),
 });
 export type UpdateCollectionInput = z.input<typeof UpdateCollectionInput>;
 
@@ -279,6 +282,8 @@ export interface ExportedCollection {
   description: string | null;
   auth: Auth;
   variables: { key: string; value: string; isSecret: boolean }[];
+  /** Pre-request and post-response scripts run around every request inside it. */
+  scripts?: Scripts;
   folders: ExportedCollection[];
   /** `ref` is the request's id in the exporting workspace, used by flow steps. */
   requests: (RequestDefinition & { description: string | null; ref?: string })[];

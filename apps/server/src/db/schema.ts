@@ -283,7 +283,7 @@ export const scripts = sqliteTable(
   'scripts',
   {
     id: id(),
-    ownerType: text('owner_type').$type<'request' | 'flow_step'>().notNull(),
+    ownerType: text('owner_type').$type<'request' | 'flow_step' | 'collection'>().notNull(),
     ownerId: text('owner_id').notNull(),
     phase: text('phase').$type<'pre' | 'post'>().notNull(),
     source: text('source').notNull().default(''),

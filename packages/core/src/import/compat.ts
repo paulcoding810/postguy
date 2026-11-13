@@ -32,6 +32,9 @@ export function compatibilityWarnings(root: ExportedCollection): string[] {
     map.set(key, names);
   };
   const walk = (node: ExportedCollection, path: string) => {
+    const own = `${node.scripts?.pre ?? ''}\n${node.scripts?.post ?? ''}`;
+    const label = path ? `${path} (folder scripts)` : `${node.name} (collection scripts)`;
+    for (const f of SCRIPT_FEATURES) if (f.pattern.test(own)) note(byFeature, f.what, label);
     for (const r of node.requests) {
       const name = path ? `${path} / ${r.name}` : r.name;
       const script = `${r.scripts?.pre ?? ''}\n${r.scripts?.post ?? ''}`;
