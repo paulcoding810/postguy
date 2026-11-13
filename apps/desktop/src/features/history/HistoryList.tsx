@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import * as React from 'react';
 import { HistoryIcon, Trash2Icon } from 'lucide-react';
 import { toast } from 'sonner';
 import { newId, type HttpMethod } from '@postguy/shared';
@@ -9,6 +10,7 @@ import { useHistory } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
 import { cn, formatMs, statusTone, timeAgo } from '@/lib/utils';
 import { blankRequest, useTabs } from '@/stores/tabs';
+import { HistoryDetailDialog } from './HistoryDetail';
 
 function dayLabel(ts: number): string {
   const d = new Date(ts);
@@ -23,9 +25,11 @@ export function HistoryList({ filter }: { filter: string }) {
   const history = useHistory();
   const qc = useQueryClient();
   const q = filter.trim().toLowerCase();
+  const [viewing, setViewing] = React.useState<string | null>(null);
   const items = (history.data ?? []).filter((h) => !q || h.url.toLowerCase().includes(q) || h.method.toLowerCase().includes(q));
 
   const restore = async (id: string) => {
+    setViewing(null);
     try {
       const entry = await api('GET /history/:id', { params: { id } });
       if (entry.requestId) {
@@ -79,7 +83,7 @@ export function HistoryList({ filter }: { filter: string }) {
             <Tooltip content={h.error ?? `${h.url} · ${timeAgo(h.createdAt)}`} side="right">
               <button
                 type="button"
-                onClick={() => restore(h.id)}
+                onClick={() => setViewing(h.id)}
                 className="flex h-7 w-full items-center gap-2 px-3 text-left text-[12px] hover:bg-accent"
               >
                 <span className={cn('w-11 shrink-0 text-right font-mono text-[10px] font-bold', `method-${h.method}`)}>{h.method}</span>
@@ -91,6 +95,7 @@ export function HistoryList({ filter }: { filter: string }) {
           </div>
         );
       })}
+      <HistoryDetailDialog id={viewing} onClose={() => setViewing(null)} onOpenRequest={restore} />
     </div>
   );
 }
