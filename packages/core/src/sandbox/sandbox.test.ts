@@ -62,7 +62,7 @@ describe('runScript', () => {
   it('enforces time and memory limits', async () => {
     const loop = await runScript({ phase: 'post', host: host(), source: 'while (true) {}', timeoutMs: 100 });
     expect(loop.error).toBe('Script timed out after 100 ms');
-    const mem = await runScript({ phase: 'post', host: host(), source: 'const a = []; while (true) a.push("x".repeat(1e5));', memoryMb: 8, timeoutMs: 5000 });
+    const mem = await runScript({ phase: 'post', host: host(), source: 'const a = []; for (let i = 0; ; i++) a.push({ i, s: "y" + i });', memoryMb: 8, timeoutMs: 5000 });
     expect(mem.error).toMatch(/memory/i);
   });
 
