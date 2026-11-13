@@ -291,3 +291,23 @@ export const scripts = sqliteTable(
   },
   (t) => [uniqueIndex('scripts_owner_phase_uq').on(t.ownerType, t.ownerId, t.phase)],
 );
+
+export const cookies = sqliteTable(
+  'cookies',
+  {
+    id: id(),
+    /** The environment id, or '' for the workspace jar used when no environment is active. */
+    jar: text('jar').notNull().default(''),
+    name: text('name').notNull(),
+    value: text('value').notNull(),
+    domain: text('domain').notNull(),
+    path: text('path').notNull(),
+    hostOnly: integer('host_only', { mode: 'boolean' }).notNull().default(true),
+    secure: integer('secure', { mode: 'boolean' }).notNull().default(false),
+    httpOnly: integer('http_only', { mode: 'boolean' }).notNull().default(false),
+    sameSite: text('same_site'),
+    expiresAt: integer('expires_at'),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [uniqueIndex('cookies_jar_key_uq').on(t.jar, t.domain, t.path, t.name)],
+);

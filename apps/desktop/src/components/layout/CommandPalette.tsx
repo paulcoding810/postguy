@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, ArrowRightIcon, FileCode2Icon, FilePlusIcon, HistoryIcon, LayersIcon, MoonIcon, PanelRightIcon, SearchIcon, SendIcon, SettingsIcon, WorkflowIcon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowRightIcon, CookieIcon, FileCode2Icon, FilePlusIcon, HistoryIcon, LayersIcon, MoonIcon, PanelRightIcon, SearchIcon, SendIcon, SettingsIcon, WorkflowIcon } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { Dialog as DialogPrimitive } from 'radix-ui';
@@ -10,6 +10,7 @@ import { neighbourTab, useTabs } from '@/stores/tabs';
 import { useUi } from '@/stores/ui';
 import { allRequests } from '@/features/collections/treeUtils';
 import { useFlows } from '@/features/flows/queries';
+import { useCookieManager } from '@/features/cookies/CookieManager';
 import { useImportDialog } from '@/features/openapi/ImportDialog';
 import { useCurlDialog } from '@/features/request/curl';
 
@@ -85,6 +86,7 @@ export function CommandPalette() {
       { id: 'a:smart', group: 'Actions', label: 'Toggle smart data panel', shortcut: `${modKey}J`, icon: <PanelRightIcon className="size-3.5" />, run: () => useUi.getState().toggleSmartPanel() },
       { id: 'a:next-tab', group: 'Actions', label: 'Next tab', shortcut: isMac ? '⌃Tab' : 'Ctrl+Tab', icon: <ArrowRightIcon className="size-3.5" />, run: () => switchTab(1) },
       { id: 'a:prev-tab', group: 'Actions', label: 'Previous tab', shortcut: isMac ? '⌃⇧Tab' : 'Ctrl+⇧Tab', icon: <ArrowLeftIcon className="size-3.5" />, run: () => switchTab(-1) },
+      { id: 'a:cookies', group: 'Actions', label: 'Manage cookies', icon: <CookieIcon className="size-3.5" />, run: () => useCookieManager.getState().setOpen(true) },
       { id: 'a:history', group: 'Actions', label: 'Show history', icon: <HistoryIcon className="size-3.5" />, run: () => useUi.getState().setSidebar('history') },
       {
         id: 'a:theme',

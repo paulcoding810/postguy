@@ -8,6 +8,7 @@ import { queryClient } from '@/hooks/queries';
 import { useApplyTheme, useResolvedTheme } from '@/hooks/useTheme';
 import { CollectionSettings } from '@/features/collections/CollectionSettings';
 import { MoveDialog } from '@/features/collections/MoveDialog';
+import { CookieManager } from '@/features/cookies/CookieManager';
 import { EnvironmentManager } from '@/features/environments/EnvironmentManager';
 import { SaveDialog } from '@/features/request/SaveDialog';
 import { OpenApiImportDialog } from '@/features/openapi/ImportDialog';
@@ -23,6 +24,7 @@ export function App() {
         <EnvironmentManager />
         <CollectionSettings />
         <MoveDialog />
+        <CookieManager />
         <SaveDialog />
         <OpenApiImportDialog />
         <CurlDialog />

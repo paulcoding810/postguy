@@ -52,6 +52,8 @@ export const RequestSettings = z.object({
   timeoutMs: z.number().int().positive().max(600_000).optional(),
   followRedirects: z.boolean().optional(),
   rejectUnauthorized: z.boolean().optional(),
+  /** false: neither send nor store cookies from the cookie jar. */
+  cookies: z.boolean().optional(),
 });
 export type RequestSettings = z.infer<typeof RequestSettings>;
 
@@ -147,6 +149,27 @@ export interface Cookie {
   sameSite?: string;
 }
 
+/** A cookie kept in the cookie jar. */
+export interface StoredCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  /** Sent only to `domain` itself, not its subdomains (no Domain attribute was given). */
+  hostOnly: boolean;
+  secure: boolean;
+  httpOnly: boolean;
+  sameSite: string | null;
+  /** Epoch ms; null for a session cookie. */
+  expiresAt: number | null;
+  createdAt: number;
+}
+
+export interface JarCookie extends StoredCookie {
+  id: string;
+  /** The environment whose jar holds it; null for the workspace jar used with no environment active. */
+  environmentId: string | null;
+}
 export interface Timing {
   totalMs: number;
 }

@@ -1,4 +1,4 @@
-import { AlertTriangleIcon, CopyIcon, LoaderIcon, SendIcon, WifiOffIcon } from 'lucide-react';
+import { AlertTriangleIcon, CookieIcon, CopyIcon, LoaderIcon, SendIcon, WifiOffIcon } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 import type { SendResult } from '@postguy/shared';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState, Kbd } from '@/components/ui/misc';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CodeEditor } from '@/components/CodeEditor';
+import { useCookieManager } from '@/features/cookies/CookieManager';
 import { cn, formatBytes, formatMs, modKey, statusTone, tryParseJson } from '@/lib/utils';
 import { SchemaTab } from './SchemaTab';
 import { TestsTab, testCounts } from './TestsTab';
@@ -160,6 +161,12 @@ export function ResponsePanel({
         <Table rows={Object.entries(response.headers)} empty="No headers" />
       </TabsContent>
       <TabsContent value="cookies">
+        <div className="flex items-center gap-2 border-b px-3 py-1.5 text-xs text-muted-foreground">
+          <span>Cookies set here are kept and sent on later requests to the same site.</span>
+          <Button size="xs" variant="outline" className="ml-auto" onClick={() => useCookieManager.getState().setOpen(true)}>
+            <CookieIcon /> Manage cookies
+          </Button>
+        </div>
         {response.cookies.length ? (
           <div className="h-full overflow-auto">
             <table className="w-full text-xs">

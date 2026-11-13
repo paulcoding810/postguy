@@ -198,6 +198,12 @@ const pm = Object.freeze({
     try { fn(); __call('assert', true, String(name)); }
     catch (e) { __call('assert', false, String(name) + ': ' + (e && e.message ? e.message : String(e))); }
   },
+  cookies: Object.freeze({
+    get: (name) => { const c = __call('cookies').find((x) => x.name === name); return c ? c.value : undefined; },
+    has: (name) => __call('cookies').some((x) => x.name === name),
+    toObject: () => Object.fromEntries(__call('cookies').map((x) => [x.name, x.value])),
+    all: () => __call('cookies'),
+  }),
   sendRequest: () => { throw new Error('pm.sendRequest is not available in Postguy; chain requests in a flow instead'); },
   info: { requestName: '', eventName: request ? 'prerequest' : 'test', iteration: 0 },
 });

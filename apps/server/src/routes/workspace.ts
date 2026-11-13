@@ -16,6 +16,7 @@ import {
 import type { Db } from '../db/client.ts';
 import { parse } from '../lib/errors.ts';
 import * as collections from '../services/collections.ts';
+import * as cookies from '../services/cookies.ts';
 import * as envs from '../services/environments.ts';
 import * as history from '../services/history.ts';
 import * as memory from '../services/memory.ts';
@@ -104,5 +105,15 @@ export function workspaceRoutes(app: FastifyInstance, db: Db) {
   app.delete('/history', async () => {
     history.clearHistory(db);
     return { ok: true };
+  });
+
+  app.get('/cookies', async () => cookies.listCookies(db));
+  app.delete('/cookies/:id', async (req) => {
+    cookies.deleteCookie(db, id(req.params));
+    return { ok: true };
+  });
+  app.delete('/cookies', async (req) => {
+    const q = parse(z.object({ environmentId: z.string().optional(), domain: z.string().optional() }), req.query);
+    return { removed: cookies.clearCookies(db, q.environmentId === undefined ? undefined : q.environmentId || null, q.domain) };
   });
 }

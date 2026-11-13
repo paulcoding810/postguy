@@ -2,7 +2,7 @@ import { and, asc, eq, max } from 'drizzle-orm';
 import { newId, type Environment } from '@postguy/shared';
 import { environmentToPostman, isPostmanEnvironment, postmanToEnvironment } from '@postguy/core';
 import type { Db } from '../db/client.ts';
-import { environments, variables } from '../db/schema.ts';
+import { cookies, environments, variables } from '../db/schema.ts';
 import { badRequest, notFound } from '../lib/errors.ts';
 import { listVariables, replaceVariables } from './variables.ts';
 
@@ -56,6 +56,7 @@ export function deleteEnvironment(db: Db, id: string): void {
   if (env.kind === 'global') throw badRequest('The global environment cannot be deleted');
   db.transaction((tx) => {
     tx.delete(variables).where(and(eq(variables.scope, 'environment'), eq(variables.ownerId, id))).run();
+    tx.delete(cookies).where(eq(cookies.jar, id)).run();
     tx.delete(environments).where(eq(environments.id, id)).run();
   });
 }

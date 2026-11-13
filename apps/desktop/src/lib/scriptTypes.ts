@@ -83,6 +83,8 @@ declare const pm: {
   response: { code: number; status: string; responseTime: number; json(): any; text(): string; headers: { get(name: string): string | undefined; has(name: string): boolean }; to: any };
   request: { url: { toString(): string }; method: string; headers: { add(h: { key: string; value: unknown }): void; upsert(h: { key: string; value: unknown }): void; remove(name: string): void; get(name: string): string | undefined }; body: { raw: string | null; readonly mode: 'none' | 'raw' | 'urlencoded'; readonly urlencoded: { key: string; value: string }[]; isEmpty(): boolean; update(o: string | null | { mode: 'raw' | 'urlencoded' | 'graphql'; raw?: unknown; urlencoded?: { key: string; value: unknown; disabled?: boolean }[] | Record<string, unknown>; graphql?: { query: string; variables?: unknown }; options?: { raw?: { language?: 'json' | 'text' | 'xml' | 'html' | 'javascript' } } }): void } };
   environment: PmScope; globals: PmScope; collectionVariables: PmScope; variables: PmScope;
+  /** Cookie-jar cookies for this request's URL */
+  cookies: { get(name: string): string | undefined; has(name: string): boolean; toObject(): Record<string, string>; all(): { name: string; value: string }[] };
 };
 interface PmScope { get(key: string): any; set(key: string, value: unknown): void; unset(key: string): void; has(key: string): boolean; replaceIn(text: string): string }
 declare const tests: Record<string, boolean>;

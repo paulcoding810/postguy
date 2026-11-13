@@ -46,6 +46,13 @@ export function SettingsEditor({ settings, onChange }: { settings: RequestSettin
           onCheckedChange={(v) => onChange({ ...settings, rejectUnauthorized: v })}
         />
       </div>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <Label className="text-foreground">Use the cookie jar</Label>
+          <p className="text-xs text-muted-foreground">Send stored cookies and keep the ones this response sets.</p>
+        </div>
+        <Switch checked={settings.cookies !== false} onCheckedChange={(v) => onChange({ ...settings, cookies: v ? undefined : false })} />
+      </div>
     </div>
   );
 }
