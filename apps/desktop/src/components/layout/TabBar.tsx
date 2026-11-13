@@ -36,6 +36,7 @@ export function TabBar() {
                   onClick={() => activate(t.id)}
                   onDoubleClick={() => pin(t.id)}
                   onAuxClick={(e) => e.button === 1 && closeTab(t)}
+                  title={req?.preview ? 'Preview tab (italic): opening another request replaces it. Double-click or edit to keep it open.' : undefined}
                   className={cn(
                     'group relative flex max-w-52 min-w-32 cursor-pointer items-center gap-1.5 border-r px-3 text-xs select-none',
                     t.id === activeId ? 'bg-background text-foreground' : 'text-muted-foreground hover:bg-accent/50',
@@ -65,6 +66,7 @@ export function TabBar() {
                 </div>
               </ContextMenuTrigger>
               <ContextMenuContent>
+                {req?.preview && <ContextMenuItem onSelect={() => pin(t.id)}>Keep open</ContextMenuItem>}
                 <ContextMenuItem onSelect={() => closeTab(t)}>Close</ContextMenuItem>
                 <ContextMenuItem onSelect={() => closeOthers(t.id)}>Close others</ContextMenuItem>
               </ContextMenuContent>

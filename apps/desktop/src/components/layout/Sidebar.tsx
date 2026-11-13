@@ -84,8 +84,8 @@ export function SidebarPanel() {
         {sidebar === 'collections' && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon-xs" className="ml-auto" aria-label="New">
-                <PlusIcon />
+              <Button variant="ghost" size="xs" className="ml-auto" aria-label="New or import">
+                <PlusIcon /> New / Import
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
@@ -130,9 +130,21 @@ export function SidebarPanel() {
             <EmptyState title="Server unavailable">{errorMessage(tree.error)}</EmptyState>
           ) : (
             <EmptyState icon={<FolderTreeIcon className="size-6" />} title="No collections">
-              <Button size="sm" className="mt-2" onClick={() => actions.newCollection()}>
-                <PlusIcon /> New collection
-              </Button>
+              Start a collection, or bring in requests you already have.
+              <div className="mt-2 flex w-full max-w-56 flex-col gap-1.5">
+                <Button size="sm" onClick={() => actions.newCollection()}>
+                  <PlusIcon /> New collection
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => useImportDialog.getState().setOpen(true)}>
+                  <FileCode2Icon /> Import OpenAPI or Postman
+                </Button>
+                <Button size="sm" variant="outline" onClick={importCollection}>
+                  <UploadIcon /> Import collection file
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => useCurlDialog.getState().setOpen(true)}>
+                  <UploadIcon /> Import cURL
+                </Button>
+              </div>
             </EmptyState>
           ))}
         {sidebar === 'flows' && <FlowList filter={filter} />}

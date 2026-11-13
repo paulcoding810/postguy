@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input, Label, Textarea } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { keys, useInvalidateVariables, useTree } from '@/hooks/queries';
+import { keys, useEnvironments, useInvalidateVariables, useTree, useVariables } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
 import { AuthEditor } from '@/features/request/AuthEditor';
 import { VariablesTable } from '@/features/environments/VariablesTable';
@@ -31,6 +31,14 @@ export function CollectionSettings() {
   const qc = useQueryClient();
   const invalidateVars = useInvalidateVariables();
   const node = id ? findNode(tree.data, id) : null;
+  const activeEnv = useEnvironments().data?.find((e) => e.kind === 'environment' && e.isActive) ?? null;
+  const envVars = useVariables('environment', activeEnv?.id);
+  const overrideNote = (key: string) => {
+    const hidden = envVars.data?.find((v) => v.enabled && v.key === key);
+    return hidden && activeEnv
+      ? `Requests in this collection use this value, not "${activeEnv.name}"'s ${key} (${hidden.isSecret ? 'secret' : hidden.value}). Untick it to use the environment's.`
+      : null;
+  };
   const [name, setName] = React.useState('');
   const [description, setDescription] = React.useState('');
   const [auth, setAuth] = React.useState<Auth>({ type: 'none' });
@@ -98,7 +106,7 @@ export function CollectionSettings() {
               </div>
             </TabsContent>
             <TabsContent value="variables" className="flex min-h-0 flex-col p-4">
-              <VariablesTable scope="collection" ownerId={node.id} hint={PRECEDENCE_HINT} />
+              <VariablesTable scope="collection" ownerId={node.id} hint={PRECEDENCE_HINT} overrideNote={overrideNote} />
             </TabsContent>
           </Tabs>
         </DialogContent>

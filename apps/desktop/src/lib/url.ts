@@ -37,6 +37,14 @@ export function applyUrlInput(input: string, params: KeyValue[]): { url: string;
   return { url: base, params: [...next, ...disabled] };
 }
 
+/** Keeps what the user typed (e.g. a trailing "?" or "&") while it still means the stored URL and params. */
+export function urlBarText(typed: string | null, url: string, params: KeyValue[]): string {
+  const shown = displayUrl(url, params);
+  if (typed === null) return shown;
+  const parsed = applyUrlInput(typed, params);
+  return displayUrl(parsed.url, parsed.params) === shown ? typed : shown;
+}
+
 export function pathParamNames(url: string): string[] {
   const noQuery = url.split(/[?#]/)[0] ?? '';
   const schemeIdx = noQuery.indexOf('://');

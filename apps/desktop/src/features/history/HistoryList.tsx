@@ -63,7 +63,16 @@ export function HistoryList({ filter }: { filter: string }) {
     qc.invalidateQueries({ queryKey: ['history'] });
   };
 
-  if (!items.length) return <EmptyState icon={<HistoryIcon className="size-6" />} title="No history yet">Sent requests appear here.</EmptyState>;
+  if (!items.length)
+    return history.data?.length ? (
+      <EmptyState icon={<HistoryIcon className="size-6" />} title="No matches">
+        No sent request matches "{filter.trim()}".
+      </EmptyState>
+    ) : (
+      <EmptyState icon={<HistoryIcon className="size-6" />} title="No history yet">
+        Sent requests appear here.
+      </EmptyState>
+    );
 
   let lastDay = '';
   return (

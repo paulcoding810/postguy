@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyUrlInput, displayUrl, pathParamNames, syncPathParams } from './url';
+import { applyUrlInput, displayUrl, pathParamNames, syncPathParams, urlBarText } from './url';
 
 const kv = (key: string, value: string, enabled = true) => ({ id: key, key, value, enabled });
 
@@ -33,5 +33,24 @@ describe('url sync', () => {
       ['id', '7'],
       ['other', ''],
     ]);
+  });
+});
+
+describe('urlBarText', () => {
+  it('keeps a typed "?" and "&" while typing a query key by key', () => {
+    let url = '';
+    let params: ReturnType<typeof applyUrlInput>['params'] = [];
+    let text = '';
+    for (const ch of 'http://x/echo?a=1&b=2') {
+      const typed = urlBarText(text, url, params) + ch;
+      ({ url, params } = applyUrlInput(typed, params));
+      text = urlBarText(typed, url, params);
+    }
+    expect(text).toBe('http://x/echo?a=1&b=2');
+    expect(params.map((p) => [p.key, p.value])).toEqual([['a', '1'], ['b', '2']]);
+  });
+  it('shows the stored URL when it changed elsewhere', () => {
+    expect(urlBarText('http://x/a?', 'http://x/a', [kv('q', '1')])).toBe('http://x/a?q=1');
+    expect(urlBarText(null, 'http://x/a', [])).toBe('http://x/a');
   });
 });

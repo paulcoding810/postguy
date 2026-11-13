@@ -1,3 +1,4 @@
+import * as React from 'react';
 import { ChevronDownIcon, LoaderIcon, SaveIcon, SendIcon, TerminalIcon, XIcon } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/menu';
 import { applyCurlToTab, copyAsCurl, looksLikeCurl, useCurlDialog } from './curl';
@@ -5,7 +6,7 @@ import { HTTP_METHODS, type HttpMethod } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
 import { Kbd, Tooltip } from '@/components/ui/misc';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { applyUrlInput, displayUrl, syncPathParams } from '@/lib/url';
+import { applyUrlInput, syncPathParams, urlBarText } from '@/lib/url';
 import { cn, modKey } from '@/lib/utils';
 import { isDirty, useTabs, type RequestTab } from '@/stores/tabs';
 import { TemplateInput } from '@/features/template/TemplateInput';
@@ -16,12 +17,16 @@ export function UrlBar({ tab }: { tab: RequestTab }) {
   const send = useSendRequest();
   const save = useSaveRequest();
   const { draft } = tab;
+  const [typed, setTyped] = React.useState<string | null>(null);
+  React.useEffect(() => setTyped(null), [tab.id]);
 
-  const onUrl = (input: string) =>
+  const onUrl = (input: string) => {
+    setTyped(input);
     updateDraft(tab.id, (d) => {
       const { url, params } = applyUrlInput(input, d.params);
       return { ...d, url, params, pathParams: syncPathParams(url, d.pathParams) };
     });
+  };
 
   return (
     <div className="flex items-center gap-2 p-3">
@@ -45,7 +50,7 @@ export function UrlBar({ tab }: { tab: RequestTab }) {
           className="flex-1"
           borderless
           inputClassName="font-mono text-[12.5px]"
-          value={displayUrl(draft.url, draft.params)}
+          value={urlBarText(typed, draft.url, draft.params)}
           onChange={onUrl}
           fieldLabel="URL"
           placeholder="Enter a URL or paste a cURL command, e.g. {{baseUrl}}/users/:id"

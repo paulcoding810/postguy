@@ -126,6 +126,7 @@ interface TabsState {
   setResponse: (id: string, res: SendResult | null) => void;
   onRequestDeleted: (requestId: string) => void;
   onRequestRenamed: (requestId: string, name: string) => void;
+  onRequestMoved: (requestId: string, collectionId: string) => void;
 }
 
 export const useTabs = create<TabsState>()(
@@ -222,6 +223,8 @@ export const useTabs = create<TabsState>()(
           tabs: s.tabs.map((t) => (isRequestTab(t) && t.requestId === requestId ? { ...t, requestId: null, saved: null } : t)),
         })),
 
+      onRequestMoved: (requestId, collectionId) =>
+        set((s) => ({ tabs: s.tabs.map((t) => (isRequestTab(t) && t.requestId === requestId ? { ...t, collectionId } : t)) })),
       onRequestRenamed: (requestId, name) =>
         set((s) => ({
           tabs: s.tabs.map((t) =>

@@ -13,6 +13,7 @@ import {
   SettingsIcon,
   Trash2Icon,
   WorkflowIcon,
+  FolderInputIcon,
 } from 'lucide-react';
 import { usePendingSteps } from '@/features/flows/pending';
 import * as React from 'react';
@@ -32,6 +33,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/menu';
 import { confirm, prompt } from '@/components/dialogs';
+import { useMoveDialog } from './MoveDialog';
 import { keys } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -144,6 +146,7 @@ export function useTreeActions() {
       run(async () => {
         if (item.kind === 'request') {
           await api('PATCH /requests/:id', { params: { id: item.id }, body: { collectionId: targetCollectionId } });
+          useTabs.getState().onRequestMoved(item.id, targetCollectionId);
         } else if (item.id !== targetCollectionId) {
           await api('PATCH /collections/:id', { params: { id: item.id }, body: { parentId: targetCollectionId } });
         }
@@ -232,6 +235,9 @@ function FolderNode({
       <Item onSelect={() => actions.renameCollection(node)}>
         <PencilIcon /> Rename
       </Item>
+      <Item onSelect={() => useMoveDialog.getState().open({ kind: 'collection', id: node.id, name: node.name, parentId: node.parentId })}>
+        <FolderInputIcon /> Move to…
+      </Item>
       {node.kind === 'collection' && (
         <>
           <Item onSelect={() => actions.exportCollection(node)}>
@@ -308,7 +314,7 @@ function FolderNode({
           {node.requests
             .filter((r) => !q || r.name.toLowerCase().includes(q) || r.url.toLowerCase().includes(q) || node.name.toLowerCase().includes(q))
             .map((r) => (
-              <RequestRow key={r.id} request={r} depth={depth + 1} actions={actions} />
+              <RequestRow key={r.id} request={r} collectionId={node.id} depth={depth + 1} actions={actions} />
             ))}
           {node.children.length === 0 && node.requests.length === 0 && (
             <div style={{ paddingLeft: 30 + depth * 12 }} className="py-1 text-xs text-muted-foreground">
@@ -326,10 +332,12 @@ function FolderNode({
 
 function RequestRow({
   request,
+  collectionId,
   depth,
   actions,
 }: {
   request: CollectionTreeNode['requests'][number];
+  collectionId: string;
   depth: number;
   actions: ReturnType<typeof useTreeActions>;
 }) {
@@ -366,6 +374,9 @@ function RequestRow({
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem onSelect={() => open(true)}>Open in tab</ContextMenuItem>
+        <ContextMenuItem onSelect={() => useMoveDialog.getState().open({ kind: 'request', id: request.id, name: request.name, parentId: collectionId })}>
+          <FolderInputIcon /> Move to…
+        </ContextMenuItem>
         <ContextMenuItem onSelect={() => actions.renameRequest(request.id, request.name)}>
           <PencilIcon /> Rename
         </ContextMenuItem>

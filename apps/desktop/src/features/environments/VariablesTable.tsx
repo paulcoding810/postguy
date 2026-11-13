@@ -18,7 +18,18 @@ interface Row {
 
 const MASK = '••••••';
 
-export function VariablesTable({ scope, ownerId, hint }: { scope: VariableScope; ownerId: string; hint?: string }) {
+export function VariablesTable({
+  scope,
+  ownerId,
+  hint,
+  overrideNote,
+}: {
+  scope: VariableScope;
+  ownerId: string;
+  hint?: string;
+  /** Explains that a variable hides a lower-precedence one, e.g. the active environment's. */
+  overrideNote?: (key: string) => string | null;
+}) {
   const [reveal, setReveal] = React.useState(false);
   const query = useVariables(scope, ownerId, reveal);
   const save = useSaveVariables(scope, ownerId);
@@ -83,13 +94,20 @@ export function VariablesTable({ scope, ownerId, hint }: { scope: VariableScope;
               <div className="flex items-center justify-center">
                 {!isGhost && <Checkbox checked={r.enabled} onCheckedChange={(v) => edit(r.id, { enabled: !!v })} />}
               </div>
-              <input
-                className={cn(cell, 'border-l')}
-                placeholder={isGhost ? 'Add variable' : ''}
-                value={r.key}
-                spellCheck={false}
-                onChange={(e) => edit(r.id, { key: e.target.value })}
-              />
+              <div className="relative flex min-w-0 items-center border-l">
+                <input
+                  className={cn(cell, 'min-w-0 flex-1')}
+                  placeholder={isGhost ? 'Add variable' : ''}
+                  value={r.key}
+                  spellCheck={false}
+                  onChange={(e) => edit(r.id, { key: e.target.value })}
+                />
+                {!isGhost && r.enabled && overrideNote?.(r.key) && (
+                  <Tooltip content={overrideNote(r.key)}>
+                    <span className="mr-1.5 shrink-0 rounded bg-warning/15 px-1 text-[10px] font-medium text-warning">overrides env</span>
+                  </Tooltip>
+                )}
+              </div>
               <input
                 className={cn(cell, 'border-l')}
                 value={r.value}

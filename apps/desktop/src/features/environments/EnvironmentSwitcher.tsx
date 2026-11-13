@@ -8,7 +8,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/menu';
+import { Kbd } from '@/components/ui/misc';
 import { useActivateEnvironment, useEnvironments } from '@/hooks/queries';
+import { modKey } from '@/lib/utils';
 import { useUi } from '@/stores/ui';
 
 export function EnvironmentSwitcher() {
@@ -44,6 +46,7 @@ export function EnvironmentSwitcher() {
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => openEnvManager(active?.id ?? null)}>
           <SettingsIcon /> Manage environments…
+          <Kbd className="ml-auto">{modKey}⇧E</Kbd>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
