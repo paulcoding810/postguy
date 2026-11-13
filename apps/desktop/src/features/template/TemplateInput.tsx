@@ -135,20 +135,23 @@ export function TemplateInput({
               aria-hidden
               className={cn(
                 inputClass,
-                'pointer-events-none absolute inset-0 overflow-hidden border-transparent bg-transparent leading-[30px] whitespace-pre shadow-none dark:bg-transparent',
+                'pointer-events-none absolute inset-0 overflow-hidden border-transparent bg-transparent whitespace-pre shadow-none dark:bg-transparent',
                 borderless && 'rounded-none',
                 inputClassName,
+                'flex items-center',
               )}
             >
-              {tokens.map((t, i) =>
-                t.kind === 'text' ? (
-                  <span key={i}>{t.value}</span>
-                ) : (
-                  <span key={i} className={cn('tpl-ref', `tpl-${ctx.status(t.ref)}`)}>
-                    {t.raw}
-                  </span>
-                ),
-              )}
+              <span className="shrink-0">
+                {tokens.map((t, i) =>
+                  t.kind === 'text' ? (
+                    <span key={i}>{t.value}</span>
+                  ) : (
+                    <span key={i} className={cn('tpl-ref', `tpl-${ctx.status(t.ref)}`)}>
+                      {t.raw}
+                    </span>
+                  ),
+                )}
+              </span>
             </div>
             <input
               ref={inputRef}
