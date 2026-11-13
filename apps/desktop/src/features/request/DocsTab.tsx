@@ -1,10 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
-import { BookOpenIcon } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { BookOpenIcon, PlusIcon } from 'lucide-react';
+import * as React from 'react';
+import { toast } from 'sonner';
+import type { KeyValue, SavedRequest } from '@postguy/shared';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/misc';
 import { SchemaView } from '@/components/SchemaView';
-import { api } from '@/lib/api';
+import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import { isDirty, isRequestTab, useTabs } from '@/stores/tabs';
 
 export function useOperation(requestId: string | null) {
   return useQuery({
@@ -13,6 +18,54 @@ export function useOperation(requestId: string | null) {
     enabled: !!requestId,
     staleTime: 60_000,
   });
+}
+
+/** Puts params a merge added on the server into open tabs, keeping unsaved edits. */
+function syncTabs(saved: SavedRequest) {
+  const store = useTabs.getState();
+  for (const t of store.tabs) {
+    if (!isRequestTab(t) || t.requestId !== saved.id) continue;
+    if (!isDirty(t)) {
+      store.markSaved(t.id, saved);
+      continue;
+    }
+    const append = (mine: KeyValue[], theirs: KeyValue[]) => [...mine, ...theirs.filter((k) => !mine.some((m) => m.key.toLowerCase() === k.key.toLowerCase()))];
+    store.updateDraft(t.id, (d) => ({ ...d, params: append(d.params, saved.params), headers: append(d.headers, saved.headers) }));
+  }
+}
+
+function MissingParams({ requestId }: { requestId: string }) {
+  const qc = useQueryClient();
+  const [busy, setBusy] = React.useState(false);
+  const merge = useQuery({
+    queryKey: ['spec-merge', requestId],
+    queryFn: () => api('GET /requests/:id/spec-merge', { params: { id: requestId } }),
+    staleTime: 10_000,
+  });
+  const added = merge.data?.added ?? [];
+  if (!added.length) return null;
+  const apply = async () => {
+    setBusy(true);
+    try {
+      const saved = await api('POST /requests/:id/spec-merge', { params: { id: requestId }, body: {} });
+      syncTabs(saved);
+      qc.setQueryData(['request', saved.id], saved);
+      toast.success(`Added ${added.join(', ')}`);
+      await Promise.all([qc.invalidateQueries({ queryKey: ['spec-merge', requestId] }), qc.invalidateQueries({ queryKey: ['tree'] })]);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+      <span className="flex-1">This request is missing required parameters from the spec: {added.join(', ')}.</span>
+      <Button size="xs" variant="outline" disabled={busy} onClick={apply}>
+        <PlusIcon /> Add missing required params
+      </Button>
+    </div>
+  );
 }
 
 export function DocsTab({ requestId }: { requestId: string | null }) {
@@ -27,6 +80,7 @@ export function DocsTab({ requestId }: { requestId: string | null }) {
   }
   return (
     <div className="flex flex-col gap-4 p-4 text-[13px]">
+      {requestId && <MissingParams requestId={requestId} />}
       <div>
         <div className="flex items-center gap-2">
           <span className={cn('font-mono text-xs font-bold', `method-${op.method}`)}>{op.method}</span>

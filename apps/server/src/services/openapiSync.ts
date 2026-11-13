@@ -5,6 +5,7 @@ import {
   diffSpecs,
   fingerprintRequest,
   loadSpec,
+  mergeOperation,
   normalizeSpec,
   operationKey,
   requestFromOperation,
@@ -16,9 +17,9 @@ import type { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { collections, openapiSpecs, openapiVersions, requests } from '../db/schema.ts';
 import { badRequest, HttpError, notFound } from '../lib/errors.ts';
-import { createCollection, subtreeIds } from './collections.ts';
+import { createCollection, rootOf, subtreeIds } from './collections.ts';
 import { fetchSpec } from './openapi.ts';
-import { createRequest, getRequest } from './requests.ts';
+import { createRequest, getRequest, updateRequest } from './requests.ts';
 import { listVariables, setVariable } from './variables.ts';
 
 function sha256(text: string) {
@@ -96,6 +97,7 @@ function plan(db: Db, p: Prepared): SyncPlan {
     .all()
     .map((r) => getRequest(db, r.id));
   const oldById = new Map(p.current.model.operations.map((o) => [o.id, o]));
+  const newById = new Map(p.next.operations.map((o) => [o.id, o]));
   const newByKey = new Map(p.next.operations.map((o) => [operationKey(o), o]));
   const changedByKey = new Map(p.diff.changed.map((c) => [c.key, c]));
   const scheme = collectionSchemeOf(p.next);
@@ -104,20 +106,28 @@ function plan(db: Db, p: Prepared): SyncPlan {
 
   for (const r of linked) {
     const old = oldById.get(r.openapiOperationId!);
-    const key = old ? operationKey(old) : null;
-    const op = key ? newByKey.get(key) : undefined;
-    if (key) seenKeys.add(key);
+    const oldKey = old ? operationKey(old) : null;
+    const op = old ? (newById.get(old.id) ?? newByKey.get(oldKey!)) : undefined;
     if (!op) {
-      out.push({ requestId: r.id, name: r.name, operation: key ?? r.openapiOperationId!, label: old ? `${old.method} ${old.path}` : r.openapiOperationId!, action: 'orphaned' });
+      out.push({ requestId: r.id, name: r.name, operation: oldKey ?? r.openapiOperationId!, label: old ? `${old.method} ${old.path}` : r.openapiOperationId!, action: 'orphaned' });
       continue;
     }
-    const change = changedByKey.get(key!);
+    const key = operationKey(op);
+    seenKeys.add(key);
+    const change = changedByKey.get(key);
     if (!change) {
-      out.push({ requestId: r.id, name: r.name, operation: key!, label: `${op.method} ${op.path}`, action: 'unchanged' });
+      out.push({ requestId: r.id, name: r.name, operation: key, label: `${op.method} ${op.path}`, action: 'unchanged' });
       continue;
     }
+    const moved = !!change.moved;
     const edited = fingerprintRequest(definitionOf(r)) !== r.openapiFingerprint;
-    out.push({ requestId: r.id, name: r.name, operation: key!, label: `${op.method} ${op.path}`, action: edited ? 'keep-edited' : 'update', changes: change.changes });
+    const base = { requestId: r.id, name: r.name, operation: key, label: `${op.method} ${op.path}`, changes: change.changes, ...(moved && { moved }) };
+    if (!edited) {
+      out.push({ ...base, action: 'update' });
+      continue;
+    }
+    const merge = mergeOperation(definitionOf(r), op, requestFromOperation(op, p.next, scheme), { followPath: moved });
+    out.push(merge.added.length ? { ...base, action: 'merge-edited', adds: merge.added } : { ...base, action: 'keep-edited' });
   }
   for (const op of p.next.operations) {
     const key = operationKey(op);
@@ -140,8 +150,9 @@ export async function previewSync(db: Db, specId: string, input: z.output<typeof
 
 /**
  * Applies a new spec version: creates requests for new operations, regenerates requests
- * nobody edited since import, keeps edited ones as they are, and leaves requests whose
- * operation was removed in place.
+ * nobody edited since import, adds new required params to edited ones (and follows moved
+ * paths) while keeping their edits, and leaves requests whose operation was removed in place.
+ * Merged requests keep their old fingerprint, so later syncs still treat them as edited.
  */
 export async function applySync(db: Db, specId: string, input: z.output<typeof SyncInput>): Promise<SyncResult> {
   const p = await prepare(db, specId, input);
@@ -190,6 +201,21 @@ export async function applySync(db: Db, specId: string, input: z.output<typeof S
           })
           .where(eq(requests.id, item.requestId))
           .run();
+      } else if (item.action === 'merge-edited' && item.requestId) {
+        const saved = getRequest(db, item.requestId);
+        const merged = mergeOperation(definitionOf(saved), op, gen, { followPath: !!item.moved }).def;
+        db.update(requests)
+          .set({
+            method: merged.method,
+            url: merged.url,
+            params: merged.params,
+            pathParams: merged.pathParams,
+            headers: merged.headers,
+            openapiOperationId: op.id,
+            updatedAt: Date.now(),
+          })
+          .where(eq(requests.id, item.requestId))
+          .run();
       } else if (item.requestId && (item.action === 'unchanged' || item.action === 'keep-edited')) {
         db.update(requests).set({ openapiOperationId: op.id }).where(eq(requests.id, item.requestId)).run();
       }
@@ -217,4 +243,19 @@ export function compareVersions(db: Db, specId: string, from: string, to: string
   const b = db.select().from(openapiVersions).where(and(eq(openapiVersions.id, to), eq(openapiVersions.specId, specId))).get();
   if (!a || !b) throw notFound('Specification version');
   return summarizeDiff(diffSpecs(a.model as ApiModel, b.model as ApiModel));
+}
+
+/** Adds the required query params and headers of a request's operation that the request lacks. */
+export function specMerge(db: Db, requestId: string, apply: boolean) {
+  const r = getRequest(db, requestId);
+  const root = r.openapiOperationId ? rootOf(db, r.collectionId) : null;
+  const spec = root?.openapiSpecId ? db.select().from(openapiSpecs).where(eq(openapiSpecs.id, root.openapiSpecId)).get() : undefined;
+  if (!spec?.currentVersionId) return null;
+  const { model } = versionModel(db, spec.currentVersionId);
+  const op = model.operations.find((o) => o.id === r.openapiOperationId);
+  if (!op) return null;
+  const merge = mergeOperation(definitionOf(r), op, requestFromOperation(op, model, collectionSchemeOf(model)), { followPath: false });
+  if (!apply) return { added: merge.added, request: r };
+  if (!merge.added.length) return { added: [], request: r };
+  return { added: merge.added, request: updateRequest(db, r.id, { params: merge.def.params, headers: merge.def.headers }) };
 }
