@@ -116,6 +116,16 @@ async fn save_text_file(app: tauri::AppHandle, file_name: String, contents: Stri
     Ok(true)
 }
 
+/// Asks the user for a file to send and returns its path; None when cancelled.
+#[tauri::command]
+async fn pick_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let Some(path) = app.dialog().file().blocking_pick_file() else {
+        return Ok(None);
+    };
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let sidecar = Arc::new(Sidecar::default());
@@ -134,7 +144,7 @@ pub fn run() {
                 Ok(())
             }
         })
-        .invoke_handler(tauri::generate_handler![server_info, save_text_file])
+        .invoke_handler(tauri::generate_handler![server_info, save_text_file, pick_file])
         .build(tauri::generate_context!())
         .expect("error while building Postguy");
     app.run(move |_, event| {

@@ -83,14 +83,26 @@ function body(b: Obj | undefined): Body {
     }
     case 'urlencoded':
       return { mode: 'urlencoded', form: kv(b.urlencoded) };
-    case 'formdata':
-      return { mode: 'form', form: kv((b.formdata ?? []).filter((f: Obj) => f.type !== 'file')) };
+    case 'formdata': {
+      const fields: Obj[] = Array.isArray(b.formdata) ? b.formdata : [];
+      return {
+        mode: 'form',
+        form: kv(fields).map((f, i) => {
+          const src = fields.filter((x) => x && typeof x.key === 'string')[i]!;
+          return src.type === 'file' ? { ...f, value: '', type: 'file' as const, src: fileSrc(src.src) } : f;
+        }),
+      };
+    }
+    case 'file':
+      return { mode: 'binary', src: fileSrc(b.file?.src) };
     case 'graphql':
       return { mode: 'json', raw: JSON.stringify({ query: b.graphql?.query ?? '', variables: tryJson(b.graphql?.variables) }, null, 2) };
     default:
       return { mode: 'none' };
   }
 }
+
+const fileSrc = (src: unknown): string => (Array.isArray(src) ? String(src[0] ?? '') : typeof src === 'string' ? src : '');
 
 function tryJson(s: unknown): unknown {
   if (typeof s !== 'string' || !s.trim()) return {};

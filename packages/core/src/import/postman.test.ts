@@ -29,4 +29,28 @@ describe('Postman import', () => {
     expect(form).toMatchObject({ url: '{{baseUrl}}/orders', auth: { type: 'apikey', key: 'X-Key', value: 'abc', in: 'header' }, body: { mode: 'urlencoded' } });
     expect(form.params).toMatchObject([{ key: 'dry', value: '1' }]);
   });
+
+  it('keeps file fields and file bodies', () => {
+    const out = postmanToCollection({
+      info: { name: 'Files', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+      item: [
+        {
+          name: 'up',
+          request: {
+            method: 'POST',
+            url: 'https://x.test/up',
+            body: { mode: 'formdata', formdata: [{ key: 'name', value: 'paul', type: 'text' }, { key: 'avatar', type: 'file', src: '/tmp/me.png' }, { key: 'none', type: 'file', src: [] }] },
+          },
+        },
+        { name: 'bin', request: { method: 'PUT', url: 'https://x.test/bin', body: { mode: 'file', file: { src: '/tmp/a.zip' } } } },
+      ],
+    }).collection;
+    expect(out.requests[0]!.body.form).toMatchObject([
+      { key: 'name', value: 'paul' },
+      { key: 'avatar', value: '', type: 'file', src: '/tmp/me.png' },
+      { key: 'none', type: 'file', src: '' },
+    ]);
+    expect(out.requests[0]!.body.form![0]!.type).toBeUndefined();
+    expect(out.requests[1]!.body).toEqual({ mode: 'binary', src: '/tmp/a.zip' });
+  });
 });

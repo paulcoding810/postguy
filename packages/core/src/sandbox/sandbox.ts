@@ -43,7 +43,7 @@ const console = Object.freeze({ log: __log('info'), info: __log('info'), warn: _
 const request = __call('request');
 if (request) {
   let __body = request.body;
-  Object.defineProperty(request, 'body', { enumerable: true, get: () => __body, set: (v) => { __body = v; request.bodyMode = 'raw'; delete request.formdata; } });
+  Object.defineProperty(request, 'body', { enumerable: true, get: () => __body, set: (v) => { __body = v; request.bodyMode = 'raw'; delete request.formdata; delete request.file; } });
 }
 const response = __call('currentResponse');
 ${CRYPTO_PRELUDE}

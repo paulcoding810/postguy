@@ -56,7 +56,7 @@ export async function executeHttp(
       url: req.url,
       method: req.method,
       headers: req.headers,
-      data: req.body.content ?? undefined,
+      data: req.body.data ?? req.body.content ?? undefined,
       responseType: 'arraybuffer',
       transformResponse: (d) => d,
       transformRequest: (d) => d,

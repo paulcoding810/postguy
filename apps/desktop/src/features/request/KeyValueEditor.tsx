@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox, Tooltip } from '@/components/ui/misc';
 import { cn } from '@/lib/utils';
 import { TemplateInput } from '@/features/template/TemplateInput';
+import { FilePathField } from './FilePathField';
 
 export interface KeyValueEditorProps {
   items: KeyValue[];
@@ -14,6 +15,8 @@ export interface KeyValueEditorProps {
   valuePlaceholder?: string;
   fixedKeys?: boolean;
   showDescription?: boolean;
+  /** Form-data: each row can switch between a text value and a file. */
+  files?: boolean;
 }
 
 export function KeyValueEditor({
@@ -24,6 +27,7 @@ export function KeyValueEditor({
   valuePlaceholder = 'Value',
   fixedKeys,
   showDescription,
+  files,
 }: KeyValueEditorProps) {
   const ghostId = React.useRef(newId(8));
   const rows = fixedKeys ? items : [...items, { id: ghostId.current, key: '', value: '', enabled: true }];
@@ -81,14 +85,30 @@ export function KeyValueEditor({
                 />
               )}
             </div>
-            <div className="border-l">
-              <TemplateInput
-                borderless
-                value={row.value}
-                fieldLabel={`${label}: ${row.key || 'value'}`}
-                placeholder={ghost ? '' : showDescription && row.description ? row.description : valuePlaceholder}
-                onChange={(value) => update(row.id, { value })}
-              />
+            <div className="flex min-w-0 items-center border-l">
+              {files && (
+                <select
+                  aria-label={`${label} type`}
+                  className="h-8 shrink-0 border-r bg-transparent px-1 text-[11px] text-muted-foreground outline-none"
+                  value={row.type === 'file' ? 'file' : 'text'}
+                  onChange={(e) => update(row.id, { type: e.target.value === 'file' ? 'file' : 'text' })}
+                >
+                  <option value="text">Text</option>
+                  <option value="file">File</option>
+                </select>
+              )}
+              {files && row.type === 'file' ? (
+                <FilePathField borderless value={row.src ?? ''} label={`${label}: ${row.key || 'file'}`} onChange={(src) => update(row.id, { src })} />
+              ) : (
+                <TemplateInput
+                  className="flex-1"
+                  borderless
+                  value={row.value}
+                  fieldLabel={`${label}: ${row.key || 'value'}`}
+                  placeholder={ghost ? '' : showDescription && row.description ? row.description : valuePlaceholder}
+                  onChange={(value) => update(row.id, { value })}
+                />
+              )}
             </div>
             <div className="flex items-center justify-center">
               {!ghost && !fixedKeys && (

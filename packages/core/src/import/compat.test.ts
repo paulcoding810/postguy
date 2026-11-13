@@ -28,4 +28,17 @@ describe('compatibilityWarnings', () => {
   it('reports dropped collection and folder scripts', () => {
     expect(postmanDroppedScripts(collection)).toEqual([`Collection- and folder-level scripts were not imported (Postguy runs scripts per request): "Shop".`]);
   });
+  it('points at requests that send files', () => {
+    const files = postmanToCollection({
+      info: { name: 'F', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+      item: [
+        { name: 'Up', request: { method: 'POST', url: 'https://x/up', body: { mode: 'formdata', formdata: [{ key: 'f', type: 'file', src: '/tmp/a.png' }] } } },
+        { name: 'Blank', request: { method: 'POST', url: 'https://x/up', body: { mode: 'file', file: {} } } },
+      ],
+    }).collection;
+    expect(compatibilityWarnings(files)).toEqual([
+      'File fields have no file chosen; pick the files before sending: "Blank".',
+      'Requests send files from the paths saved in the export; check they exist on this machine: "Up".',
+    ]);
+  });
 });

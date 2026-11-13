@@ -57,9 +57,12 @@ describe('parseCurl', () => {
   it('parses multipart forms, --json, plain text bodies and HEAD', () => {
     const multi = parseCurl(`curl https://x.test/up -F name=Ann -F 'file=@photo.png' -H 'Content-Type: multipart/form-data'`);
     expect(multi.request.body.mode).toBe('form');
-    expect(pairs(multi.request.body.form!)).toEqual([['name', 'Ann']]);
+    expect(multi.request.body.form!.map((f) => [f.key, f.type ?? 'text', f.type === 'file' ? f.src : f.value])).toEqual([
+      ['name', 'text', 'Ann'],
+      ['file', 'file', 'photo.png'],
+    ]);
     expect(multi.request.headers).toEqual([]);
-    expect(multi.warnings).toEqual(['File field file was not attached']);
+    expect(multi.warnings).toEqual([]);
 
     const json = parseCurl(`curl --json '{"a":1}' https://x.test/j`);
     expect(json.request).toMatchObject({ method: 'POST', body: { mode: 'json' } });
@@ -90,5 +93,24 @@ describe('toCurl', () => {
     expect(again).toMatchObject({ method: 'POST', url: 'https://x.test/a' });
     expect(pairs(again.params)).toEqual([['b', '1']]);
     expect(JSON.parse(again.body.raw!)).toEqual({ n: 1 });
+  });
+});
+
+describe('cURL files', () => {
+  it('maps -F @file to file fields and --data-binary @file to a binary body', () => {
+    const form = parseCurl(`curl https://x.test/up -F 'avatar=@/tmp/a b.png;type=image/png' -F 'note=<notes.txt'`);
+    expect(form.request.body.form).toMatchObject([{ key: 'avatar', type: 'file', src: '/tmp/a b.png' }]);
+    expect(form.warnings).toEqual(['File field note was not attached']);
+    const bin = parseCurl(`curl https://x.test/up -H 'Content-Type: image/png' --data-binary @/tmp/a.png`);
+    expect(bin.request).toMatchObject({ method: 'POST', body: { mode: 'binary', src: '/tmp/a.png', contentType: 'image/png' } });
+    expect(bin.request.headers).toEqual([]);
+  });
+
+  it('copies file bodies as -F and --data-binary', () => {
+    const ctx = createContext({});
+    const form = resolveRequest(parseCurl(`curl https://x.test/up -F name=Ann -F 'f=@/tmp/a.png' --form-string 'at=@literal'`).request, ctx).request;
+    expect(toCurl(form)).toBe("curl -X POST https://x.test/up \\\n  -F name=Ann \\\n  -F f=@/tmp/a.png \\\n  --form-string at=@literal");
+    const bin = resolveRequest(parseCurl(`curl https://x.test/up --data-binary @/tmp/a.png`).request, ctx).request;
+    expect(toCurl(bin)).toBe("curl -X POST https://x.test/up \\\n  -H 'Content-Type: image/png' \\\n  --data-binary @/tmp/a.png");
   });
 });

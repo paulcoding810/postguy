@@ -39,11 +39,18 @@ export function compatibilityWarnings(root: ExportedCollection): string[] {
       for (const f of SCRIPT_FEATURES) if (f.pattern.test(script)) note(byFeature, f.what, name);
       const { scripts: _scripts, ...rest } = r;
       for (const m of JSON.stringify(rest).matchAll(DYNAMIC_REF)) if (!KNOWN.has(m[1]!)) note(unknownVars, m[1]!, name);
+      const files = r.body.mode === 'binary' ? [r.body.src ?? ''] : r.body.mode === 'form' ? (r.body.form ?? []).filter((f) => f.type === 'file').map((f) => f.src ?? '') : [];
+      if (files.some((f) => !f)) missingFiles.push(name);
+      else if (files.length) withFiles.push(name);
     }
     for (const f of node.folders) walk(f, path ? `${path} / ${f.name}` : f.name);
   };
+  const missingFiles: string[] = [];
+  const withFiles: string[] = [];
   walk(root, '');
   return [
+    ...(missingFiles.length ? [`File fields have no file chosen; pick the files before sending: ${list(missingFiles)}.`] : []),
+    ...(withFiles.length ? [`Requests send files from the paths saved in the export; check they exist on this machine: ${list(withFiles)}.`] : []),
     ...[...byFeature].map(([what, names]) => `Scripts use ${what}, which Postguy doesn't run: ${list(names)}.`),
     ...[...unknownVars].map(([v, names]) => `{{${v}}} isn't a built-in variable Postguy knows, so it is sent as text: ${list(names)}.`),
   ];

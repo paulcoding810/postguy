@@ -24,6 +24,7 @@ import type { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { requestHistory } from '../db/schema.ts';
 import { effectiveAuth, rootOf } from './collections.ts';
+import { loadBodyFiles } from './bodyFiles.ts';
 import { buildContext } from './context.ts';
 import { globalEnvironment } from './environments.ts';
 import { executeHttp, isTextual } from './http.ts';
@@ -75,8 +76,11 @@ function toScriptRequest(def: RequestDefinition): ScriptRequest {
     ...(def.body.mode === 'urlencoded' && { bodyMode: 'urlencoded' as const }),
     ...(def.body.mode === 'form' && {
       bodyMode: 'formdata' as const,
-      formdata: (def.body.form ?? []).filter((f) => f.enabled && f.key).map((f) => ({ key: f.key, value: f.value })),
+      formdata: (def.body.form ?? [])
+        .filter((f) => f.enabled && f.key)
+        .map((f) => (f.type === 'file' ? { key: f.key, value: '', type: 'file' as const, src: f.src ?? '' } : { key: f.key, value: f.value })),
     }),
+    ...(def.body.mode === 'binary' && def.body.src && { bodyMode: 'file' as const, file: { src: def.body.src } }),
   };
 }
 
@@ -243,6 +247,9 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
       redactedRequest,
     );
   }
+  const loaded = loadBodyFiles(resolution.request.body);
+  if ('error' in loaded) return failure(def, loaded.error, [], scripts, redactedRequest);
+  resolution.request.body = loaded.body;
   const raw = await executeHttp(resolution.request, def.settings, opts.signal);
 
   const contentType = headerValue(raw.headers, 'content-type');
