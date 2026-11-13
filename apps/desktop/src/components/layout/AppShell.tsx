@@ -3,8 +3,8 @@ import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { EmptyState, Kbd } from '@/components/ui/misc';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
-import { modKey } from '@/lib/utils';
-import { isRequestTab, useActiveTab, useTabs } from '@/stores/tabs';
+import { isMac, modKey } from '@/lib/utils';
+import { isRequestTab, neighbourTab, numberedTab, useActiveTab, useTabs } from '@/stores/tabs';
 import { FlowEditor } from '@/features/flows/FlowEditor';
 import { useUi } from '@/stores/ui';
 import { RequestEditor } from '@/features/request/RequestEditor';
@@ -27,6 +27,15 @@ function useShortcuts() {
       const tab = isRequestTab(any) ? any : null;
       const ui = useUi.getState();
       const key = e.key.toLowerCase();
+      const go = (t: ReturnType<typeof neighbourTab>) => {
+        e.preventDefault();
+        if (t) useTabs.getState().activate(t.id);
+      };
+      const inEditor = e.target instanceof Element && !!e.target.closest('.monaco-editor');
+      if (key === 'tab' && e.ctrlKey) return go(neighbourTab(tabs, activeId, e.shiftKey ? -1 : 1));
+      if (e.shiftKey && (e.code === 'BracketRight' || e.code === 'BracketLeft') && (isMac || !inEditor))
+        return go(neighbourTab(tabs, activeId, e.code === 'BracketRight' ? 1 : -1));
+      if (!e.shiftKey && !e.altKey && /^Digit[1-9]$/.test(e.code)) return go(numberedTab(tabs, Number(e.code.slice(5))));
       if (key === 'enter' && tab) {
         e.preventDefault();
         void send(tab);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeDefinition } from './tabs';
+import { neighbourTab, normalizeDefinition, numberedTab, type Tab } from './tabs';
 
 describe('normalizeDefinition', () => {
   it('fills fields missing from tabs saved by older versions', () => {
@@ -30,5 +30,20 @@ describe('normalizeDefinition', () => {
     expect(d).toMatchObject({ method: 'POST', url: 'https://api.test/items', body: { mode: 'json', raw: '{"a":1}' }, scripts: { pre: 'console.log(1)' } });
     expect(d.headers.map((h) => h.key)).toEqual(['X-Trace']);
     expect(d.settings).toEqual({ followRedirects: false });
+  });
+});
+
+describe('tab switching', () => {
+  const tabs = ['a', 'b', 'c'].map((id) => ({ kind: 'flow', id, flowId: id, name: id }) as Tab);
+  it('moves to the next and previous tab, wrapping', () => {
+    expect(neighbourTab(tabs, 'c', 1)?.id).toBe('a');
+    expect(neighbourTab(tabs, 'a', -1)?.id).toBe('c');
+    expect(neighbourTab(tabs, 'a', 1)?.id).toBe('b');
+    expect(neighbourTab([], null, 1)).toBeNull();
+  });
+  it('picks numbered tabs, with 9 as the last', () => {
+    expect(numberedTab(tabs, 2)?.id).toBe('b');
+    expect(numberedTab(tabs, 9)?.id).toBe('c');
+    expect(numberedTab(tabs, 5)).toBeNull();
   });
 });

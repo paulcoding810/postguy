@@ -1,10 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  ArrowDownIcon,
+  ArrowUpIcon,
   ChevronRightIcon,
   CopyIcon,
   DownloadIcon,
   FilePlusIcon,
   FolderIcon,
+  FolderInputIcon,
   FolderOpenIcon,
   FolderPlusIcon,
   LibraryIcon,
@@ -13,7 +16,6 @@ import {
   SettingsIcon,
   Trash2Icon,
   WorkflowIcon,
-  FolderInputIcon,
 } from 'lucide-react';
 import { usePendingSteps } from '@/features/flows/pending';
 import * as React from 'react';
@@ -34,6 +36,7 @@ import {
 } from '@/components/ui/menu';
 import { confirm, prompt } from '@/components/dialogs';
 import { useMoveDialog } from './MoveDialog';
+import { orderPatches, reorderIds, type Place } from './reorder';
 import { keys } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -150,6 +153,14 @@ export function useTreeActions() {
         } else if (item.id !== targetCollectionId) {
           await api('PATCH /collections/:id', { params: { id: item.id }, body: { parentId: targetCollectionId } });
         }
+      }),
+    placeRequest: (requestId: string, folder: CollectionTreeNode, targetId: string, place: Place) =>
+      run(async () => {
+        const moved = !folder.requests.some((r) => r.id === requestId);
+        const ordered = reorderIds(folder.requests.map((r) => r.id), requestId, targetId, place);
+        for (const p of orderPatches(ordered, folder.requests, moved ? requestId : undefined))
+          await api('PATCH /requests/:id', { params: { id: p.id }, body: { sortOrder: p.sortOrder, ...(p.id === requestId && moved && { collectionId: folder.id }) } });
+        if (moved) useTabs.getState().onRequestMoved(requestId, folder.id);
       }),
   };
 }
@@ -314,7 +325,7 @@ function FolderNode({
           {node.requests
             .filter((r) => !q || r.name.toLowerCase().includes(q) || r.url.toLowerCase().includes(q) || node.name.toLowerCase().includes(q))
             .map((r) => (
-              <RequestRow key={r.id} request={r} collectionId={node.id} depth={depth + 1} actions={actions} />
+              <RequestRow key={r.id} request={r} folder={node} depth={depth + 1} actions={actions} />
             ))}
           {node.children.length === 0 && node.requests.length === 0 && (
             <div style={{ paddingLeft: 30 + depth * 12 }} className="py-1 text-xs text-muted-foreground">
@@ -332,12 +343,12 @@ function FolderNode({
 
 function RequestRow({
   request,
-  collectionId,
+  folder,
   depth,
   actions,
 }: {
   request: CollectionTreeNode['requests'][number];
-  collectionId: string;
+  folder: CollectionTreeNode;
   depth: number;
   actions: ReturnType<typeof useTreeActions>;
 }) {
@@ -345,6 +356,8 @@ function RequestRow({
     const t = s.tabs.find((x) => x.id === s.activeId);
     return isRequestTab(t) && t.requestId === request.id;
   });
+  const [dropAt, setDropAt] = React.useState<Place | null>(null);
+  const index = folder.requests.findIndex((r) => r.id === request.id);
   const open = async (pin: boolean) => {
     try {
       const saved = await api('GET /requests/:id', { params: { id: request.id } });
@@ -360,12 +373,33 @@ function RequestRow({
         <div
           role="treeitem"
           draggable
-          onDragStart={(e) => e.dataTransfer.setData('application/x-postguy', JSON.stringify({ kind: 'request', id: request.id }))}
+          onDragStart={(e) => {
+            e.dataTransfer.setData('application/x-postguy', JSON.stringify({ kind: 'request', id: request.id }));
+            e.dataTransfer.setData('application/x-postguy-request', request.id);
+          }}
+          onDragOver={(e) => {
+            if (!e.dataTransfer.types.includes('application/x-postguy-request')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            const box = e.currentTarget.getBoundingClientRect();
+            setDropAt(e.clientY < box.top + box.height / 2 ? 'before' : 'after');
+          }}
+          onDragLeave={() => setDropAt(null)}
+          onDrop={(e) => {
+            const id = e.dataTransfer.getData('application/x-postguy-request');
+            const place = dropAt;
+            setDropAt(null);
+            if (!id || !place) return;
+            e.preventDefault();
+            e.stopPropagation();
+            void actions.placeRequest(id, folder, request.id, place);
+          }}
           onClick={() => open(false)}
           onDoubleClick={() => open(true)}
           style={{ paddingLeft: 22 + depth * 12 }}
-          className={cn('group flex h-7 cursor-pointer items-center gap-2 pr-1 text-[13px] select-none hover:bg-accent', active && 'bg-accent')}
+          className={cn('group relative flex h-7 cursor-pointer items-center gap-2 pr-1 text-[13px] select-none hover:bg-accent', active && 'bg-accent')}
         >
+          {dropAt && <span className={cn('pointer-events-none absolute inset-x-0 h-0.5 bg-primary', dropAt === 'before' ? 'top-0' : 'bottom-0')} />}
           <span className={cn('w-11 shrink-0 text-right font-mono text-[10px] font-bold', `method-${request.method}`)}>
             {request.method === 'DELETE' ? 'DEL' : request.method === 'OPTIONS' ? 'OPT' : request.method}
           </span>
@@ -374,8 +408,14 @@ function RequestRow({
       </ContextMenuTrigger>
       <ContextMenuContent>
         <ContextMenuItem onSelect={() => open(true)}>Open in tab</ContextMenuItem>
-        <ContextMenuItem onSelect={() => useMoveDialog.getState().open({ kind: 'request', id: request.id, name: request.name, parentId: collectionId })}>
+        <ContextMenuItem onSelect={() => useMoveDialog.getState().open({ kind: 'request', id: request.id, name: request.name, parentId: folder.id })}>
           <FolderInputIcon /> Move to…
+        </ContextMenuItem>
+        <ContextMenuItem disabled={index <= 0} onSelect={() => actions.placeRequest(request.id, folder, folder.requests[index - 1]!.id, 'before')}>
+          <ArrowUpIcon /> Move up
+        </ContextMenuItem>
+        <ContextMenuItem disabled={index >= folder.requests.length - 1} onSelect={() => actions.placeRequest(request.id, folder, folder.requests[index + 1]!.id, 'after')}>
+          <ArrowDownIcon /> Move down
         </ContextMenuItem>
         <ContextMenuItem onSelect={() => actions.renameRequest(request.id, request.name)}>
           <PencilIcon /> Rename

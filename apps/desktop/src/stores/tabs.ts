@@ -102,6 +102,18 @@ function normalizeTab(t: unknown): Tab | null {
   };
 }
 
+/** The tab `step` places away from the active one, wrapping around. */
+export function neighbourTab(tabs: Tab[], activeId: string | null, step: number): Tab | null {
+  if (!tabs.length) return null;
+  const at = Math.max(0, tabs.findIndex((t) => t.id === activeId));
+  return tabs[(((at + step) % tabs.length) + tabs.length) % tabs.length]!;
+}
+
+/** Tab number `n` (1-based) as ⌘1…⌘8 pick it; 9 is always the last tab. */
+export function numberedTab(tabs: Tab[], n: number): Tab | null {
+  return (n === 9 ? tabs[tabs.length - 1] : tabs[n - 1]) ?? null;
+}
+
 export function isDirty(tab: Tab): boolean {
   if (!isRequestTab(tab)) return false;
   if (!tab.saved) return true;

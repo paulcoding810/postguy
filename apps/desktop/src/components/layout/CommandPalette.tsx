@@ -1,17 +1,23 @@
-import { FileCode2Icon, FilePlusIcon, HistoryIcon, LayersIcon, MoonIcon, PanelRightIcon, SearchIcon, SendIcon, SettingsIcon, WorkflowIcon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowRightIcon, FileCode2Icon, FilePlusIcon, HistoryIcon, LayersIcon, MoonIcon, PanelRightIcon, SearchIcon, SendIcon, SettingsIcon, WorkflowIcon } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import { useActivateEnvironment, useEnvironments, useTree } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
 import { Kbd } from '@/components/ui/misc';
-import { cn, modKey } from '@/lib/utils';
-import { useTabs } from '@/stores/tabs';
+import { cn, isMac, modKey } from '@/lib/utils';
+import { neighbourTab, useTabs } from '@/stores/tabs';
 import { useUi } from '@/stores/ui';
 import { allRequests } from '@/features/collections/treeUtils';
 import { useFlows } from '@/features/flows/queries';
 import { useImportDialog } from '@/features/openapi/ImportDialog';
 import { useCurlDialog } from '@/features/request/curl';
+
+function switchTab(step: number) {
+  const { tabs, activeId, activate } = useTabs.getState();
+  const next = neighbourTab(tabs, activeId, step);
+  if (next) activate(next.id);
+}
 
 interface Item {
   id: string;
@@ -77,6 +83,8 @@ export function CommandPalette() {
       { id: 'a:curl', group: 'Actions', label: 'Import cURL…', icon: <FilePlusIcon className="size-3.5" />, run: () => useCurlDialog.getState().setOpen(true) },
       { id: 'a:env', group: 'Actions', label: 'Manage environments', shortcut: `${modKey}⇧E`, icon: <SettingsIcon className="size-3.5" />, run: () => openEnvManager() },
       { id: 'a:smart', group: 'Actions', label: 'Toggle smart data panel', shortcut: `${modKey}J`, icon: <PanelRightIcon className="size-3.5" />, run: () => useUi.getState().toggleSmartPanel() },
+      { id: 'a:next-tab', group: 'Actions', label: 'Next tab', shortcut: isMac ? '⌃Tab' : 'Ctrl+Tab', icon: <ArrowRightIcon className="size-3.5" />, run: () => switchTab(1) },
+      { id: 'a:prev-tab', group: 'Actions', label: 'Previous tab', shortcut: isMac ? '⌃⇧Tab' : 'Ctrl+⇧Tab', icon: <ArrowLeftIcon className="size-3.5" />, run: () => switchTab(-1) },
       { id: 'a:history', group: 'Actions', label: 'Show history', icon: <HistoryIcon className="size-3.5" />, run: () => useUi.getState().setSidebar('history') },
       {
         id: 'a:theme',

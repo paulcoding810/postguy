@@ -1,10 +1,10 @@
 import { PlusIcon, WorkflowIcon, XIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/menu';
-import { Tooltip } from '@/components/ui/misc';
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/menu';
+import { Kbd, Tooltip } from '@/components/ui/misc';
 import { confirm } from '@/components/dialogs';
-import { cn, modKey } from '@/lib/utils';
-import { isDirty, isRequestTab, useTabs, type Tab } from '@/stores/tabs';
+import { cn, isMac, modKey } from '@/lib/utils';
+import { isDirty, isRequestTab, neighbourTab, useTabs, type Tab } from '@/stores/tabs';
 
 export async function closeTab(tab: Tab) {
   if (isRequestTab(tab) && isDirty(tab) && (tab.requestId || tab.draft.url)) {
@@ -21,6 +21,11 @@ export async function closeTab(tab: Tab) {
 
 export function TabBar() {
   const { tabs, activeId, activate, newRequest, closeOthers, pin } = useTabs();
+  const goTo = (step: number) => {
+    const next = neighbourTab(tabs, activeId, step);
+    if (next) activate(next.id);
+  };
+  const ctrl = isMac ? '⌃' : 'Ctrl+';
   return (
     <div className="flex h-9 shrink-0 items-stretch border-b bg-sidebar" role="tablist">
       <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none]">
@@ -67,8 +72,20 @@ export function TabBar() {
               </ContextMenuTrigger>
               <ContextMenuContent>
                 {req?.preview && <ContextMenuItem onSelect={() => pin(t.id)}>Keep open</ContextMenuItem>}
-                <ContextMenuItem onSelect={() => closeTab(t)}>Close</ContextMenuItem>
+                <ContextMenuItem onSelect={() => closeTab(t)}>
+                  Close <Kbd className="ml-auto">{modKey}W</Kbd>
+                </ContextMenuItem>
                 <ContextMenuItem onSelect={() => closeOthers(t.id)}>Close others</ContextMenuItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem onSelect={() => goTo(1)}>
+                  Next tab <Kbd className="ml-auto">{ctrl}Tab</Kbd>
+                </ContextMenuItem>
+                <ContextMenuItem onSelect={() => goTo(-1)}>
+                  Previous tab <Kbd className="ml-auto">{ctrl}⇧Tab</Kbd>
+                </ContextMenuItem>
+                <ContextMenuItem disabled>
+                  Go to tab 1–8, or the last <Kbd className="ml-auto">{modKey}1–9</Kbd>
+                </ContextMenuItem>
               </ContextMenuContent>
             </ContextMenu>
           );
