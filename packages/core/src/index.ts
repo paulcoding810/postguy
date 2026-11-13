@@ -22,6 +22,7 @@ export * from './flow/executor.ts';
 export * from './flow/mapping.ts';
 export * from './sandbox/sandbox.ts';
 export * from './openapi/diff.ts';
+export * from './openapi/merge.ts';
 export * from './import/postman.ts';
 export * from './import/curl.ts';
 export * from './import/compat.ts';

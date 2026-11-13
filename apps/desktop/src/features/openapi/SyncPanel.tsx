@@ -14,10 +14,18 @@ import { pickFile } from '@/features/collections/transfer';
 const ACTION: Record<SyncAction, { label: string; variant: 'success' | 'default' | 'warning' | 'destructive' | 'outline' }> = {
   create: { label: 'new request', variant: 'success' },
   update: { label: 'will update', variant: 'default' },
+  'merge-edited': { label: 'edited, will add', variant: 'default' },
   'keep-edited': { label: 'edited, kept as is', variant: 'warning' },
   orphaned: { label: 'removed from spec, kept', variant: 'destructive' },
   unchanged: { label: 'unchanged', variant: 'outline' },
 };
+
+function actionLabel(r: SyncPlan['requests'][number]): string {
+  if (r.action !== 'merge-edited' || !r.adds?.length) return ACTION[r.action].label;
+  const moves = r.adds.filter((a) => a.includes('URL ')).map((a) => `move to ${a.split('URL ')[1]}`);
+  const adds = r.adds.filter((a) => !a.includes('URL ')).map((a) => a.split(' ').slice(1).join(' '));
+  return `edited, will ${[...(adds.length ? [`add ${adds.join(', ')}`] : []), ...moves].join(', ')}`;
+}
 
 export function DiffView({ diff }: { diff: SpecDiffSummary }) {
   const row = (m: string, p: string, s?: string) => (
@@ -95,11 +103,12 @@ export function SyncPanel({ spec }: { spec: OpenApiSpecDetail }) {
     setBusy(true);
     try {
       const r = await api('POST /openapi/:id/sync', { params: { id: spec.id }, body: input });
-      const created = r.requests.filter((x) => x.action === 'create').length;
-      const updated = r.requests.filter((x) => x.action === 'update').length;
-      toast.success(`Synced to ${r.toVersion}: ${created} new, ${updated} updated`);
+      const count = (a: SyncAction) => r.requests.filter((x) => x.action === a).length;
+      const moved = r.requests.filter((x) => x.moved).length;
+      const parts = [`${count('create')} new`, `${count('update')} updated`, `${count('merge-edited')} merged`, ...(moved ? [`${moved} moved`] : [])];
+      toast.success(`Synced to ${r.toVersion}: ${parts.join(', ')}`);
       setPlan(null);
-      await Promise.all(['openapi', 'tree', 'operation', 'request'].map((k) => qc.invalidateQueries({ queryKey: [k] })));
+      await Promise.all(['openapi', 'tree', 'operation', 'request', 'spec-merge'].map((k) => qc.invalidateQueries({ queryKey: [k] })));
     } catch (e) {
       toast.error(errorMessage(e));
     } finally {
@@ -149,11 +158,14 @@ export function SyncPanel({ spec }: { spec: OpenApiSpecDetail }) {
                   <div key={i} className="flex items-center gap-2 border-b px-2 py-1 text-xs last:border-b-0">
                     <span className="truncate">{r.name}</span>
                     <span className="truncate font-mono text-[11px] text-muted-foreground">{r.label}</span>
-                    <Badge variant={ACTION[r.action].variant} className="ml-auto">{ACTION[r.action].label}</Badge>
+                    {r.moved && r.action !== 'merge-edited' && <Badge variant="secondary" className="ml-auto">moved</Badge>}
+                    <Badge variant={ACTION[r.action].variant} className={cn('max-w-[60%] truncate', !(r.moved && r.action !== 'merge-edited') && 'ml-auto')} title={actionLabel(r)}>
+                      {actionLabel(r)}
+                    </Badge>
                   </div>
                 ))}
             </div>
-            <p className="mt-1 text-[11px] text-muted-foreground">Requests you edited after import are never overwritten. Requests whose operation was removed stay in place.</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Requests you edited keep your changes: sync only adds newly required params and headers, and follows a moved path. Requests whose operation was removed stay in place.</p>
           </div>
           <div className="flex justify-end gap-2">
             <Button size="sm" variant="ghost" onClick={() => setPlan(null)}>

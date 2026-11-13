@@ -185,14 +185,25 @@ export interface SpecDiffSummary {
   info: { before: string; after: string } | null;
 }
 
-export type SyncAction = 'create' | 'update' | 'keep-edited' | 'orphaned' | 'unchanged';
+export type SyncAction = 'create' | 'update' | 'merge-edited' | 'keep-edited' | 'orphaned' | 'unchanged';
 
 export interface SyncPlan {
   upToDate: boolean;
   fromVersion: string;
   toVersion: string;
   diff: SpecDiffSummary;
-  requests: { requestId: string | null; name: string; operation: string; label: string; action: SyncAction; changes?: string[] }[];
+  requests: {
+    requestId: string | null;
+    name: string;
+    operation: string;
+    label: string;
+    action: SyncAction;
+    changes?: string[];
+    /** For edited requests: what the merge adds, e.g. "query page", "header X-Tenant". */
+    adds?: string[];
+    /** The operation's path or method moved; the request follows it. */
+    moved?: boolean;
+  }[];
   warnings: string[];
 }
 
@@ -369,6 +380,8 @@ export interface ApiRoutes {
   'POST /openapi/:id/sync': { body: SyncInput; response: SyncResult };
   'GET /openapi/:id/compare': { query: { from: string; to: string }; response: SpecDiffSummary };
   'GET /requests/:id/operation': { response: { model: Pick<ApiModel, 'title' | 'version'>; operation: OpenApiOperation } | null };
+  'GET /requests/:id/spec-merge': { response: { added: string[] } | null };
+  'POST /requests/:id/spec-merge': { body: Empty; response: SavedRequest };
 
   'GET /reference-sources': { query: { collectionId?: string }; response: ReferenceSource[] };
   'GET /requests/:id/snapshots': { response: SnapshotSummary[] };

@@ -20,6 +20,8 @@ export interface OperationChange {
   changes: string[];
   before: OpenApiOperation;
   after: OpenApiOperation;
+  /** Same operationId at a different method or path. */
+  moved?: boolean;
 }
 
 export interface SpecDiff {
@@ -71,7 +73,7 @@ function describe(before: OpenApiOperation, after: OpenApiOperation): string[] {
   return out;
 }
 
-/** Compares two specs operation by operation (matched by method and path template). */
+/** Compares two specs operation by operation, matched by method and path template, then by operationId for moves. */
 export function diffSpecs(before: ApiModel, after: ApiModel): SpecDiff {
   const b = new Map(before.operations.map((o) => [operationKey(o), o]));
   const a = new Map(after.operations.map((o) => [operationKey(o), o]));
@@ -90,6 +92,14 @@ export function diffSpecs(before: ApiModel, after: ApiModel): SpecDiff {
     else unchanged++;
   }
   for (const [k, op] of b) if (!a.has(k)) removed.push(op);
+  for (const old of [...removed]) {
+    const i = added.findIndex((op) => op.id === old.id);
+    if (i < 0) continue;
+    const op = added.splice(i, 1)[0]!;
+    removed.splice(removed.indexOf(old), 1);
+    const moved = `${old.method !== op.method ? `${old.method} ${old.path} → ${op.method} ${op.path}` : `path moved ${old.path} → ${op.path}`}`;
+    changed.push({ key: operationKey(op), method: op.method, path: op.path, summary: op.summary, changes: [moved, ...describe(old, op)], before: old, after: op, moved: true });
+  }
   const sb = before.servers.map((s) => s.url);
   const sa = after.servers.map((s) => s.url);
   return {

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { OpenApiImportInput, SyncInput } from '@postguy/shared';
 import type { Db } from '../db/client.ts';
-import { parse } from '../lib/errors.ts';
+import { notFound, parse } from '../lib/errors.ts';
 import * as openapi from '../services/openapi.ts';
 import * as sync from '../services/openapiSync.ts';
 
@@ -24,6 +24,15 @@ export function openapiRoutes(app: FastifyInstance, db: Db) {
     return sync.compareVersions(db, parse(IdParams, req.params).id, q.from, q.to);
   });
   app.get('/requests/:id/operation', async (req) => openapi.operationForRequest(db, parse(IdParams, req.params).id));
+  app.get('/requests/:id/spec-merge', async (req) => {
+    const m = sync.specMerge(db, parse(IdParams, req.params).id, false);
+    return m ? { added: m.added } : null;
+  });
+  app.post('/requests/:id/spec-merge', async (req) => {
+    const m = sync.specMerge(db, parse(IdParams, req.params).id, true);
+    if (!m) throw notFound('Linked OpenAPI operation');
+    return m.request;
+  });
   app.get('/collections/:id/export/openapi', async (req, reply) => {
     const { format } = parse(ExportQuery, req.query);
     const text = openapi.exportOpenApi(db, parse(IdParams, req.params).id, format);
