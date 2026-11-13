@@ -222,6 +222,17 @@ export interface SendResult {
   unresolved: string[];
   validation: ValidationResult | null;
   scripts: ScriptRun[];
+  /** An auth credential came out empty, so it was not sent. */
+  emptyAuth?: EmptyAuthWarning;
+}
+
+export interface EmptyAuthWarning {
+  field: string;
+  template: string;
+  /** Where the empty variable is defined, when the field is one `{{variable}}`. */
+  variable: { name: string; scope: VariableScope | null; ownerId: string | null } | null;
+  /** A remembered response value that looks like the credential, e.g. `Login.data.access_token`. */
+  suggestion: { ref: string; source: string; path: string } | null;
 }
 
 export interface HistoryEntry {

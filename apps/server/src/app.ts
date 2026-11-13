@@ -3,12 +3,13 @@ import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Db } from './db/client.ts';
 import { registerErrorHandler } from './lib/errors.ts';
+import { VERSION } from './lib/version.ts';
 import { flowRoutes } from './routes/flows.ts';
 import { openapiRoutes } from './routes/openapi.ts';
 import { sendRoutes } from './routes/send.ts';
 import { workspaceRoutes } from './routes/workspace.ts';
 
-export const VERSION = '0.1.0';
+export { VERSION } from './lib/version.ts';
 
 export interface ServerOptions {
   db: Db;

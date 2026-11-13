@@ -118,6 +118,7 @@ function AddValue({ name }: { name: string }) {
       label: `Collection "${root.name}"`,
     },
     global && { key: `global:${global.id}`, scope: 'global' as const, ownerId: global.id, label: 'Globals' },
+    owner.requestId ? { key: `request:${owner.requestId}`, scope: 'request' as const, ownerId: owner.requestId, label: 'This request' } : null,
   ].filter((t): t is NonNullable<typeof t> => !!t);
   const [target, setTarget] = React.useState<string | null>(null);
   const [value, setValue] = React.useState('');
@@ -177,6 +178,7 @@ export function VariableRow({ name, preview }: { name: string; preview: PreviewR
         >
           {!preview ? '…' : preview.resolved ? scopeLabel(preview.source) : 'not defined'}
         </span>
+        {preview?.resolved && preview.preview === '' && <span className="rounded bg-warning/15 px-1 text-[10px] text-warning">empty</span>}
       </div>
       {editable ? (
         <EditValue name={name} scope={preview.source as VariableScope} ownerId={preview.ownerId!} />

@@ -5,6 +5,8 @@ import {
   resolveRequest,
   resolveValue,
   runScript,
+  suggestTokenRef,
+  type EmptyAuth,
   type ResolutionContext,
   type ResponseRecord,
   type ScriptHost,
@@ -18,6 +20,7 @@ import {
   type ScriptResponse,
   type ScriptRun,
   type Scripts,
+  type EmptyAuthWarning,
   type SendResult,
 } from '@postguy/shared';
 import type { z } from 'zod';
@@ -27,7 +30,7 @@ import { effectiveAuth, rootOf } from './collections.ts';
 import { buildContext } from './context.ts';
 import { globalEnvironment } from './environments.ts';
 import { executeHttp, isTextual } from './http.ts';
-import { recordSnapshot, validateResponse } from './memory.ts';
+import { recordSnapshot, referenceSources, snapshotLookup, validateResponse } from './memory.ts';
 import { afterSend } from './maintenance.ts';
 import { exchangeToken, needsTokenExchange } from './oauth.ts';
 import { getRequest } from './requests.ts';
@@ -316,6 +319,31 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     unresolved: resolution.unresolved,
     validation,
     scripts,
+    ...(resolution.emptyAuth && {
+      emptyAuth: describeEmptyAuth(db, resolution.emptyAuth, ctx, collectionId, saved?.id ?? null),
+    }),
+  };
+}
+
+function describeEmptyAuth(
+  db: Db,
+  e: EmptyAuth,
+  ctx: ResolutionContext,
+  collectionId: string | null,
+  requestId: string | null,
+): EmptyAuthWarning {
+  const entry = e.variable ? ctx.variables.get(e.variable) : undefined;
+  const scope = entry && entry.source !== 'runtime' ? entry.source : null;
+  const lookup = snapshotLookup(db, collectionId);
+  const sources = referenceSources(db, collectionId)
+    .filter((s) => !s.shadowed && s.requestId !== requestId)
+    .map((s) => ({ name: s.name, body: lookup(s.name)?.body }))
+    .filter((s) => s.body !== undefined);
+  return {
+    field: e.field,
+    template: e.template,
+    variable: e.variable ? { name: e.variable, scope, ownerId: entry?.ownerId ?? null } : null,
+    suggestion: e.field === 'Bearer token' ? suggestTokenRef(sources) : null,
   };
 }
 

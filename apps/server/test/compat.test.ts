@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { fixture } from '@postguy/mock-api';
 import { createHarness, type Harness } from './harness.ts';
 
 let h: Harness;
@@ -60,5 +61,40 @@ describe('collection import warnings', () => {
     const res = (await h.call('POST', '/collections/import', { data })).body;
     expect(res.name).toBe('P');
     expect(res.warnings).toHaveLength(2);
+  });
+});
+
+describe('empty auth credentials', () => {
+  it('warns when the bearer token is empty and suggests the token from a remembered Login', async () => {
+    const imp = (await h.call('POST', '/openapi/import', { sourceType: 'paste', content: fixture('mock-api.openapi.yaml') })).body;
+    await h.call('PUT', `/variables/collection/${imp.collectionId}/baseUrl`, { value: h.mockUrl });
+    const tree = (await h.call('GET', '/collections/tree')).body.find((c: any) => c.id === imp.collectionId);
+    const all = [tree, ...tree.children].flatMap((c: any) => c.requests);
+    const login = all.find((r: any) => r.name === 'Login');
+    const profile = all.find((r: any) => r.name === 'Get User Profile');
+    const send = async (id: string) => {
+      const saved = (await h.call('GET', `/requests/${id}`)).body;
+      return (await h.call('POST', '/send', { requestId: id, request: saved })).body;
+    };
+    expect((await send(login.id)).status).toBe(200);
+    const res = await send(profile.id);
+    expect(res.status).toBe(401);
+    expect(res.emptyAuth).toEqual({
+      field: 'Bearer token',
+      template: '{{accessToken}}',
+      variable: { name: 'accessToken', scope: 'collection', ownerId: imp.collectionId },
+      suggestion: { ref: 'Login.data.access_token', source: 'Login', path: 'data.access_token' },
+    });
+    await h.call('PUT', `/variables/collection/${imp.collectionId}/accessToken`, { value: `{{${res.emptyAuth.suggestion.ref}}}` });
+    const fixed = await send(profile.id);
+    expect(fixed.status).toBe(200);
+    expect(fixed.emptyAuth).toBeUndefined();
+  });
+
+  it('sends a Postguy User-Agent unless the request sets one', async () => {
+    const echo = async (headers: unknown[]) =>
+      JSON.parse((await h.call('POST', '/send', { request: { name: 'e', method: 'GET', url: `${h.mockUrl}/echo`, headers } })).body.body).headers['user-agent'];
+    expect(await echo([])).toMatch(/^Postguy\//);
+    expect(await echo([{ id: '1', key: 'User-Agent', value: 'mine', enabled: true }])).toBe('mine');
   });
 });

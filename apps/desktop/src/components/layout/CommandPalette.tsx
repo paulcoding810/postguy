@@ -24,6 +24,8 @@ interface Item {
   group: string;
   label: string;
   detail?: string;
+  /** Extra text matched by search but not shown, e.g. a request's URL. */
+  keywords?: string;
   shortcut?: string;
   icon: React.ReactNode;
   run: () => void;
@@ -52,6 +54,7 @@ export function CommandPalette() {
       group: 'Requests',
       label: r.name,
       detail: `${r.method} · ${r.path}`,
+      keywords: r.url,
       icon: <span className={cn('w-9 font-mono text-[10px] font-bold', `method-${r.method}`)}>{r.method}</span>,
       run: async () => {
         try {
@@ -97,7 +100,7 @@ export function CommandPalette() {
     const all = [...reqs, ...flowItems, ...envItems, ...actions];
     const needle = q.trim().toLowerCase();
     if (!needle) return all.slice(0, 60);
-    return all.filter((i) => `${i.label} ${i.detail ?? ''}`.toLowerCase().includes(needle)).slice(0, 60);
+    return all.filter((i) => `${i.label} ${i.detail ?? ''} ${i.keywords ?? ''}`.toLowerCase().includes(needle)).slice(0, 60);
   }, [tree.data, flows.data, envs.data, q, theme, activate, openEnvManager, setTheme]);
 
   const choose = (item: Item | undefined) => {

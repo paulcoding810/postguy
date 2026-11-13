@@ -222,7 +222,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
     })();
   };
 
-  // Steps queued by "Create flow from folder": taken inside the timer so a re-run effect adds them once.
+  // Steps queued by "Run folder as a flow": taken inside the timer so a re-run effect adds them once.
   const addStepsRef = React.useRef(addSteps);
   addStepsRef.current = addSteps;
   const pending = usePendingSteps((st) => st.byFlow[flowId]);

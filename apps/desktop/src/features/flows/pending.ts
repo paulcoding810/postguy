@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AddChoice } from './AddStepMenu';
 
-/** Steps queued for a flow that is about to open, e.g. from "Create flow from folder". */
+/** Steps queued for a flow that is about to open, e.g. from "Run folder as a flow". */
 export const usePendingSteps = create<{ byFlow: Record<string, AddChoice[]>; queue: (flowId: string, steps: AddChoice[]) => void; take: (flowId: string) => void }>((set) => ({
   byFlow: {},
   queue: (flowId, steps) => set((s) => ({ byFlow: { ...s.byFlow, [flowId]: steps } })),

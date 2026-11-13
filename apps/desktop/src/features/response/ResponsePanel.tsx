@@ -8,6 +8,7 @@ import { EmptyState, Kbd } from '@/components/ui/misc';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CodeEditor } from '@/components/CodeEditor';
 import { cn, formatBytes, formatMs, modKey, statusTone, tryParseJson } from '@/lib/utils';
+import { EmptyAuthBanner } from './EmptyAuthBanner';
 import { SchemaTab } from './SchemaTab';
 import { TestsTab, testCounts } from './TestsTab';
 
@@ -43,10 +44,12 @@ export function ResponsePanel({
   response,
   sending,
   requestId,
+  onResend,
 }: {
   response: SendResult | null;
   sending: boolean;
   requestId: string | null;
+  onResend?: () => void;
 }) {
   const [view, setView] = React.useState<'pretty' | 'raw'>('pretty');
 
@@ -109,6 +112,8 @@ export function ResponsePanel({
           Unresolved: {response.unresolved.map((u) => `{{${u}}}`).join(', ')}
         </div>
       )}
+
+      {response.emptyAuth && <EmptyAuthBanner warning={response.emptyAuth} onResend={onResend} />}
 
       <TabsContent value="body" className="flex min-h-0 flex-col">
         {response.error ? (

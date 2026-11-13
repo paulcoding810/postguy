@@ -6,10 +6,11 @@ import { newId, type HttpMethod } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
 import { EmptyState, Tooltip } from '@/components/ui/misc';
 import { confirm } from '@/components/dialogs';
-import { useHistory } from '@/hooks/queries';
+import { useHistory, useTree } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
 import { cn, formatMs, statusTone, timeAgo } from '@/lib/utils';
 import { blankRequest, useTabs } from '@/stores/tabs';
+import { allRequests } from '@/features/collections/treeUtils';
 import { HistoryDetailDialog } from './HistoryDetail';
 
 function dayLabel(ts: number): string {
@@ -21,12 +22,30 @@ function dayLabel(ts: number): string {
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+const MAX_HISTORY = 500;
+
+function pathOf(url: string): string {
+  try {
+    const u = new URL(url);
+    return `${u.pathname}${u.search}`;
+  } catch {
+    return url.replace(/^https?:\/\/[^/]+/, '');
+  }
+}
+
 export function HistoryList({ filter }: { filter: string }) {
-  const history = useHistory();
+  const [limit, setLimit] = React.useState(200);
+  const history = useHistory(undefined, limit);
+  const tree = useTree();
+  const names = React.useMemo(() => new Map(allRequests(tree.data).map((r) => [r.id, r.name])), [tree.data]);
   const qc = useQueryClient();
   const q = filter.trim().toLowerCase();
   const [viewing, setViewing] = React.useState<string | null>(null);
-  const items = (history.data ?? []).filter((h) => !q || h.url.toLowerCase().includes(q) || h.method.toLowerCase().includes(q));
+  const items = (history.data ?? []).filter(
+    (h) =>
+      !q ||
+      `${h.method} ${h.url} ${h.requestId ? (names.get(h.requestId) ?? '') : ''}`.toLowerCase().includes(q),
+  );
 
   const restore = async (id: string) => {
     setViewing(null);
@@ -45,11 +64,20 @@ export function HistoryList({ filter }: { filter: string }) {
       const def = blankRequest(`${entry.method} ${url.pathname}`);
       def.method = entry.method as HttpMethod;
       def.url = `${url.origin}${url.pathname}`;
-      def.params = [...url.searchParams.entries()].map(([key, value]) => ({ id: newId(8), key, value, enabled: true }));
+      def.params = [...url.searchParams.entries()].map(([key, value]) => ({
+        id: newId(8),
+        key,
+        value,
+        enabled: true,
+      }));
       def.headers = Object.entries(entry.request.headers)
         .filter(([k]) => !/^content-type$/i.test(k) || !entry.request.body)
         .map(([key, value]) => ({ id: newId(8), key, value, enabled: true }));
-      if (entry.request.body) def.body = { mode: /json/i.test(entry.request.headers['Content-Type'] ?? '') ? 'json' : 'text', raw: entry.request.body };
+      if (entry.request.body)
+        def.body = {
+          mode: /json/i.test(entry.request.headers['Content-Type'] ?? '') ? 'json' : 'text',
+          raw: entry.request.body,
+        };
       useTabs.getState().newRequest(null, def);
       toast.message('Restored as a new draft. Secret values were masked in history.');
     } catch (e) {
@@ -88,22 +116,57 @@ export function HistoryList({ filter }: { filter: string }) {
         lastDay = day;
         return (
           <div key={h.id}>
-            {header && <div className="px-3 pt-2 pb-1 text-[11px] font-semibold text-muted-foreground uppercase">{day}</div>}
+            {header && (
+              <div className="px-3 pt-2 pb-1 text-[11px] font-semibold text-muted-foreground uppercase">
+                {day}
+              </div>
+            )}
             <Tooltip content={h.error ?? `${h.url} · ${timeAgo(h.createdAt)}`} side="right">
               <button
                 type="button"
                 onClick={() => setViewing(h.id)}
                 className="flex h-7 w-full items-center gap-2 px-3 text-left text-[12px] hover:bg-accent"
               >
-                <span className={cn('w-11 shrink-0 text-right font-mono text-[10px] font-bold', `method-${h.method}`)}>{h.method}</span>
-                <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{h.url.replace(/^https?:\/\//, '')}</span>
-                <span className={cn('shrink-0 font-mono text-[10px]', statusTone(h.status))}>{h.status ?? 'ERR'}</span>
-                <span className="w-12 shrink-0 text-right text-[10px] text-muted-foreground">{formatMs(h.timing.totalMs)}</span>
+                <span
+                  className={cn(
+                    'w-11 shrink-0 text-right font-mono text-[10px] font-bold',
+                    `method-${h.method}`,
+                  )}
+                >
+                  {h.method}
+                </span>
+                <span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate">
+                  {h.requestId && names.has(h.requestId) ? (
+                    <>
+                      <span className="shrink-0 truncate font-medium">{names.get(h.requestId)}</span>
+                      <span className="truncate font-mono text-[11px] text-muted-foreground">
+                        {pathOf(h.url)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="truncate font-mono text-[11.5px]">
+                      {h.url.replace(/^https?:\/\//, '')}
+                    </span>
+                  )}
+                </span>
+                <span className={cn('shrink-0 font-mono text-[10px]', statusTone(h.status))}>
+                  {h.status ?? 'ERR'}
+                </span>
+                <span className="w-12 shrink-0 text-right text-[10px] text-muted-foreground">
+                  {formatMs(h.timing.totalMs)}
+                </span>
               </button>
             </Tooltip>
           </div>
         );
       })}
+      {history.data?.length === limit && limit < MAX_HISTORY && (
+        <div className="flex justify-center py-2">
+          <Button variant="ghost" size="xs" onClick={() => setLimit(MAX_HISTORY)}>
+            Load older sends
+          </Button>
+        </div>
+      )}
       <HistoryDetailDialog id={viewing} onClose={() => setViewing(null)} onOpenRequest={restore} />
     </div>
   );

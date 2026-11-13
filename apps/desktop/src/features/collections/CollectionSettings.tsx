@@ -106,7 +106,9 @@ export function CollectionSettings() {
               </div>
             </TabsContent>
             <TabsContent value="variables" className="flex min-h-0 flex-col p-4">
-              <VariablesTable scope="collection" ownerId={node.id} hint={PRECEDENCE_HINT} overrideNote={overrideNote} />
+              <TemplateProvider draft={blankRequest()} collectionId={node.id} requestId={null}>
+                <VariablesTable scope="collection" ownerId={node.id} hint={PRECEDENCE_HINT} overrideNote={overrideNote} />
+              </TemplateProvider>
             </TabsContent>
           </Tabs>
         </DialogContent>

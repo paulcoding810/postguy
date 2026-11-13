@@ -13,6 +13,8 @@ import {
   LibraryIcon,
   MoreHorizontalIcon,
   PencilIcon,
+  RefreshCwIcon,
+  SearchIcon,
   SettingsIcon,
   Trash2Icon,
   WorkflowIcon,
@@ -35,6 +37,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/menu';
 import { confirm, prompt } from '@/components/dialogs';
+import { EmptyState } from '@/components/ui/misc';
 import { useMoveDialog } from './MoveDialog';
 import { orderPatches, reorderIds, type Place } from './reorder';
 import { keys } from '@/hooks/queries';
@@ -42,6 +45,8 @@ import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { isRequestTab, useTabs } from '@/stores/tabs';
 import { useCollectionSettings } from './CollectionSettings';
+import { useSpecDetail } from '@/features/openapi/ApiSpecList';
+import { useUi } from '@/stores/ui';
 import { downloadJson, downloadText } from './transfer';
 
 const EXPANDED_KEY = 'postguy.tree.expanded';
@@ -199,9 +204,17 @@ export function CollectionTree({ tree, filter }: { tree: CollectionTreeNode[]; f
       return next;
     });
 
+  const shown = tree.filter((n) => matches(n, q));
+  if (q && !shown.length)
+    return (
+      <EmptyState icon={<SearchIcon className="size-6" />} title="No matches">
+        No collection, folder or request matches "{filter.trim()}".
+      </EmptyState>
+    );
+
   return (
     <div className="py-1" role="tree">
-      {tree.filter((n) => matches(n, q)).map((n) => (
+      {shown.map((n) => (
         <FolderNode key={n.id} node={n} depth={0} expanded={expanded} toggle={toggle} actions={actions} q={q} />
       ))}
     </div>
@@ -237,8 +250,18 @@ function FolderNode({
         <FolderPlusIcon /> New folder
       </Item>
       <Item onSelect={() => actions.flowFromFolder(node)}>
-        <WorkflowIcon /> Create flow from {node.kind === 'collection' ? 'collection' : 'folder'}
+        <WorkflowIcon /> Run {node.kind === 'collection' ? 'collection' : 'folder'} as a flow
       </Item>
+      {node.openapiSpecId && (
+        <Item
+          onSelect={() => {
+            useUi.getState().setSidebar('apis');
+            useSpecDetail.getState().open(node.openapiSpecId!, 'sync');
+          }}
+        >
+          <RefreshCwIcon /> Update from spec…
+        </Item>
+      )}
       <Sep />
       <Item onSelect={() => openSettings(node.id)}>
         <SettingsIcon /> Settings, auth & variables

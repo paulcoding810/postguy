@@ -100,12 +100,22 @@ export function suggestMappings(
     if (c) out.push({ field: 'header', key: h.key, ref: refFor(c.source, c.path), reason: `matches ${c.source} → ${c.path}` });
   }
   if (effectiveAuth.type === 'bearer' && (!effectiveAuth.token.trim() || isUnresolved(effectiveAuth.token))) {
-    let pick: Candidate | null = null;
-    for (const key of TOKEN_KEYS) {
-      pick = list.filter((c) => c.leaf === key).sort((a, b) => a.rank - b.rank || a.segs.length - b.segs.length)[0] ?? null;
-      if (pick) break;
-    }
+    const pick = tokenCandidate(list);
     if (pick) out.push({ field: 'auth', key: 'token', ref: refFor(pick.source, pick.path), reason: `bearer token from ${pick.source} → ${pick.path}` });
   }
   return out;
+}
+
+function tokenCandidate(list: Candidate[]): Candidate | null {
+  for (const key of TOKEN_KEYS) {
+    const pick = list.filter((c) => c.leaf === key).sort((a, b) => a.rank - b.rank || a.segs.length - b.segs.length)[0];
+    if (pick) return pick;
+  }
+  return null;
+}
+
+/** The most likely access token among remembered responses, e.g. `Login.data.access_token`. */
+export function suggestTokenRef(sources: UpstreamSource[]): { ref: string; source: string; path: string } | null {
+  const pick = tokenCandidate(candidates(sources));
+  return pick ? { ref: refFor(pick.source, pick.path), source: pick.source, path: pick.path } : null;
 }

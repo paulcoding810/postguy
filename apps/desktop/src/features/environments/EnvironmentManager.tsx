@@ -12,6 +12,8 @@ import { cn } from '@/lib/utils';
 import { useUi } from '@/stores/ui';
 import { exportEnvironment, importEnvironmentFile } from './exchange';
 import { VariablesTable } from './VariablesTable';
+import { TemplateProvider } from '@/features/template/TemplateProvider';
+import { blankRequest } from '@/stores/tabs';
 
 export const PRECEDENCE_HINT =
   'Precedence (highest first): request → flow → collection (inner folder first) → active environment → globals.';
@@ -131,7 +133,9 @@ export function EnvironmentManager() {
                     </div>
                   )}
                 </div>
-                <VariablesTable key={current.id} scope={current.kind === 'global' ? 'global' : 'environment'} ownerId={current.id} />
+                <TemplateProvider draft={blankRequest()} collectionId={null} requestId={null}>
+                  <VariablesTable key={current.id} scope={current.kind === 'global' ? 'global' : 'environment'} ownerId={current.id} />
+                </TemplateProvider>
               </>
             )}
           </div>

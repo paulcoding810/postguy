@@ -7,6 +7,7 @@ import { inputClass } from '@/components/ui/input';
 import { Checkbox, Tooltip } from '@/components/ui/misc';
 import { useSaveVariables, useVariables } from '@/hooks/queries';
 import { cn } from '@/lib/utils';
+import { TemplateInput } from '@/features/template/TemplateInput';
 
 interface Row {
   id: string;
@@ -108,14 +109,26 @@ export function VariablesTable({
                   </Tooltip>
                 )}
               </div>
-              <input
-                className={cn(cell, 'border-l')}
-                value={r.value}
-                spellCheck={false}
-                type={masked ? 'password' : 'text'}
-                onFocus={(e) => masked && e.target.select()}
-                onChange={(e) => edit(r.id, { value: e.target.value })}
-              />
+              {masked ? (
+                <input
+                  className={cn(cell, 'border-l')}
+                  value={r.value}
+                  spellCheck={false}
+                  type="password"
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => edit(r.id, { value: e.target.value })}
+                />
+              ) : (
+                <TemplateInput
+                  className="border-l"
+                  borderless
+                  inputClassName="h-8 font-mono text-xs"
+                  value={r.value}
+                  fieldLabel={`${r.key || 'Variable'} value`}
+                  placeholder={isGhost ? '' : 'Value, or {{Login.data.token}}'}
+                  onChange={(v) => edit(r.id, { value: v })}
+                />
+              )}
               <div className="flex items-center justify-center border-l">
                 {!isGhost && <Checkbox checked={r.isSecret} onCheckedChange={(v) => edit(r.id, { isSecret: !!v })} aria-label="Secret" />}
               </div>

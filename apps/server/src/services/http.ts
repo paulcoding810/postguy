@@ -4,6 +4,7 @@ import { performance } from 'node:perf_hooks';
 import axios, { AxiosError, type AxiosResponse } from 'axios';
 import type { ResolvedRequest } from '@postguy/core';
 import type { RequestSettings } from '@postguy/shared';
+import { VERSION } from '../lib/version.ts';
 
 export const MAX_RESPONSE_BYTES = 50 * 1024 * 1024;
 export const DEFAULT_TIMEOUT_MS = 30_000;
@@ -55,7 +56,7 @@ export async function executeHttp(
     const res = await axios.request<ArrayBuffer>({
       url: req.url,
       method: req.method,
-      headers: req.headers,
+      headers: Object.keys(req.headers).some((h) => h.toLowerCase() === 'user-agent') ? req.headers : { 'User-Agent': `Postguy/${VERSION}`, ...req.headers },
       data: req.body.content ?? undefined,
       responseType: 'arraybuffer',
       transformResponse: (d) => d,

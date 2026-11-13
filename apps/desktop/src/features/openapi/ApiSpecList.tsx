@@ -8,10 +8,16 @@ import { EmptyState } from '@/components/ui/misc';
 import { confirm } from '@/components/dialogs';
 import { api } from '@/lib/api';
 import { cn, timeAgo } from '@/lib/utils';
+import { create } from 'zustand';
 import { useUi } from '@/stores/ui';
 import { useImportDialog } from './ImportDialog';
 import { SyncPanel } from './SyncPanel';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+/** The spec dialog, openable from elsewhere (e.g. a collection's menu) on a given tab. */
+export const useSpecDetail = create<{ id: string | null; tab: 'overview' | 'sync'; open: (id: string, tab?: 'overview' | 'sync') => void; close: () => void }>(
+  (set) => ({ id: null, tab: 'overview', open: (id, tab = 'overview') => set({ id, tab }), close: () => set({ id: null }) }),
+);
 
 export function useSpecs() {
   return useQuery({ queryKey: ['openapi'], queryFn: () => api('GET /openapi') });
@@ -20,7 +26,7 @@ export function useSpecs() {
 export function ApiSpecList() {
   const specs = useSpecs();
   const setOpen = useImportDialog((s) => s.setOpen);
-  const [selected, setSelected] = React.useState<string | null>(null);
+  const { id: selected, tab, open: setSelected, close } = useSpecDetail();
 
   return (
     <div className="flex flex-col p-2">
@@ -47,12 +53,12 @@ export function ApiSpecList() {
           </span>
         </button>
       ))}
-      <SpecDetail id={selected} onClose={() => setSelected(null)} />
+      <SpecDetail id={selected} tab={tab} onClose={close} />
     </div>
   );
 }
 
-function SpecDetail({ id, onClose }: { id: string | null; onClose: () => void }) {
+function SpecDetail({ id, tab, onClose }: { id: string | null; tab: 'overview' | 'sync'; onClose: () => void }) {
   const qc = useQueryClient();
   const detail = useQuery({
     queryKey: ['openapi', id],
@@ -91,7 +97,7 @@ function SpecDetail({ id, onClose }: { id: string | null; onClose: () => void })
           <DialogDescription className="line-clamp-2">{m?.description ?? ''}</DialogDescription>
         </DialogHeader>
         {m && detail.data && (
-          <Tabs defaultValue="overview" className="flex min-h-0 flex-1 flex-col">
+          <Tabs key={`${id}:${tab}`} defaultValue={tab} className="flex min-h-0 flex-1 flex-col">
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="sync">Sync &amp; versions</TabsTrigger>

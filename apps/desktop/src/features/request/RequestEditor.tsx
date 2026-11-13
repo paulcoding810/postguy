@@ -2,7 +2,8 @@ import type { KeyValue, RequestDefinition } from '@postguy/shared';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTree } from '@/hooks/queries';
-import { useTabs, type RequestTab } from '@/stores/tabs';
+import { isRequestTab, useTabs, type RequestTab } from '@/stores/tabs';
+import { useSendRequest } from './actions';
 import { TemplateProvider } from '@/features/template/TemplateProvider';
 import { inheritedAuthSource, chainTo } from '@/features/collections/treeUtils';
 import { ResponsePanel } from '@/features/response/ResponsePanel';
@@ -21,6 +22,7 @@ function count(list: KeyValue[]) {
 
 export function RequestEditor({ tab }: { tab: RequestTab }) {
   const updateDraft = useTabs((s) => s.updateDraft);
+  const send = useSendRequest();
   const tree = useTree();
   const set = <K extends keyof RequestDefinition>(key: K, value: RequestDefinition[K]) =>
     updateDraft(tab.id, (d) => ({ ...d, [key]: value }));
@@ -119,7 +121,15 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
           </ResizablePanel>
           <ResizableHandle orientation="vertical" />
           <ResizablePanel id="response" defaultSize="55%" minSize="15%">
-            <ResponsePanel response={tab.response} sending={tab.sending} requestId={tab.requestId} />
+            <ResponsePanel
+              response={tab.response}
+              sending={tab.sending}
+              requestId={tab.requestId}
+              onResend={() => {
+                const latest = useTabs.getState().tabs.find((t) => t.id === tab.id);
+                if (isRequestTab(latest)) void send(latest);
+              }}
+            />
           </ResizablePanel>
         </ResizableGroup>
       </div>

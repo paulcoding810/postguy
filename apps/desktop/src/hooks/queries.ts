@@ -55,10 +55,11 @@ export function useContextVariables(collectionId: string | null, requestId: stri
   });
 }
 
-export function useHistory(requestId?: string) {
+export function useHistory(requestId?: string, limit = 200) {
   return useQuery({
-    queryKey: keys.history(requestId),
-    queryFn: () => api('GET /history', { query: { requestId, limit: 200 } }),
+    queryKey: [...keys.history(requestId), limit],
+    queryFn: () => api('GET /history', { query: { requestId, limit } }),
+    placeholderData: keepPreviousData,
   });
 }
 

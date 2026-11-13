@@ -19,6 +19,42 @@ export interface RequestResolution {
   unresolved: string[];
   secrets: string[];
   refs: RefResolution[];
+  /** Set when the auth credential came out empty, so the request goes without it. */
+  emptyAuth?: EmptyAuth;
+}
+
+export interface EmptyAuth {
+  /** Which credential was empty, e.g. "Bearer token". */
+  field: string;
+  /** The field as written, e.g. "{{accessToken}}". */
+  template: string;
+  /** The variable when the field is exactly one `{{variable}}`. */
+  variable: string | null;
+}
+
+/** Finds a credential that resolved to nothing, unless an explicit header already covers it. */
+export function findEmptyAuth(written: Auth, resolved: Auth, headers: Record<string, string>): EmptyAuth | null {
+  const pick = (field: string, template: string, value: string): EmptyAuth | null => {
+    if (value.trim()) return null;
+    const m = /^\s*\{\{\s*([^{}.[\]\s]+)\s*\}\}\s*$/.exec(template);
+    return { field, template, variable: m ? m[1]! : null };
+  };
+  switch (resolved.type) {
+    case 'bearer':
+      return written.type === 'bearer' && !hasHeader(headers, 'authorization')
+        ? pick('Bearer token', written.token, resolved.token)
+        : null;
+    case 'apikey':
+      return written.type === 'apikey' && resolved.key && !hasHeader(headers, resolved.key)
+        ? pick(`API key "${resolved.key}"`, written.value, resolved.value)
+        : null;
+    case 'basic':
+      return written.type === 'basic' && !hasHeader(headers, 'authorization') && !resolved.password
+        ? pick('Basic auth username', written.username, resolved.username)
+        : null;
+    default:
+      return null;
+  }
 }
 
 const PATH_PARAM = /\/:([A-Za-z_][\w-]*)/g;
@@ -158,6 +194,7 @@ export function resolveRequest(
 
   const auth = resolveAuth(effectiveAuth, str);
   authSecretValues(auth).forEach((s) => s && secrets.add(s));
+  const emptyAuth = findEmptyAuth(effectiveAuth, auth, headers);
   applyAuth(auth, headers, query);
 
   if (query.length) {
@@ -173,6 +210,7 @@ export function resolveRequest(
     unresolved: [...unresolved],
     secrets: [...secrets].filter((s) => s.length >= 3),
     refs,
+    ...(emptyAuth && { emptyAuth }),
   };
 }
 
