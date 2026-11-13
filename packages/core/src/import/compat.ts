@@ -5,7 +5,6 @@ const SCRIPT_FEATURES: { pattern: RegExp; what: string }[] = [
   { pattern: /\bpm\.sendRequest\s*\(/, what: 'pm.sendRequest (chain the requests in a flow instead)' },
   { pattern: /\b(?:postman\.setNextRequest|pm\.execution\.setNextRequest)\s*\(/, what: 'setNextRequest (use flow conditions instead)' },
   { pattern: /\bpm\.execution\b/, what: 'pm.execution' },
-  { pattern: /\bpm\.cookies\b/, what: 'pm.cookies' },
   { pattern: /\bpm\.vault\b/, what: 'pm.vault' },
   { pattern: /\bpm\.visualizer\b/, what: 'pm.visualizer' },
   { pattern: /\bpm\.iterationData\b/, what: 'pm.iterationData' },

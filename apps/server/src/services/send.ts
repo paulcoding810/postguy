@@ -1,13 +1,16 @@
 import {
+  cookieHeader,
   parseSetCookies,
   redactHeaders,
   redactText,
   resolveRequest,
+  resolveTemplate,
   resolveValue,
   runScript,
   suggestTokenRef,
   type EmptyAuth,
   type ResolutionContext,
+  type ResolvedRequest,
   type ResponseRecord,
   type ScriptHost,
 } from '@postguy/core';
@@ -29,7 +32,8 @@ import { requestHistory } from '../db/schema.ts';
 import { effectiveAuth, rootOf } from './collections.ts';
 import { buildContext } from './context.ts';
 import { globalEnvironment } from './environments.ts';
-import { executeHttp, isTextual } from './http.ts';
+import { cookieHeaderFor, cookiesFor, storeSetCookies } from './cookies.ts';
+import { executeHttp, isTextual, type CookieHooks } from './http.ts';
 import { recordSnapshot, referenceSources, snapshotLookup, validateResponse } from './memory.ts';
 import { afterSend } from './maintenance.ts';
 import { exchangeToken, needsTokenExchange } from './oauth.ts';
@@ -127,6 +131,17 @@ function applyScriptRequest(def: RequestDefinition, before: ScriptRequest, after
   return next;
 }
 
+/** Adds the jar's cookies to the request unless it sets its own Cookie header; returns the values sent, to mask in history. */
+function cookieJarFor(db: Db, environmentId: string | null, def: RequestDefinition, request: ResolvedRequest): { hooks?: CookieHooks; sent: string[] } {
+  if (def.settings.cookies === false) return { sent: [] };
+  const store = (url: string, list: string[]) => storeSetCookies(db, environmentId, url, list);
+  if (headerValue(request.headers, 'cookie') !== null) return { hooks: { store }, sent: [] };
+  const sent = cookiesFor(db, environmentId, request.url);
+  const header = cookieHeader(sent);
+  if (header) request.headers = { ...request.headers, Cookie: header };
+  return { hooks: { store, header: (url) => cookieHeaderFor(db, environmentId, url) }, sent: sent.map((c) => c.value).filter((v) => v.length >= 4) };
+}
+
 function runtimeVarMap(runtime: Map<string, unknown>) {
   const out: Record<string, { value: string }> = {};
   for (const [k, v] of runtime) out[k] = { value: typeof v === 'string' ? v : JSON.stringify(v) };
@@ -168,6 +183,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     return env ? { scope: 'environment' as const, ownerId: env } : { scope: 'global' as const, ownerId: globalEnvironment(db).id };
   };
   let current: ScriptResponse | undefined;
+  let answeredUrl: string | null = null;
   const selfName = (opts.selfName ?? input.request.name).toLowerCase();
   const host = (ctx: ResolutionContext): ScriptHost => ({
     response: (name) => {
@@ -183,6 +199,10 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     set: (key, value) => {
       if (value === null) runtime.delete(key);
       else runtime.set(key, value);
+    },
+    cookies: () => {
+      if (def.settings.cookies === false) return [];
+      return cookiesFor(db, context().environmentId, answeredUrl ?? resolveTemplate(def.url, ctx).value);
     },
     envGet: (key) => (ctx.variables.has(key) ? resolveValue(`{{${key}}}`, ctx).value : undefined),
     envSet: (key, value, scope) => {
@@ -231,7 +251,8 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     }
   }
   const resolution = resolveRequest(def, ctx, auth);
-  const secrets = [...resolution.secrets, ...secretValues(ctx)];
+  const jar = cookieJarFor(db, environmentId, def, resolution.request);
+  const secrets = [...resolution.secrets, ...secretValues(ctx), ...jar.sent];
   const redactedRequest = {
     method: resolution.request.method,
     url: redactText(resolution.request.url, secrets),
@@ -246,7 +267,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
       redactedRequest,
     );
   }
-  const raw = await executeHttp(resolution.request, def.settings, opts.signal);
+  const raw = await executeHttp(resolution.request, def.settings, opts.signal, jar.hooks);
 
   const contentType = headerValue(raw.headers, 'content-type');
   const textual = isTextual(contentType, raw.body);
@@ -285,6 +306,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     validation = validateResponse(db, saved.id, raw.status, contentType, bodyText);
   }
 
+  answeredUrl = raw.finalUrl;
   if (raw.status !== null) {
     const response: ScriptResponse = {
       status: raw.status,

@@ -13,6 +13,7 @@ import {
   type Environment,
   type HistoryEntry,
   type HistorySummary,
+  type JarCookie,
   type JsonSchema,
   type OpenApiOperation,
   type OpenApiSpec,
@@ -349,6 +350,11 @@ export interface ApiRoutes {
   'GET /history': { query: { requestId?: string; limit?: number }; response: HistorySummary[] };
   'GET /history/:id': { response: HistoryEntry };
   'DELETE /history': { response: { ok: true } };
+
+  'GET /cookies': { response: JarCookie[] };
+  'DELETE /cookies/:id': { response: { ok: true } };
+  /** environmentId '' = the workspace jar; omitted = every jar. */
+  'DELETE /cookies': { query: { environmentId?: string; domain?: string }; response: { removed: number } };
 
   'GET /openapi': { response: OpenApiSpec[] };
   'POST /openapi/import': { body: OpenApiImportInput; response: OpenApiImportResult };

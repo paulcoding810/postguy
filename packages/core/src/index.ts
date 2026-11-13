@@ -6,6 +6,7 @@ export * from './template/dynamic.ts';
 export * from './jsonpath/query.ts';
 export * from './http/request.ts';
 export * from './http/cookies.ts';
+export * from './http/cookieJar.ts';
 export * from './redact/redact.ts';
 export * from './openapi/parse.ts';
 export * from './openapi/schema.ts';

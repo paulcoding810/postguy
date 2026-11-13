@@ -12,6 +12,8 @@ export interface ScriptHost {
   envGet(key: string): unknown;
   /** Saves a variable; `scope` is where Postman scripts asked for it (environment by default). */
   envSet(key: string, value: unknown, scope?: 'environment' | 'globals' | 'collection'): void;
+  /** Cookie-jar cookies for the request's URL (the final URL once a response arrived). */
+  cookies?(): { name: string; value: string }[];
 }
 
 export interface ScriptInput {
@@ -109,6 +111,9 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
           break;
         case 'set':
           input.host.set(String(args[0]), args[1]);
+          break;
+        case 'cookies':
+          out = input.host.cookies?.() ?? [];
           break;
         case 'envGet':
           out = input.host.envGet(String(args[0]));

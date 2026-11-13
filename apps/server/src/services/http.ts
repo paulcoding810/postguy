@@ -14,6 +14,8 @@ export interface RawResponse {
   statusText: string | null;
   headers: Record<string, string>;
   setCookies: string[];
+  /** The URL that answered, after redirects. */
+  finalUrl: string;
   body: Buffer;
   timing: { totalMs: number };
   error: { code: string; message: string } | null;
@@ -34,10 +36,20 @@ function flattenHeaders(raw: AxiosResponse['headers']): { headers: Record<string
   return { headers, setCookies };
 }
 
+/** Cookie jar access for one request: what to send to a URL, and where to keep what came back. */
+export interface CookieHooks {
+  /** Absent when the request sets its own Cookie header, which redirects then keep. */
+  header?: (url: string) => string | null;
+  store: (url: string, setCookies: string[]) => void;
+}
+
+const asList = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : v === undefined || v === null ? [] : [String(v)]);
+
 export async function executeHttp(
   req: ResolvedRequest,
   settings: RequestSettings = {},
   signal?: AbortSignal,
+  jar?: CookieHooks,
 ): Promise<RawResponse> {
   const start = performance.now();
   const elapsed = () => Math.round((performance.now() - start) * 10) / 10;
@@ -47,11 +59,13 @@ export async function executeHttp(
       statusText: null,
       headers: {},
       setCookies: [],
+      finalUrl: req.url,
       body: Buffer.alloc(0),
       timing: { totalMs: 0 },
       error: { code: 'INVALID_URL', message: 'URL is empty' },
     };
   }
+  let finalUrl = req.url;
   try {
     const res = await axios.request<ArrayBuffer>({
       url: req.url,
@@ -71,13 +85,27 @@ export async function executeHttp(
       httpAgent,
       httpsAgent: settings.rejectUnauthorized === false ? httpsLoose : httpsStrict,
       signal,
+      beforeRedirect: (options: Record<string, unknown>, response: { headers: Record<string, unknown> }, request?: { url?: string }) => {
+        const from = request?.url ?? finalUrl;
+        finalUrl = String(options.href ?? finalUrl);
+        if (!jar) return;
+        jar.store(from, asList(response.headers['set-cookie']));
+        if (!jar.header) return;
+        const headers = (options.headers ?? {}) as Record<string, unknown>;
+        for (const k of Object.keys(headers)) if (k.toLowerCase() === 'cookie') delete headers[k];
+        const cookie = jar.header(finalUrl);
+        if (cookie) headers.Cookie = cookie;
+        options.headers = headers;
+      },
     });
     const { headers, setCookies } = flattenHeaders(res.headers);
+    jar?.store(finalUrl, setCookies);
     return {
       status: res.status,
       statusText: res.statusText,
       headers,
       setCookies,
+      finalUrl,
       body: Buffer.from(res.data ?? new ArrayBuffer(0)),
       timing: { totalMs: elapsed() },
       error: null,
@@ -100,6 +128,7 @@ export async function executeHttp(
       statusText: null,
       headers: {},
       setCookies: [],
+      finalUrl,
       body: Buffer.alloc(0),
       timing: { totalMs: elapsed() },
       error: { code, message },

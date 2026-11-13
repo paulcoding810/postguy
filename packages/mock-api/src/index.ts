@@ -195,6 +195,8 @@ export function buildMockApi(opts: MockApiOptions = {}) {
     return { ok: true };
   });
   app.get('/redirect', async (_req, reply) => reply.redirect('/health'));
+  app.get('/cookie-redirect', async (_req, reply) => reply.header('set-cookie', 'hop=1; Path=/').redirect('/echo'));
+  app.get('/logout', async (_req, reply) => reply.header('set-cookie', 'session=; Path=/; Max-Age=0').send({ ok: true }));
   app.get('/text', async (_req, reply) => reply.type('text/plain').send('plain text body'));
 
   return app;
