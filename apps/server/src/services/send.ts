@@ -73,6 +73,10 @@ function toScriptRequest(def: RequestDefinition): ScriptRequest {
           ? (def.body.form ?? []).filter((f) => f.enabled && f.key).map((f) => `${encodeURIComponent(f.key)}=${encodeURIComponent(f.value)}`).join('&')
           : null,
     ...(def.body.mode === 'urlencoded' && { bodyMode: 'urlencoded' as const }),
+    ...(def.body.mode === 'form' && {
+      bodyMode: 'formdata' as const,
+      formdata: (def.body.form ?? []).filter((f) => f.enabled && f.key).map((f) => ({ key: f.key, value: f.value })),
+    }),
   };
 }
 

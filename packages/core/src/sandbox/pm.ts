@@ -96,6 +96,10 @@ const __pmResponse = response ? (() => {
   };
   return self;
 })() : undefined;
+const __formDecodePart = (s) => { try { return decodeURIComponent(s.replace(/\+/g, ' ')); } catch (e) { return s; } };
+const __formDecode = (text) => text.split('&').filter(Boolean).map((p) => { const i = p.indexOf('='); return { key: __formDecodePart(i < 0 ? p : p.slice(0, i)), value: i < 0 ? '' : __formDecodePart(p.slice(i + 1)) }; });
+const __formItem = (p) => ({ key: String(p.key), value: p.value == null ? '' : typeof p.value === 'string' ? p.value : String(p.value), ...(p.disabled ? { disabled: true } : {}) });
+const __formEncode = (list) => list.filter((p) => !p.disabled).map((p) => encodeURIComponent(p.key) + '=' + encodeURIComponent(p.value)).join('&');
 const __pmRequest = request ? {
   get url() { return { toString: () => request.url }; },
   set url(v) { request.url = String(v); },
@@ -104,30 +108,61 @@ const __pmRequest = request ? {
   headers: __headers(request.headers),
   body: {
     get raw() { return request.body; },
-    set raw(v) { request.body = v == null ? null : typeof v === 'string' ? v : JSON.stringify(v); request.bodyMode = 'raw'; },
-    get mode() { return request.body == null ? 'none' : (request.bodyMode || 'raw'); },
+    set raw(v) { request.body = v == null ? null : typeof v === 'string' ? v : JSON.stringify(v); },
+    get mode() { return request.bodyMode === 'formdata' ? 'formdata' : request.body == null ? 'none' : (request.bodyMode || 'raw'); },
     get urlencoded() {
-      return request.bodyMode === 'urlencoded' && request.body ? String(request.body).split('&').filter(Boolean).map((p) => { const i = p.indexOf('='); return { key: decodeURIComponent(i < 0 ? p : p.slice(0, i)), value: i < 0 ? '' : decodeURIComponent(p.slice(i + 1)) }; }) : [];
+      const list = request.bodyMode === 'urlencoded' && request.body ? __formDecode(String(request.body)) : [];
+      const save = () => { request.body = __formEncode(list); request.bodyMode = 'urlencoded'; };
+      const find = (k) => list.findIndex((p) => p.key === k);
+      const put = (p) => Array.prototype.push.call(list, __formItem(p));
+      const methods = {
+        add(p) { put(p); save(); },
+        append(p) { put(p); save(); },
+        push(...ps) { ps.forEach(put); save(); return list.length; },
+        upsert(p) { const i = find(String(p.key)); if (i < 0) put(p); else list[i] = __formItem(p); save(); },
+        remove(k) { const keep = list.filter((p) => !(typeof k === 'function' ? k(p) : p.key === (k && typeof k === 'object' ? k.key : k))); list.length = 0; keep.forEach((p) => Array.prototype.push.call(list, p)); save(); },
+        clear() { list.length = 0; save(); },
+        get(k) { const i = find(k); return i < 0 ? undefined : list[i].value; },
+        one(k) { const i = find(k); return i < 0 ? undefined : list[i]; },
+        has(k) { return find(k) >= 0; },
+        all() { return list.slice(); },
+        count() { return list.length; },
+        each(fn) { list.forEach(fn); },
+        toObject() { return Object.fromEntries(list.filter((p) => !p.disabled).map((p) => [p.key, p.value])); },
+      };
+      for (const [k, f] of Object.entries(methods)) Object.defineProperty(list, k, { value: f, enumerable: false });
+      return list;
     },
-    isEmpty() { return request.body == null || request.body === ''; },
+    get formdata() { return request.bodyMode === 'formdata' ? (request.formdata || []).map((p) => ({ ...p })) : []; },
+    isEmpty() { return request.bodyMode === 'formdata' ? !(request.formdata || []).length : request.body == null || request.body === ''; },
     toString() { return request.body ?? ''; },
-    toJSON() { return { mode: this.mode, raw: request.body }; },
+    toJSON() {
+      const mode = this.mode;
+      if (mode === 'none') return {};
+      if (mode === 'urlencoded') return { mode, urlencoded: this.urlencoded.all() };
+      if (mode === 'formdata') return { mode, formdata: this.formdata };
+      return { mode, raw: request.body };
+    },
     update(o) {
       const contentType = (type) => { if (!__headers(request.headers).has('content-type')) request.headers['Content-Type'] = type; };
       if (o == null) { request.body = null; request.bodyMode = undefined; return; }
-      if (typeof o === 'string') { request.body = o; request.bodyMode = 'raw'; return; }
+      if (typeof o === 'string') { request.body = o; return; }
+      if (o.mode == null && o.raw === undefined) { request.body = null; request.bodyMode = undefined; return; }
       const mode = o.mode ?? 'raw';
       if (mode === 'raw') {
         request.body = o.raw == null ? '' : typeof o.raw === 'string' ? o.raw : JSON.stringify(o.raw);
-        request.bodyMode = 'raw';
         const lang = o.options && o.options.raw && o.options.raw.language;
         const types = { json: 'application/json', xml: 'application/xml', html: 'text/html', text: 'text/plain', javascript: 'application/javascript' };
         if (lang && types[lang]) contentType(types[lang]);
         return;
       }
       if (mode === 'urlencoded') {
-        const list = Array.isArray(o.urlencoded) ? o.urlencoded : Object.entries(o.urlencoded || {}).map(([key, value]) => ({ key, value }));
-        request.body = list.filter((p) => p && !p.disabled && p.key != null).map((p) => encodeURIComponent(p.key) + '=' + encodeURIComponent(p.value == null ? '' : String(p.value))).join('&');
+        const u = o.urlencoded;
+        const list = Array.isArray(u) ? u
+          : u && typeof u.all === 'function' ? u.all()
+          : u ? Object.entries(u).map(([key, value]) => ({ key, value }))
+          : typeof o.raw === 'string' ? __formDecode(o.raw) : [];
+        request.body = __formEncode(list.filter((p) => p && p.key != null).map(__formItem));
         request.bodyMode = 'urlencoded';
         return;
       }
@@ -136,10 +171,10 @@ const __pmRequest = request ? {
         let variables = g.variables || {};
         if (typeof variables === 'string') { try { variables = JSON.parse(variables || '{}'); } catch (e) { throw new Error('pm.request.body.update: graphql variables are not valid JSON'); } }
         request.body = JSON.stringify({ query: g.query || '', variables });
-        request.bodyMode = 'raw';
         contentType('application/json');
         return;
       }
+      if (mode === 'formdata' && request.bodyMode === 'formdata' && JSON.stringify(o.formdata || []) === JSON.stringify(request.formdata || [])) return;
       if (mode === 'formdata' || mode === 'file') throw new Error('pm.request.body.update: ' + mode + ' bodies cannot be set from a script; use raw or urlencoded');
       throw new Error('pm.request.body.update: unknown mode ' + JSON.stringify(mode));
     },

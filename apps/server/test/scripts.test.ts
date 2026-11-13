@@ -148,4 +148,38 @@ describe('pm.request.body.update when sending', () => {
     });
     expect(edited.body).toEqual({ kept: 'yes', added: '1' });
   });
+  const echo = (pre: string, body: Record<string, unknown>) =>
+    h.call('POST', '/send', { request: { name: 'echo', method: 'POST', url: `${h.mockUrl}/echo`, body, scripts: { pre, post: '' } } }).then((r) => r.body);
+  const annForm = { mode: 'urlencoded', form: [{ id: '1', key: 'user', value: 'ann', enabled: true }, { id: '2', key: 'pass', value: 'p+w d', enabled: true }] };
+
+  it('sends JSON when request.body is assigned on a form-encoded request', async () => {
+    const res = await echo(`request.body = JSON.stringify({ a: 1 })`, annForm);
+    const got = JSON.parse(res.body);
+    expect(got.headers['content-type']).toBe('application/json');
+    expect(got.body).toEqual({ a: 1 });
+  });
+
+  it('keeps the form when the body is written back from toJSON()', async () => {
+    const res = await echo(`pm.request.body.update(pm.request.body.toJSON())`, annForm);
+    expect(JSON.parse(res.body).body).toEqual({ user: 'ann', pass: 'p+w d' });
+  });
+
+  it('supports add, upsert, push and remove on pm.request.body.urlencoded', async () => {
+    const res = await echo(
+      `const u = pm.request.body.urlencoded; u.add({ key: 'a', value: '1' }); u.upsert({ key: 'user', value: 'bob' }); u.push({ key: 'b', value: '2' }); u.remove('pass');`,
+      annForm,
+    );
+    expect(res.scripts?.[0]?.error ?? null).toBeNull();
+    expect(JSON.parse(res.body).body).toEqual({ user: 'bob', a: '1', b: '2' });
+  });
+
+  it('reports form-data bodies to scripts and leaves them untouched', async () => {
+    const res = await echo(
+      `pm.test('mode', () => pm.expect(pm.request.body.mode).to.equal('formdata')); pm.test('not empty', () => pm.expect(pm.request.body.isEmpty()).to.equal(false)); pm.test('fields', () => pm.expect(pm.request.body.formdata[0].key).to.equal('f'));`,
+      { mode: 'form', form: [{ id: '1', key: 'f', value: 'v', enabled: true }] },
+    );
+    expect(res.scripts.flatMap((s: { assertions: { ok: boolean }[] }) => s.assertions).every((a: { ok: boolean }) => a.ok)).toBe(true);
+    const contentType = Object.entries(res.request.headers as Record<string, string>).find(([k]) => k.toLowerCase() === 'content-type')?.[1];
+    expect(contentType).toMatch(/multipart\/form-data/);
+  });
 });

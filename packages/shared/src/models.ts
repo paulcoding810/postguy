@@ -167,8 +167,10 @@ export interface ScriptRequest {
   url: string;
   headers: Record<string, string>;
   body: string | null;
-  /** Set by pm.request.body.update / .raw: how the body string should be sent. */
-  bodyMode?: 'raw' | 'urlencoded';
+  /** How the body string is sent; 'formdata' bodies are read-only and kept as they are. */
+  bodyMode?: 'raw' | 'urlencoded' | 'formdata';
+  /** The form-data fields when bodyMode is 'formdata'. */
+  formdata?: { key: string; value: string }[];
 }
 
 export interface ScriptResponse {

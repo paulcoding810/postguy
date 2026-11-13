@@ -39,7 +39,7 @@ describe('runScript', () => {
       request: { method: 'GET', url: 'http://x/a', headers: {}, body: null },
       source: `request.headers["X-Trace"] = "t-" + 42; request.url += "?q=1"; request.body = JSON.stringify({ n: 1 });`,
     });
-    expect(r.request).toEqual({ method: 'GET', url: 'http://x/a?q=1', headers: { 'X-Trace': 't-42' }, body: '{"n":1}' });
+    expect(r.request).toEqual({ method: 'GET', url: 'http://x/a?q=1', headers: { 'X-Trace': 't-42' }, body: '{"n":1}', bodyMode: 'raw' });
   });
 
   it('exposes the current response to post scripts and fails on false assertions', async () => {

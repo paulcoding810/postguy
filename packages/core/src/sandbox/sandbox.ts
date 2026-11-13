@@ -39,6 +39,10 @@ const env = Object.freeze({
 });
 const console = Object.freeze({ log: __log('info'), info: __log('info'), warn: __log('warn'), error: __log('error'), debug: __log('info') });
 const request = __call('request');
+if (request) {
+  let __body = request.body;
+  Object.defineProperty(request, 'body', { enumerable: true, get: () => __body, set: (v) => { __body = v; request.bodyMode = 'raw'; delete request.formdata; } });
+}
 const response = __call('currentResponse');
 ${PM_PRELUDE}`;
 const PRELUDE_LINES = PRELUDE.split('\n').length;
@@ -160,5 +164,5 @@ export function normalizeScriptRequest(r: ScriptRequest): ScriptRequest {
   const headers: Record<string, string> = {};
   for (const [k, v] of Object.entries(r.headers ?? {})) if (v !== null && v !== undefined) headers[k] = typeof v === 'string' ? v : JSON.stringify(v);
   const body = r.body === null || r.body === undefined ? null : typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
-  return { method: String(r.method ?? 'GET').toUpperCase(), url: String(r.url ?? ''), headers, body };
+  return { method: String(r.method ?? 'GET').toUpperCase(), url: String(r.url ?? ''), headers, body, ...(r.bodyMode && { bodyMode: r.bodyMode }) };
 }
