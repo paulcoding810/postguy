@@ -61,6 +61,8 @@ export function workspaceRoutes(app: FastifyInstance, db: Db) {
     envs.deleteEnvironment(db, id(req.params));
     return { ok: true };
   });
+  app.post('/environments/import', async (req) => envs.importEnvironment(db, parse(ImportCollectionInput, req.body).data));
+  app.get('/environments/:id/export', async (req) => envs.exportEnvironment(db, id(req.params)));
   app.post('/environments/:id/activate', async (req) => {
     envs.activateEnvironment(db, id(req.params));
     return envs.getEnvironment(db, id(req.params));

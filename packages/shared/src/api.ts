@@ -26,10 +26,13 @@ import {
 } from './models.ts';
 import type {
   Flow,
+  FlowConnection,
   FlowDetail,
   FlowExecution,
   FlowExecutionDetail,
+  FlowSettings,
   FlowSource,
+  FlowStep,
   MappingSuggestion,
 } from './flows.ts';
 import type { z as zt } from 'zod';
@@ -273,7 +276,29 @@ export interface ExportedCollection {
   auth: Auth;
   variables: { key: string; value: string; isSecret: boolean }[];
   folders: ExportedCollection[];
-  requests: (RequestDefinition & { description: string | null })[];
+  /** `ref` is the request's id in the exporting workspace, used by flow steps. */
+  requests: (RequestDefinition & { description: string | null; ref?: string })[];
+  /** Flows built from this collection's requests; root only. */
+  flows?: ExportedFlow[];
+}
+
+export interface PostmanEnvironmentExport {
+  id: string;
+  name: string;
+  values: { key: string; value: string; type: 'default' | 'secret'; enabled: boolean }[];
+  _postman_variable_scope: 'environment' | 'globals';
+  _postman_exported_at: string;
+  _postman_exported_using: string;
+}
+
+export interface ExportedFlow {
+  name: string;
+  description: string | null;
+  settings: FlowSettings;
+  variables: { key: string; value: string; isSecret: boolean }[];
+  /** Request steps point at an exported request's `ref`. */
+  steps: (Omit<FlowStep, 'requestId'> & { requestRef: string | null })[];
+  connections: FlowConnection[];
 }
 
 type Empty = Record<string, never>;
@@ -300,6 +325,8 @@ export interface ApiRoutes {
   'POST /environments': { body: { name: string }; response: Environment };
   'PATCH /environments/:id': { body: { name?: string; sortOrder?: number }; response: Environment };
   'DELETE /environments/:id': { response: { ok: true } };
+  'POST /environments/import': { body: { data: unknown }; response: { environment: Environment; warnings: string[] } };
+  'GET /environments/:id/export': { response: PostmanEnvironmentExport };
   'POST /environments/:id/activate': { body: Empty; response: Environment };
   'POST /environments/deactivate': { body: Empty; response: { ok: true } };
 

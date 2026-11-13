@@ -1,14 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { CheckIcon, GlobeIcon, LayersIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { CheckIcon, DownloadIcon, GlobeIcon, LayersIcon, PencilIcon, PlusIcon, Trash2Icon, UploadIcon } from 'lucide-react';
 import * as React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { confirm, prompt } from '@/components/dialogs';
+import { Tooltip } from '@/components/ui/misc';
 import { keys, useActivateEnvironment, useEnvironments, useInvalidateVariables } from '@/hooks/queries';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useUi } from '@/stores/ui';
+import { exportEnvironment, importEnvironmentFile } from './exchange';
 import { VariablesTable } from './VariablesTable';
 
 export const PRECEDENCE_HINT =
@@ -83,6 +85,17 @@ export function EnvironmentManager() {
               <Button variant="ghost" size="sm" className="w-full justify-start" onClick={create}>
                 <PlusIcon /> New environment
               </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start"
+                onClick={async () => {
+                  const env = await importEnvironmentFile(qc);
+                  if (env) setSelected(env.id);
+                }}
+              >
+                <UploadIcon /> Import from Postman…
+              </Button>
             </div>
           </div>
           <div className="flex min-w-0 flex-1 flex-col p-4">
@@ -95,8 +108,13 @@ export function EnvironmentManager() {
                   ) : current.isActive ? (
                     <Badge variant="success">Active</Badge>
                   ) : null}
+                  <Tooltip content="Export as a Postman environment file">
+                    <Button size="icon-sm" variant="ghost" className="ml-auto" onClick={() => exportEnvironment(current)} aria-label="Export">
+                      <DownloadIcon />
+                    </Button>
+                  </Tooltip>
                   {current.kind === 'environment' && (
-                    <div className="ml-auto flex gap-1">
+                    <div className="flex gap-1">
                       <Button
                         size="sm"
                         variant="outline"

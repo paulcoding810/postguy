@@ -1,13 +1,16 @@
-import { CheckIcon, GlobeIcon, LayersIcon, PlusIcon } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { CheckIcon, GlobeIcon, LayersIcon, PlusIcon, UploadIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useActivateEnvironment, useEnvironments } from '@/hooks/queries';
 import { cn } from '@/lib/utils';
 import { useUi } from '@/stores/ui';
+import { importEnvironmentFile } from './exchange';
 
 export function EnvironmentList() {
   const envs = useEnvironments();
   const activate = useActivateEnvironment();
   const openEnvManager = useUi((s) => s.openEnvManager);
+  const qc = useQueryClient();
 
   return (
     <div className="flex flex-col gap-0.5 p-2">
@@ -33,6 +36,9 @@ export function EnvironmentList() {
       ))}
       <Button variant="ghost" size="sm" className="mt-1 justify-start" onClick={() => openEnvManager(null)}>
         <PlusIcon /> Manage environments
+      </Button>
+      <Button variant="ghost" size="sm" className="justify-start" onClick={() => importEnvironmentFile(qc)}>
+        <UploadIcon /> Import from Postman…
       </Button>
     </div>
   );

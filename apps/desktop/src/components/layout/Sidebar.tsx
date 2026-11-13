@@ -18,6 +18,7 @@ import { useUi, type SidebarSection } from '@/stores/ui';
 import { CollectionTree, useTreeActions } from '@/features/collections/CollectionTree';
 import { pickFile } from '@/features/collections/transfer';
 import { EnvironmentList } from '@/features/environments/EnvironmentList';
+import { importEnvironmentData, looksLikePostmanEnvironment } from '@/features/environments/exchange';
 import { HistoryList } from '@/features/history/HistoryList';
 import { ApiSpecList } from '@/features/openapi/ApiSpecList';
 import { useImportDialog } from '@/features/openapi/ImportDialog';
@@ -68,7 +69,12 @@ export function SidebarPanel() {
     const file = await pickFile('.json,application/json');
     if (!file) return;
     try {
-      const c = await api('POST /collections/import', { body: { data: JSON.parse(file.text) } });
+      const data: unknown = JSON.parse(file.text);
+      if (looksLikePostmanEnvironment(data)) {
+        await importEnvironmentData(qc, data);
+        return;
+      }
+      const c = await api('POST /collections/import', { body: { data } });
       await qc.invalidateQueries({ queryKey: keys.tree });
       toast.success(`Imported "${c.name}"`);
       c.warnings.forEach((w) => toast.warning(w));
@@ -93,7 +99,7 @@ export function SidebarPanel() {
                 <PlusIcon /> New collection
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={importCollection}>
-                <UploadIcon /> Import collection (Postguy or Postman)…
+                <UploadIcon /> Import collection or environment file…
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => useImportDialog.getState().setOpen(true)}>
                 <FileCode2Icon /> Import OpenAPI / Swagger…
@@ -139,7 +145,7 @@ export function SidebarPanel() {
                   <FileCode2Icon /> Import OpenAPI or Postman
                 </Button>
                 <Button size="sm" variant="outline" onClick={importCollection}>
-                  <UploadIcon /> Import collection file
+                  <UploadIcon /> Import collection or environment file
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => useCurlDialog.getState().setOpen(true)}>
                   <UploadIcon /> Import cURL
