@@ -55,7 +55,8 @@ export function ExecutionPanel({
         {detail && (
           <>
             <Badge variant={TONE[detail.status]} className="capitalize">{detail.status}</Badge>
-            {detail.finishedAt && <span className="text-muted-foreground">{formatMs(detail.finishedAt - detail.startedAt)}</span>}
+            {detail.finishedAt && <span className="whitespace-nowrap text-muted-foreground">{formatMs(detail.finishedAt - detail.startedAt)}</span>}
+            <TestSummary steps={detail.steps} />
             {detail.error && <span className="truncate text-destructive">{detail.error}</span>}
             {detail.status !== 'running' && detail.status !== 'paused' && (
               <DropdownMenu>
@@ -104,6 +105,8 @@ export function ExecutionPanel({
             <tbody>
               {detail.steps.map((s) => {
                 const first = s.logs.find((l) => l.level !== 'info') ?? s.logs.find((l) => / → \d{3}\b/.test(l.message)) ?? s.logs.at(-1);
+                const tests = (s.scripts ?? []).flatMap((r) => r.assertions);
+                const failed = tests.filter((a) => !a.ok).length;
                 return (
                   <tr
                     key={s.id}
@@ -119,6 +122,14 @@ export function ExecutionPanel({
                     </td>
                     <td className={cn('px-2 py-1.5 font-mono', statusTone(s.response?.status ?? null))}>{s.response?.status ?? ''}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap text-muted-foreground">{s.response ? formatMs(s.response.timeMs) : ''}</td>
+                    <td className="px-1 py-1.5 font-mono text-[11px] whitespace-nowrap" title={tests.length ? `${tests.length - failed} passed, ${failed} failed` : undefined}>
+                      {tests.length > 0 && (
+                        <>
+                          <span className="text-success">✓{tests.length - failed}</span>
+                          {failed > 0 && <span className="ml-1 text-destructive">✗{failed}</span>}
+                        </>
+                      )}
+                    </td>
                     <td className={cn('w-full truncate px-2 py-1.5 font-mono text-[11px]', first?.level === 'error' ? 'text-destructive' : first?.level === 'warn' ? 'text-warning' : 'text-muted-foreground')}>
                       {s.error ?? first?.message ?? ''}
                     </td>
@@ -130,5 +141,17 @@ export function ExecutionPanel({
         </div>
       )}
     </div>
+  );
+}
+
+function TestSummary({ steps }: { steps: { scripts: { assertions: { ok: boolean }[] }[] | null }[] }) {
+  const all = steps.flatMap((s) => (s.scripts ?? []).flatMap((r) => r.assertions));
+  if (!all.length) return null;
+  const failed = all.filter((a) => !a.ok).length;
+  return (
+    <span className="whitespace-nowrap">
+      <span className="text-success">{all.length - failed} passed</span>
+      {failed > 0 && <span className="text-destructive">, {failed} failed</span>}
+    </span>
   );
 }

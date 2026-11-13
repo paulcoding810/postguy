@@ -65,6 +65,9 @@ export function redactUrl(url: string, secrets: Iterable<string>): string {
 }
 
 const SENSITIVE_KEY = /(token|secret|password|passwd|authorization|api[-_]?key|cookie|session|credential|private[-_]?key)/i;
+/** Keys that describe a credential rather than hold one, e.g. `token_type` or `expires_in`. */
+const DESCRIPTIVE_KEY = /(type|kind|expires?(_?in|_?at|_?on)?|expiry|ttl|lifetime|scopes?|url|uri|endpoint|count|length)$/i;
+const isSensitiveKey = (k: string) => SENSITIVE_KEY.test(k) && !DESCRIPTIVE_KEY.test(k);
 
 /** Masks values under credential-like keys anywhere in a JSON value. */
 export function redactJson(value: unknown, secrets: Iterable<string> = [], depth = 0): unknown {
@@ -74,7 +77,7 @@ export function redactJson(value: unknown, secrets: Iterable<string> = [], depth
   if (Array.isArray(value)) return value.map((v) => redactJson(v, list, depth + 1));
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) out[k] = SENSITIVE_KEY.test(k) && v !== null && typeof v !== 'object' ? MASK : redactJson(v, list, depth + 1);
+    for (const [k, v] of Object.entries(value)) out[k] = isSensitiveKey(k) && v !== null && typeof v !== 'object' ? MASK : redactJson(v, list, depth + 1);
     return out;
   }
   return value;

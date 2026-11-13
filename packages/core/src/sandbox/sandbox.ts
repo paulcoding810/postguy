@@ -1,6 +1,7 @@
 import { getQuickJS, type QuickJSContext, type QuickJSHandle } from 'quickjs-emscripten';
-import type { ScriptAssertion, ScriptRequest, ScriptResponse, ScriptRun, StepLog } from '@postguy/shared';
+import type { JsonSchema, ScriptAssertion, ScriptRequest, ScriptResponse, ScriptRun, StepLog } from '@postguy/shared';
 import { dynamicVariable } from '../template/dynamic.ts';
+import { validateJson } from '../memory/validate.ts';
 import { CRYPTO_PRELUDE, hostCrypto } from './crypto.ts';
 import { PM_PRELUDE } from './pm.ts';
 
@@ -42,6 +43,10 @@ const env = Object.freeze({
   set: (key, value) => { __call('envSet', String(key), value === undefined ? null : value); },
 });
 const console = Object.freeze({ log: __log('info'), info: __log('info'), warn: __log('warn'), error: __log('error'), debug: __log('info') });
+const __timers = [];
+const setTimeout = (fn, _ms, ...args) => { __timers.push(() => fn(...args)); return __timers.length; };
+const clearTimeout = (id) => { __timers[id - 1] = null; };
+const setInterval = () => { throw new Error('setInterval is not available in Postguy scripts'); };
 const request = __call('request');
 if (request) {
   let __body = request.body;
@@ -133,6 +138,9 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
         case 'crypto':
           out = hostCrypto(String(args[0]), args.slice(1));
           break;
+        case 'jsonSchema':
+          out = validateJson(args[0] as JsonSchema, args[1]);
+          break;
         case 'dynamic':
           out = dynamicVariable(String(args[0]));
           break;
@@ -148,7 +156,7 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
     vm.setProp(vm.global, '__host', host);
     host.dispose();
 
-    const code = `${PRELUDE}(function () {\n${input.source}\n})();\nif (request) __call('result', request);\n`;
+    const code = `${PRELUDE}(function () {\n${input.source}\n})();\nfor (let i = 0; i < __timers.length; i++) { const t = __timers[i]; __timers[i] = null; if (t) t(); }\nif (request) __call('result', request);\n`;
     const result = vm.evalCode(code, 'script.js');
     if (result.error) {
       error = errorText(vm.dump(result.error), timedOut, timeoutMs);

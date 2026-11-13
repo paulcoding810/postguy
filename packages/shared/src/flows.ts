@@ -51,6 +51,8 @@ export type FlowGraph = z.output<typeof FlowGraphInput>;
 export const FlowSettings = z.object({
   stopOnError: z.boolean().default(true),
   stepTimeoutMs: z.number().int().positive().max(600_000).optional(),
+  /** Created by "Run collection": re-running adds the collection's new requests first. */
+  runsCollection: z.boolean().optional(),
 });
 export type FlowSettings = z.output<typeof FlowSettings>;
 
@@ -75,7 +77,9 @@ export const UpdateFlowInput = z.object({
   name: z.string().min(1).optional(),
   description: z.string().nullable().optional(),
   collectionId: z.string().nullable().optional(),
-  settings: z.object({ stopOnError: z.boolean().optional(), stepTimeoutMs: z.number().int().positive().max(600_000).optional() }).optional(),
+  settings: z
+    .object({ stopOnError: z.boolean().optional(), stepTimeoutMs: z.number().int().positive().max(600_000).optional(), runsCollection: z.boolean().optional() })
+    .optional(),
 });
 
 export type ExecutionStatus = 'running' | 'paused' | 'success' | 'failed' | 'stopped';

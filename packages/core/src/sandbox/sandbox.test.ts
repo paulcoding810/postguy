@@ -75,8 +75,8 @@ describe('runScript', () => {
       `,
     });
     expect(r.error).toMatch(/SyntaxError/);
-    const ok = await runScript({ phase: 'post', host: host(), source: `flow.log(typeof process, typeof fetch, typeof setTimeout)` });
-    expect(ok.logs[0]!.message).toBe('undefined undefined undefined');
+    const ok = await runScript({ phase: 'post', host: host(), source: `flow.log(typeof process, typeof fetch, typeof require)` });
+    expect(ok.logs[0]!.message).toBe('undefined undefined function');
     expect((await runScript({ phase: 'post', host: host(), source: `require('fs')` })).error).toMatch(/not available/);
     const esc = await runScript({ phase: 'post', host: host(), source: `flow.log(String(this.constructor.constructor("return typeof process")()))` });
     expect(esc.logs[0]?.message ?? esc.error).toMatch(/undefined|TypeError/);
@@ -247,5 +247,34 @@ describe('CryptoJS and base64 in scripts', () => {
   it('replaces built-in variables in pm.variables.replaceIn', async () => {
     const r = await run(`flow.log(pm.variables.replaceIn('{{$guid}}|{{$timestamp}}|{{$nope}}'))`);
     expect(r.logs[0]!.message).toMatch(/^[0-9a-f-]{36}\|\d{10}\|\{\{\$nope\}\}$/);
+  });
+});
+
+describe('more Postman script support', () => {
+  const response = { status: 200, headers: {}, body: { id: 7, name: 'Ann' }, timeMs: 12 };
+  const run = (source: string, extra: object = {}) => runScript({ phase: 'post', host: host(), response, source, ...extra });
+  it('exposes the sent request, the response size and a test.skip', async () => {
+    const r = await run(
+      `pm.test('url', () => pm.expect(pm.request.url.toString()).to.include('/users/7'));
+       flow.log(pm.response.responseSize, pm.info.eventName);
+       pm.test.skip('later', () => { throw new Error('should not run'); });`,
+      { request: { method: 'GET', url: 'http://x/users/7', headers: {}, body: null } },
+    );
+    expect(r.error).toBeNull();
+    expect(r.assertions).toEqual([{ ok: true, message: 'url' }]);
+    expect(r.logs.map((l) => l.message)).toEqual(['21 test', 'Skipped test: later']);
+  });
+  it('validates against a JSON Schema', async () => {
+    const r = await run(`
+      pm.test('ok', () => pm.response.to.have.jsonSchema({ type: 'object', required: ['id'], properties: { id: { type: 'integer' } } }));
+      pm.test('bad', () => pm.response.to.have.jsonSchema({ type: 'object', required: ['email'] }));`);
+    expect(r.assertions[0]).toEqual({ ok: true, message: 'ok' });
+    expect(r.assertions[1]!.ok).toBe(false);
+    expect(r.assertions[1]!.message).toMatch(/missing required property "email"/);
+  });
+  it('runs setTimeout callbacks after the script, without waiting', async () => {
+    const r = await run(`setTimeout(() => flow.log('later', 2), 1000); const t = setTimeout(() => flow.log('never'), 5); clearTimeout(t); flow.log('first');`);
+    expect(r.logs.map((l) => l.message)).toEqual(['first', 'later 2']);
+    expect((await run(`setInterval(() => {}, 10)`)).error).toMatch(/setInterval is not available/);
   });
 });

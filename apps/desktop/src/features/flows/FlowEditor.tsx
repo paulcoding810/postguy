@@ -173,10 +173,10 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
   };
 
   /** Adds steps as a chain after the selected step (or the flow's only end), then maps their inputs in order. */
-  const addSteps = (choices: AddChoice[]) => {
-    if (!choices.length) return;
+  const addSteps = (choices: AddChoice[], opts?: { atEnd?: boolean }): Promise<void> => {
+    if (!choices.length) return Promise.resolve();
     const g = graphRef.current;
-    let from = g.steps.find((s) => s.id === selected) ?? sinkOf(g);
+    let from = (opts?.atEnd ? lastStep(g) : g.steps.find((s) => s.id === selected)) ?? sinkOf(g);
     const taken = g.steps.map((s) => s.name);
     const placed = [...g.steps];
     const added: FlowStep[] = [];
@@ -209,7 +209,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
     setSelected(added.at(-1)!.id);
     setInspectorTab('inputs');
     setTimeout(() => rf.fitView({ padding: 0.2, maxZoom: 1, duration: 300 }), 50);
-    void (async () => {
+    return (async () => {
       const results: string[] = [];
       for (const step of added) {
         if (step.kind !== 'request' || !g.steps.length && step === added[0]) continue;
@@ -222,17 +222,19 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
     })();
   };
 
-  // Steps queued by "Run folder as a flow": taken inside the timer so a re-run effect adds them once.
+  // Work queued by "Run collection": taken inside the timer so a re-run effect does it once.
   const addStepsRef = React.useRef(addSteps);
   addStepsRef.current = addSteps;
+  const runRef = React.useRef<(debug?: boolean) => Promise<void>>(async () => {});
   const pending = usePendingSteps((st) => st.byFlow[flowId]);
   React.useEffect(() => {
-    if (!pending?.length) return;
-    const timer = setTimeout(() => {
-      const steps = usePendingSteps.getState().byFlow[flowId];
-      if (!steps?.length) return;
+    if (!pending) return;
+    const timer = setTimeout(async () => {
+      const work = usePendingSteps.getState().byFlow[flowId];
+      if (!work) return;
       usePendingSteps.getState().take(flowId);
-      addStepsRef.current(steps);
+      await addStepsRef.current(work.steps, { atEnd: true });
+      if (work.run) await runRef.current();
     }, 300);
     return () => clearTimeout(timer);
   }, [pending, flowId]);
@@ -312,6 +314,8 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
       toast.error(errorMessage(e));
     }
   };
+
+  runRef.current = run;
 
   const resume = async (mode: 'continue' | 'step') => {
     if (!currentId) return;
@@ -499,6 +503,13 @@ function freeSpot(p: { x: number; y: number }, steps: FlowStep[]): { x: number; 
   const pos = { ...p };
   while (steps.some((s) => Math.abs(s.position.x - pos.x) < 260 && Math.abs(s.position.y - pos.y) < 100)) pos.x += 280;
   return pos;
+}
+
+/** The step a run reaches last: the lowest step with nothing after it. */
+function lastStep(g: FlowGraph): FlowStep | undefined {
+  return g.steps
+    .filter((s) => !g.connections.some((c) => c.source === s.id))
+    .sort((a, b) => b.position.y - a.position.y || b.position.x - a.position.x)[0];
 }
 
 function sinkOf(g: FlowGraph): FlowStep | undefined {

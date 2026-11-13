@@ -13,6 +13,7 @@ import {
   LibraryIcon,
   MoreHorizontalIcon,
   PencilIcon,
+  PlayIcon,
   RefreshCwIcon,
   SearchIcon,
   SettingsIcon,
@@ -122,15 +123,24 @@ export function useTreeActions() {
       }),
     flowFromFolder: (node: CollectionTreeNode) =>
       run(async () => {
-        const choices = collectRequests(node).map((r) => ({ kind: 'request' as const, requestId: r.id, name: r.name }));
-        if (!choices.length) {
+        const requests = collectRequests(node);
+        if (!requests.length) {
           toast.message('This folder has no requests yet');
           return;
         }
-        const flow = await api('POST /flows', { body: { name: node.name, collectionId: node.id } });
-        usePendingSteps.getState().queue(flow.id, choices);
+        const flows = await api('GET /flows');
+        const runner = flows
+          .filter((f) => f.collectionId === node.id && (f.settings.runsCollection || f.name === node.name))
+          .sort((a, b) => Number(!!b.settings.runsCollection) - Number(!!a.settings.runsCollection) || b.updatedAt - a.updatedAt)[0];
+        const flow = runner ?? (await api('POST /flows', { body: { name: node.name, collectionId: node.id } }));
+        if (!runner || !runner.settings.runsCollection)
+          await api('PATCH /flows/:id', { params: { id: flow.id }, body: { settings: { runsCollection: true, ...(!runner && { stopOnError: false }) } } });
+        const present = runner ? new Set((await api('GET /flows/:id', { params: { id: flow.id } })).steps.map((st) => st.requestId)) : new Set<string | null>();
+        const missing = requests.filter((r) => !present.has(r.id));
+        usePendingSteps.getState().queue(flow.id, missing.map((r) => ({ kind: 'request' as const, requestId: r.id, name: r.name })), { run: true });
         await qc.invalidateQueries({ queryKey: ['flows'] });
         useTabs.getState().openFlow(flow);
+        if (runner && missing.length) toast.message(`Added ${missing.length} new request${missing.length > 1 ? 's' : ''} from "${node.name}"`);
       }),
     renameRequest: (id: string, current: string) =>
       run(async () => {
@@ -250,7 +260,7 @@ function FolderNode({
         <FolderPlusIcon /> New folder
       </Item>
       <Item onSelect={() => actions.flowFromFolder(node)}>
-        <WorkflowIcon /> Run {node.kind === 'collection' ? 'collection' : 'folder'} as a flow
+        <PlayIcon /> Run {node.kind === 'collection' ? 'collection' : 'folder'}
       </Item>
       {node.openapiSpecId && (
         <Item

@@ -98,3 +98,25 @@ describe('empty auth credentials', () => {
     expect(await echo([{ id: '1', key: 'User-Agent', value: 'mine', enabled: true }])).toBe('mine');
   });
 });
+
+describe('post-response scripts and runner flows', () => {
+  it('gives post-response scripts the request as sent', async () => {
+    const res = (
+      await h.call('POST', '/send', {
+        request: { name: 'e', method: 'GET', url: `${h.mockUrl}/echo?q={{$timestamp}}`, scripts: { pre: '', post: "pm.test('url', () => pm.expect(pm.request.url.toString()).to.match(/echo\\?q=\\d{10}$/)); pm.test('method', () => pm.expect(pm.request.method).to.equal('GET'));" } },
+      })
+    ).body;
+    expect(res.scripts[0].assertions).toEqual([
+      { ok: true, message: 'url' },
+      { ok: true, message: 'method' },
+    ]);
+  });
+
+  it('remembers that a flow runs a collection', async () => {
+    const col = (await h.call('POST', '/collections', { name: 'Shop', parentId: null })).body;
+    const flow = (await h.call('POST', '/flows', { name: 'Shop', collectionId: col.id })).body;
+    const patched = (await h.call('PATCH', `/flows/${flow.id}`, { settings: { runsCollection: true, stopOnError: false } })).body;
+    expect(patched.settings).toMatchObject({ runsCollection: true, stopOnError: false });
+    expect((await h.call('GET', '/flows')).body.find((f: any) => f.id === flow.id).settings.runsCollection).toBe(true);
+  });
+});

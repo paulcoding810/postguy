@@ -75,6 +75,7 @@ const __pmResponse = response ? (() => {
     code: r.status,
     status: r.statusText || String(r.status),
     responseTime: r.timeMs ?? 0,
+    responseSize: encodeURIComponent(text ?? '').replace(/%[0-9A-F]{2}/g, '_').length,
     headers: __headers({ ...(r.headers || {}) }),
     json: () => (typeof r.body === 'string' ? JSON.parse(r.body) : r.body),
     text: () => text,
@@ -84,6 +85,11 @@ const __pmResponse = response ? (() => {
       status(c) { __expect(self).to.have.status(c); },
       header(n, v) { if (arguments.length < 2) __expect(self).to.have.header(n); else __expect(self).to.have.header(n, v); },
       jsonBody(p) { __expect(self).to.have.jsonBody(p); },
+      jsonSchema(schema) {
+        const issues = __call('jsonSchema', schema, self.json());
+        if (issues === null) throw new Error('expected a valid JSON Schema');
+        if (issues.length) throw new Error('expected response to match the JSON Schema: ' + issues.slice(0, 3).map((i) => i.path + ' ' + i.message).join('; '));
+      },
     },
     be: {
       get ok() { __expect(r.status >= 200 && r.status < 300).to.be.true; return true; },
@@ -196,10 +202,10 @@ const pm = Object.freeze({
   response: __pmResponse,
   request: __pmRequest,
   expect: __pmExpect,
-  test: (name, fn) => {
+  test: Object.assign((name, fn) => {
     try { fn(); __call('assert', true, String(name)); }
     catch (e) { __call('assert', false, String(name) + ': ' + (e && e.message ? e.message : String(e))); }
-  },
+  }, { skip: (name) => { __call('log', 'info', 'Skipped test: ' + String(name)); } }),
   cookies: Object.freeze({
     get: (name) => { const c = __call('cookies').find((x) => x.name === name); return c ? c.value : undefined; },
     has: (name) => __call('cookies').some((x) => x.name === name),
@@ -207,7 +213,7 @@ const pm = Object.freeze({
     all: () => __call('cookies'),
   }),
   sendRequest: () => { throw new Error('pm.sendRequest is not available in Postguy; chain requests in a flow instead'); },
-  info: { requestName: '', eventName: request ? 'prerequest' : 'test', iteration: 0 },
+  info: { requestName: '', eventName: response ? 'test' : 'prerequest', iteration: 0 },
 });
 const postman = Object.freeze({
   setEnvironmentVariable: (k, v) => pm.environment.set(k, v),

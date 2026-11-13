@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MASK, redactAuth, redactHeaders, redactText } from './redact.ts';
+import { MASK, redactAuth, redactHeaders, redactJson, redactText } from './redact.ts';
 
 describe('redact', () => {
   it('masks secrets in text, longest first, ignoring tiny values', () => {
@@ -18,5 +18,17 @@ describe('redact', () => {
     expect(redactAuth({ type: 'bearer', token: 'raw-token' })).toEqual({ type: 'bearer', token: '' });
     expect(redactAuth({ type: 'bearer', token: '{{token}}' })).toEqual({ type: 'bearer', token: '{{token}}' });
     expect(redactAuth({ type: 'basic', username: 'u', password: 'p' })).toEqual({ type: 'basic', username: 'u', password: '' });
+  });
+});
+
+describe('descriptive credential keys', () => {
+  it('keeps token_type, expires_in and scope but masks the token', () => {
+    expect(redactJson({ access_token: 'abc', token_type: 'Bearer', expires_in: 3600, scope: 'read', session_id: 's1' })).toEqual({
+      access_token: MASK,
+      token_type: 'Bearer',
+      expires_in: 3600,
+      scope: 'read',
+      session_id: MASK,
+    });
   });
 });

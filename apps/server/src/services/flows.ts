@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import { and, asc, desc, eq, max } from 'drizzle-orm';
+import { and, asc, desc, eq, max, sql } from 'drizzle-orm';
 import {
   applyOverrides,
   evaluateExpression,
@@ -232,7 +232,7 @@ export function getExecution(db: Db, id: string): FlowExecutionDetail {
     .select()
     .from(flowExecutionSteps)
     .where(eq(flowExecutionSteps.executionId, id))
-    .orderBy(asc(flowExecutionSteps.startedAt), asc(flowExecutionSteps.attempt))
+    .orderBy(asc(flowExecutionSteps.startedAt), asc(flowExecutionSteps.attempt), sql`rowid`)
     .all() as ExecutionStep[];
   return { ...exec, steps };
 }

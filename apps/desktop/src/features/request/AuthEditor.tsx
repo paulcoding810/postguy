@@ -197,11 +197,15 @@ export function AuthEditor({
 function TokenButton({ auth, context }: { auth: Auth; context?: { collectionId: string | null; requestId: string | null } }) {
   const [busy, setBusy] = React.useState(false);
   const [token, setToken] = React.useState<OAuthTokenResult | null>(null);
+  const [failure, setFailure] = React.useState<string | null>(null);
   const get = async () => {
     setBusy(true);
     try {
       setToken(await api('POST /oauth/token', { body: { auth, collectionId: context?.collectionId ?? null, requestId: context?.requestId ?? null, refresh: true } }));
+      setFailure(null);
     } catch (e) {
+      setToken(null);
+      setFailure(errorMessage(e));
       toast.error(errorMessage(e));
     } finally {
       setBusy(false);
@@ -225,6 +229,7 @@ function TokenButton({ auth, context }: { auth: Auth; context?: { collectionId: 
             </span>
           </span>
         )}
+        {failure && <span className="text-destructive">Token request failed: {failure}</span>}
       </div>
     </div>
   );

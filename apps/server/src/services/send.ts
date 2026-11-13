@@ -314,6 +314,13 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
   }
 
   answeredUrl = raw.finalUrl;
+  /** The request as sent, for `pm.request` in post-response scripts; edits there are ignored. */
+  const sentRequest: ScriptRequest = {
+    method: resolution.request.method,
+    url: resolution.request.url,
+    headers: { ...resolution.request.headers },
+    body: resolution.request.body.content,
+  };
   if (raw.status !== null) {
     const response: ScriptResponse = {
       status: raw.status,
@@ -324,7 +331,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     };
     current = response;
     for (const [label, source] of sources('post')) {
-      const run = await runScript({ source, phase: 'post', host: host(context().ctx), response, timeoutMs: SCRIPT_TIMEOUT_MS });
+      const run = await runScript({ source, phase: 'post', host: host(context().ctx), request: sentRequest, response, timeoutMs: SCRIPT_TIMEOUT_MS });
       const logSecrets = [...secrets, ...secretValues(context().ctx)];
       scripts.push({ ...run, source: label, logs: run.logs.map((l) => ({ ...l, message: redactText(l.message, logSecrets) })) });
     }
