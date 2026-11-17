@@ -10,6 +10,7 @@ import { CodeEditor } from '@/components/CodeEditor';
 import { useCookieManager } from '@/features/cookies/CookieManager';
 import { cn, formatBytes, formatMs, modKey, statusTone, tryParseJson } from '@/lib/utils';
 import { EmptyAuthBanner } from './EmptyAuthBanner';
+import { ResponseTree } from './ResponseTree';
 import { SchemaTab } from './SchemaTab';
 import { TestsTab, testCounts } from './TestsTab';
 
@@ -41,18 +42,45 @@ function Table({ rows, empty }: { rows: [string, React.ReactNode][]; empty: stri
   );
 }
 
+type BodyView = 'pretty' | 'raw' | 'tree';
+const VIEW_KEY = 'postguy.responseView';
+
+/** The body view, remembered across responses and restarts. */
+function useBodyView(): [BodyView, (v: BodyView) => void] {
+  const [view, setView] = React.useState<BodyView>(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_KEY);
+      return saved === 'raw' || saved === 'tree' ? saved : 'pretty';
+    } catch {
+      return 'pretty';
+    }
+  });
+  const set = (v: BodyView) => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  return [view, set];
+}
+
 export function ResponsePanel({
   response,
   sending,
   requestId,
+  requestName = null,
   onResend,
 }: {
   response: SendResult | null;
   sending: boolean;
   requestId: string | null;
+  /** The saved request's name, used for `{{Name.path}}` references in the tree view. */
+  requestName?: string | null;
   onResend?: () => void;
 }) {
-  const [view, setView] = React.useState<'pretty' | 'raw'>('pretty');
+  const [view, setView] = useBodyView();
 
   if (!response) {
     return sending ? (
@@ -66,6 +94,7 @@ export function ResponsePanel({
 
   const json = response.bodyEncoding === 'utf8' && /json/i.test(response.contentType ?? '') ? tryParseJson(response.body) : null;
   const pretty = json?.ok ? JSON.stringify(json.value, null, 2) : response.body;
+  const shown: BodyView = view === 'tree' && !json?.ok ? 'pretty' : view;
   const isBinary = response.bodyEncoding === 'base64';
   const isImage = isBinary && /^image\//.test(response.contentType ?? '');
 
@@ -130,12 +159,12 @@ export function ResponsePanel({
         ) : (
           <>
             <div className="flex items-center gap-1 border-b px-3 py-1">
-              {(['pretty', 'raw'] as const).map((v) => (
+              {(json?.ok ? (['pretty', 'raw', 'tree'] as const) : (['pretty', 'raw'] as const)).map((v) => (
                 <button
                   key={v}
                   type="button"
                   onClick={() => setView(v)}
-                  className={cn('rounded px-2 py-0.5 text-xs capitalize text-muted-foreground', view === v && 'bg-secondary text-foreground')}
+                  className={cn('rounded px-2 py-0.5 text-xs capitalize text-muted-foreground', shown === v && 'bg-secondary text-foreground')}
                 >
                   {v}
                 </button>
@@ -150,15 +179,19 @@ export function ResponsePanel({
                 <CopyIcon className="size-3.5" />
               </Button>
             </div>
-            <div className="min-h-0 flex-1">
-              <CodeEditor
-                key={view}
-                readOnly
-                wordWrap={view === 'raw'}
-                language={view === 'raw' ? 'plaintext' : languageFor(response.contentType)}
-                value={view === 'raw' ? response.body : pretty}
-              />
-            </div>
+            {shown === 'tree' && json?.ok ? (
+              <ResponseTree value={json.value} requestName={requestName} />
+            ) : (
+              <div className="min-h-0 flex-1">
+                <CodeEditor
+                  key={shown}
+                  readOnly
+                  wordWrap={shown === 'raw'}
+                  language={shown === 'raw' ? 'plaintext' : languageFor(response.contentType)}
+                  value={shown === 'raw' ? response.body : pretty}
+                />
+              </div>
+            )}
           </>
         )}
       </TabsContent>

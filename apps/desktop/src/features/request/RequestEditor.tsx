@@ -125,6 +125,7 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
               response={tab.response}
               sending={tab.sending}
               requestId={tab.requestId}
+              requestName={tab.requestId ? (tab.saved?.name ?? tab.draft.name) : null}
               onResend={() => {
                 const latest = useTabs.getState().tabs.find((t) => t.id === tab.id);
                 if (isRequestTab(latest)) void send(latest);

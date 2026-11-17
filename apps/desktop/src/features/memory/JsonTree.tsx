@@ -1,4 +1,4 @@
-import { ChevronRightIcon, CopyIcon, CornerDownLeftIcon } from 'lucide-react';
+import { ChevronRightIcon, ClipboardIcon, CopyIcon, CornerDownLeftIcon } from 'lucide-react';
 import * as React from 'react';
 import { Tooltip } from '@/components/ui/misc';
 import { cn } from '@/lib/utils';
@@ -10,6 +10,12 @@ export interface JsonTreeProps {
   onCopy: (path: string) => void;
   canInsert: boolean;
   filter?: string;
+  /** Levels open at first; 3 by default. */
+  openDepth?: number;
+  /** Shows a copy-value action on each row. */
+  onCopyValue?: (value: unknown) => void;
+  /** Tooltip for the copy action; defaults to copying a reference. */
+  copyLabel?: (path: string) => string;
 }
 
 function kind(v: unknown): string {
@@ -44,7 +50,7 @@ function Row({ name, value, segs, depth, props }: { name: string; value: unknown
   const k = kind(value);
   const container = k === 'object' || k === 'array';
   const q = props.filter?.trim().toLowerCase() ?? '';
-  const [open, setOpen] = React.useState(depth < 3);
+  const [open, setOpen] = React.useState(depth < (props.openDepth ?? 3));
   const isOpen = q ? true : open;
   const path = formatSegs(segs);
   if (!matchesFilter(value, segs, q)) return null;
@@ -76,7 +82,14 @@ function Row({ name, value, segs, depth, props }: { name: string; value: unknown
         )}
         {path && (
           <span className="ml-auto flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
-            <Tooltip content={`Copy {{…${path}}}`}>
+            {props.onCopyValue && (
+              <Tooltip content="Copy value">
+                <button type="button" className="rounded p-0.5 hover:bg-background" onClick={() => props.onCopyValue!(value)} aria-label="Copy value">
+                  <ClipboardIcon className="size-3" />
+                </button>
+              </Tooltip>
+            )}
+            <Tooltip content={props.copyLabel?.(path) ?? `Copy {{…${path}}}`}>
               <button type="button" className="rounded p-0.5 hover:bg-background" onClick={() => props.onCopy(path)} aria-label="Copy reference">
                 <CopyIcon className="size-3" />
               </button>
