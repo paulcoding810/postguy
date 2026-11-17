@@ -15,6 +15,7 @@ export function flowRoutes(app: FastifyInstance, db: Db) {
   app.get('/flows', async () => flows.listFlows(db));
   app.post('/flows', async (req) => flows.createFlow(db, parse(CreateFlowInput, req.body)));
   app.get('/flows/:id', async (req) => flows.getFlow(db, id(req.params)));
+  app.post('/flows/:id/duplicate', async (req) => flows.duplicateFlow(db, id(req.params)));
   app.patch('/flows/:id', async (req) => flows.updateFlow(db, id(req.params), parse(UpdateFlowInput, req.body)));
   app.delete('/flows/:id', async (req) => {
     flows.deleteFlow(db, id(req.params));

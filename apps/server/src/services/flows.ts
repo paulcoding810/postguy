@@ -46,6 +46,7 @@ import { getRequest } from './requests.ts';
 import { deleteScripts, loadScripts, saveScripts, stepOwnerId } from './scripts.ts';
 import { pruneExecutions } from './maintenance.ts';
 import { send } from './send.ts';
+import { listVariables, replaceVariables } from './variables.ts';
 
 const BODY_TEXT_LIMIT = 1024 * 1024;
 
@@ -94,14 +95,46 @@ export function getFlow(db: Db, id: string): FlowDetail {
   return { ...getFlowRow(db, id), ...getGraph(db, id) };
 }
 
+/** `name`, or `name (2)`, `name (3)`… when another flow already uses it. */
+export function uniqueFlowName(db: Db, name: string): string {
+  const taken = new Set(db.select({ name: flows.name }).from(flows).all().map((f) => f.name.toLowerCase()));
+  if (!taken.has(name.toLowerCase())) return name;
+  for (let i = 2; ; i++) if (!taken.has(`${name} (${i})`.toLowerCase())) return `${name} (${i})`;
+}
+
+/** `name (copy)`, then `name (copy 2)`…; copying a copy does not stack the suffix. */
+function copyName(db: Db, name: string): string {
+  const base = `${name.replace(/ \(copy(?: \d+)?\)$/, '')} (copy`;
+  const taken = new Set(db.select({ name: flows.name }).from(flows).all().map((f) => f.name.toLowerCase()));
+  if (!taken.has(`${base})`.toLowerCase())) return `${base})`;
+  for (let i = 2; ; i++) if (!taken.has(`${base} ${i})`.toLowerCase())) return `${base} ${i})`;
+}
+
 export function createFlow(db: Db, input: z.output<typeof CreateFlowInput>): FlowDetail {
   if (input.collectionId) getCollection(db, input.collectionId);
   const now = Date.now();
   const id = newId();
   db.insert(flows)
-    .values({ id, name: input.name, description: input.description ?? null, collectionId: input.collectionId, settings: { stopOnError: true }, createdAt: now, updatedAt: now })
+    .values({ id, name: uniqueFlowName(db, input.name.trim()), description: input.description ?? null, collectionId: input.collectionId, settings: { stopOnError: true }, createdAt: now, updatedAt: now })
     .run();
   return getFlow(db, id);
+}
+
+/** Copies a flow's steps, connections, step scripts, variables and settings; run history stays behind. */
+export function duplicateFlow(db: Db, id: string): FlowDetail {
+  const source = getFlow(db, id);
+  const { runsCollection: _runner, ...settings } = source.settings;
+  const now = Date.now();
+  const copyId = newId();
+  db.transaction(() => {
+    db.insert(flows)
+      .values({ id: copyId, name: copyName(db, source.name), description: source.description, collectionId: source.collectionId, settings, createdAt: now, updatedAt: now })
+      .run();
+    saveGraph(db, copyId, { steps: source.steps, connections: source.connections });
+    const vars = listVariables(db, 'flow', id, true);
+    if (vars.length) replaceVariables(db, 'flow', copyId, vars.map((v) => ({ key: v.key, value: v.value, isSecret: v.isSecret, enabled: v.enabled })));
+  });
+  return getFlow(db, copyId);
 }
 
 export function updateFlow(db: Db, id: string, input: z.output<typeof UpdateFlowInput>): FlowDetail {

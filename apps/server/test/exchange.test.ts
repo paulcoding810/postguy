@@ -81,8 +81,8 @@ describe('collection export with flows', () => {
 
     const imported = (await h.call('POST', '/collections/import', { data: exported })).body;
     expect(imported.warnings).toEqual([]);
-    const flows = (await h.call('GET', '/flows')).body.filter((f: any) => f.name === 'Sign in');
-    expect(flows).toHaveLength(2);
+    const flows = (await h.call('GET', '/flows')).body.filter((f: any) => f.name.startsWith('Sign in'));
+    expect(flows.map((f: any) => f.name).sort()).toEqual(['Sign in', 'Sign in (2)']);
     const copy = (await h.call('GET', `/flows/${flows.find((f: any) => f.id !== flow.id).id}`)).body;
     expect(copy.collectionId).toBe(imported.id);
     const tree = (await h.call('GET', '/collections/tree')).body.find((c: any) => c.id === imported.id);

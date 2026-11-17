@@ -1,6 +1,7 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as React from 'react';
-import type { ExecutionStep, FlowExecution, FlowExecutionDetail } from '@postguy/shared';
+import { toast } from 'sonner';
+import type { ExecutionStep, Flow, FlowExecution, FlowExecutionDetail } from '@postguy/shared';
 import { api } from '@/lib/api';
 import { streamEvents } from '@/lib/sse';
 
@@ -11,6 +12,12 @@ export const flowKeys = {
   execution: (id: string) => ['execution', id] as const,
   sources: (flowId: string, stepId: string) => ['flow-sources', flowId, stepId] as const,
 };
+
+/** Warns, without blocking, when a rename gives a flow the same name as another one. */
+export function warnIfNameTaken(qc: QueryClient, flowId: string, name: string) {
+  const clash = qc.getQueryData<Flow[]>(flowKeys.list)?.some((f) => f.id !== flowId && f.name.trim().toLowerCase() === name.trim().toLowerCase());
+  if (clash) toast.warning(`Another flow is also called "${name.trim()}"`, { description: 'Both keep working; a different name makes them easier to tell apart.' });
+}
 
 export function useFlows() {
   return useQuery({ queryKey: flowKeys.list, queryFn: () => api('GET /flows') });

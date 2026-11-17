@@ -391,6 +391,7 @@ export interface ApiRoutes {
 
   'GET /flows': { response: Flow[] };
   'POST /flows': { body: zt.input<typeof CreateFlowInput>; response: FlowDetail };
+  'POST /flows/:id/duplicate': { body: Empty; response: FlowDetail };
   'GET /flows/:id': { response: FlowDetail };
   'PATCH /flows/:id': { body: zt.input<typeof UpdateFlowInput>; response: FlowDetail };
   'DELETE /flows/:id': { response: { ok: true } };

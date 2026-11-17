@@ -32,7 +32,7 @@ import { usePendingSteps } from './pending';
 import { applySuggestions, describeMappings, uniqueStepName } from './automap';
 import { ExecutionPanel } from './ExecutionPanel';
 import { nodeTypes, type StepNode } from './nodes';
-import { flowKeys, latestByStep, useExecutions, useFlow, useLiveExecution } from './queries';
+import { flowKeys, latestByStep, useExecutions, useFlow, useLiveExecution, warnIfNameTaken } from './queries';
 import { StepInspector } from './StepInspector';
 
 export function FlowEditor({ flowId }: { flowId: string }) {
@@ -341,7 +341,10 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
       const f = await api('PATCH /flows/:id', { params: { id: flowId }, body: patch });
       qc.setQueryData<FlowDetail>(flowKeys.flow(flowId), (old) => (old ? { ...old, name: f.name, settings: f.settings } : old));
       qc.invalidateQueries({ queryKey: flowKeys.list });
-      if (patch.name) useTabs.getState().onFlowRenamed(flowId, f.name);
+      if (patch.name) {
+        warnIfNameTaken(qc, flowId, f.name);
+        useTabs.getState().onFlowRenamed(flowId, f.name);
+      }
     } catch (e) {
       toast.error(errorMessage(e));
     }

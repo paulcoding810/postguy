@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { PencilIcon, PlusIcon, Trash2Icon, WorkflowIcon } from 'lucide-react';
+import { CopyIcon, PencilIcon, PlusIcon, Trash2Icon, WorkflowIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import type { FlowDetail } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { confirm, prompt } from '@/components/dialogs';
 import { api, errorMessage } from '@/lib/api';
 import { cn, timeAgo } from '@/lib/utils';
 import { useTabs } from '@/stores/tabs';
-import { flowKeys, useFlows } from './queries';
+import { flowKeys, useFlows, warnIfNameTaken } from './queries';
 
 export function useCreateFlow() {
   const qc = useQueryClient();
@@ -42,10 +42,22 @@ export function FlowList({ filter }: { filter: string }) {
     if (!name) return;
     try {
       await api('PATCH /flows/:id', { params: { id }, body: { name } });
+      warnIfNameTaken(qc, id, name);
       useTabs.getState().onFlowRenamed(id, name);
       // Patch the name only: refetching the flow would replace a graph the open editor hasn't saved yet.
       qc.setQueryData<FlowDetail>(flowKeys.flow(id), (old) => (old ? { ...old, name } : old));
       await qc.invalidateQueries({ queryKey: flowKeys.list });
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  };
+
+  const duplicate = async (id: string) => {
+    try {
+      const copy = await api('POST /flows/:id/duplicate', { params: { id } });
+      await qc.invalidateQueries({ queryKey: flowKeys.list });
+      useTabs.getState().openFlow(copy);
+      toast.success(`Created "${copy.name}"`);
     } catch (e) {
       toast.error(errorMessage(e));
     }
@@ -90,6 +102,9 @@ export function FlowList({ filter }: { filter: string }) {
           <ContextMenuContent>
             <ContextMenuItem onSelect={() => rename(f.id, f.name)}>
               <PencilIcon /> Rename
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => duplicate(f.id)}>
+              <CopyIcon /> Duplicate
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem variant="destructive" onSelect={() => remove(f.id, f.name)}>
