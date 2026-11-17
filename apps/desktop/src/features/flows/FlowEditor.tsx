@@ -9,21 +9,21 @@ import {
   applyNodeChanges,
   useReactFlow,
   type Connection,
-  type Edge,
   type EdgeChange,
   type NodeChange,
 } from '@xyflow/react';
-import { BugIcon, LoaderIcon, PlayIcon, SkipForwardIcon, SquareIcon, StepForwardIcon, VariableIcon, WorkflowIcon } from 'lucide-react';
+import { BugIcon, LoaderIcon, PlayIcon, Redo2Icon, SkipForwardIcon, SquareIcon, StepForwardIcon, Undo2Icon, VariableIcon, WorkflowIcon } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { newId, type FlowConnection, type FlowDetail, type FlowGraph, type FlowHandle, type FlowStep, type MappingSuggestion, type SavedRequest } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { EmptyState, Switch, Tooltip } from '@/components/ui/misc';
+import { EmptyState, Kbd, Switch, Tooltip } from '@/components/ui/misc';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { useResolvedTheme } from '@/hooks/useTheme';
 import { useTree } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
+import { modKey } from '@/lib/utils';
 import { useTabs } from '@/stores/tabs';
 import { allRequests } from '@/features/collections/treeUtils';
 import { VariablesTable } from '@/features/environments/VariablesTable';
@@ -31,6 +31,8 @@ import { AddStepMenu, type AddChoice } from './AddStepMenu';
 import { usePendingSteps } from './pending';
 import { applySuggestions, describeMappings, uniqueStepName } from './automap';
 import { ExecutionPanel } from './ExecutionPanel';
+import { edgeTypes, type ConnectionEdge } from './edges';
+import { useGraphHistory } from './history';
 import { nodeTypes, type StepNode } from './nodes';
 import { flowKeys, latestByStep, useExecutions, useFlow, useLiveExecution, warnIfNameTaken } from './queries';
 import { StepInspector } from './StepInspector';
@@ -73,6 +75,12 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
   const [measured, setMeasured] = React.useState<Record<string, { width: number; height: number }>>({});
   const graphRef = React.useRef(graph);
   graphRef.current = graph;
+  const history = useGraphHistory(graph, (g) => {
+    graphRef.current = g;
+    setGraph(g);
+    setSelectedEdge(null);
+    setSelected((id) => (id && g.steps.some((s) => s.id === id) ? id : null));
+  });
   const saveTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const savePromise = React.useRef<Promise<void>>(Promise.resolve());
   const firstRender = React.useRef(true);
@@ -251,7 +259,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
     };
   });
 
-  const edges: Edge[] = graph.connections.map((c) => {
+  const edges: ConnectionEdge[] = graph.connections.map((c) => {
     const target = runs.get(c.target);
     const color = c.handle === 'error' || c.handle === 'false' ? 'var(--destructive)' : c.handle === 'true' ? 'var(--success)' : 'var(--muted-foreground)';
     const taken = runs.get(c.source)?.handle === c.handle;
@@ -260,11 +268,10 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
       source: c.source,
       target: c.target,
       sourceHandle: c.handle,
+      type: 'connection',
       selected: c.id === selectedEdge,
       animated: target?.status === 'running',
-      label: c.handle === 'out' ? undefined : c.handle === 'error' ? 'on error' : c.handle,
-      labelStyle: { fill: color, fontSize: 11 },
-      labelBgStyle: { fill: 'var(--background)' },
+      data: { label: c.handle === 'out' ? undefined : c.handle === 'error' ? 'on error' : c.handle, color, onRemove: removeConnection },
       style: { stroke: color, strokeWidth: taken ? 2.25 : 1.5, opacity: live.data && !taken && runs.has(c.source) ? 0.45 : 1 },
       markerEnd: { type: MarkerType.ArrowClosed, color },
     };
@@ -291,14 +298,31 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
         connections: g.connections.filter((c) => !removed.has(c.source) && !removed.has(c.target)),
       }));
       if (selected && removed.has(selected)) setSelected(null);
+      if (removed.size) undoToast(`Removed ${removed.size > 1 ? `${removed.size} steps` : 'a step'}`);
     }
   };
+
+  function undoToast(message: string) {
+    toast(message, { action: { label: 'Undo', onClick: () => history.undo() } });
+  }
+
+  function removeConnection(id: string) {
+    setGraph((g) => ({ ...g, connections: g.connections.filter((c) => c.id !== id) }));
+    setSelectedEdge(null);
+    undoToast('Removed a connection');
+  }
 
   const onEdgesChange = (changes: EdgeChange[]) => {
     const removed = new Set(changes.filter((c) => c.type === 'remove').map((c) => c.id));
     const select = changes.find((c) => c.type === 'select' && c.selected);
     if (select && select.type === 'select') setSelectedEdge(select.id);
-    if (removed.size) setGraph((g) => ({ ...g, connections: g.connections.filter((c) => !removed.has(c.id)) }));
+    if (removed.size) {
+      setGraph((g) => ({ ...g, connections: g.connections.filter((c) => !removed.has(c.id)) }));
+      // Arrows deleted along with their step are covered by the step's toast.
+      const deleting = new Set(rf.getNodes().filter((n) => n.selected).map((n) => n.id));
+      const own = graphRef.current.connections.filter((c) => removed.has(c.id) && !deleting.has(c.source) && !deleting.has(c.target)).length;
+      if (own) undoToast(own > 1 ? `Removed ${own} connections` : 'Removed a connection');
+    }
   };
 
   const onConnect = (c: Connection) => connect(c.source, c.target, (c.sourceHandle as FlowHandle | null) ?? 'out');
@@ -365,6 +389,18 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
         />
         <span className="text-[11px] text-muted-foreground">{saving === 'saving' ? 'Saving…' : saving === 'error' ? 'Not saved' : 'Saved'}</span>
         <div className="ml-auto flex items-center gap-2">
+          <div className="flex">
+            <Tooltip content={<span>Undo <Kbd className="ml-1">{modKey}Z</Kbd></span>}>
+              <Button variant="ghost" size="icon-sm" aria-label="Undo" onClick={history.undo} disabled={!history.canUndo}>
+                <Undo2Icon />
+              </Button>
+            </Tooltip>
+            <Tooltip content={<span>Redo <Kbd className="ml-1">{modKey}⇧Z</Kbd></span>}>
+              <Button variant="ghost" size="icon-sm" aria-label="Redo" onClick={history.redo} disabled={!history.canRedo}>
+                <Redo2Icon />
+              </Button>
+            </Tooltip>
+          </div>
           <AddStepMenu onAdd={addSteps} />
           <Tooltip content="Flow variables, available to every step">
             <Button variant="ghost" size="sm" onClick={() => setVarsOpen(true)}>
@@ -424,6 +460,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
                   nodes={nodes}
                   edges={edges}
                   nodeTypes={nodeTypes}
+                  edgeTypes={edgeTypes}
                   onNodesChange={onNodesChange}
                   onEdgesChange={onEdgesChange}
                   onConnect={onConnect}
@@ -443,7 +480,7 @@ function Editor({ flowId, initial }: { flowId: string; initial: FlowGraph & { na
                       <WorkflowIcon className="size-6 text-primary" />
                       <div className="text-sm font-medium">Build a flow from saved requests</div>
                       <p className="max-w-xs text-xs text-muted-foreground">
-                        Tick the requests to run, in order. They are connected into a chain and their inputs are mapped from earlier responses. You can also right-click a folder and choose Create flow.
+                        Tick the requests to run, in order. They are connected into a chain and their inputs are mapped from earlier responses. You can also right-click a folder and choose Run folder.
                       </p>
                       <AddStepMenu onAdd={addSteps} label="Add first step" variant="default" />
                     </div>
