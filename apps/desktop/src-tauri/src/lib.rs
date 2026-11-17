@@ -29,8 +29,10 @@ fn dev_server_info() -> ServerInfo {
     }
 }
 
+/// The bundled server, in built apps only: `tauri dev` always uses the dev server, even when a
+/// local `tauri build --debug` left a bundled server next to the dev binary.
 fn sidecar_script(app: &tauri::AppHandle) -> Option<PathBuf> {
-    if std::env::var("POSTGUY_SERVER_URL").is_ok() {
+    if tauri::is_dev() || std::env::var("POSTGUY_SERVER_URL").is_ok() {
         return None;
     }
     let script = app.path().resource_dir().ok()?.join("server").join("server.mjs");
