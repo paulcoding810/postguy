@@ -59,17 +59,42 @@ function SecretToggle({ shown, onToggle }: { shown: boolean; onToggle: () => voi
   );
 }
 
-function EditValue({ name, scope, ownerId }: { name: string; scope: VariableScope; ownerId: string }) {
+interface EditProps {
+  /** Focus the value and select it, ready to type over. */
+  focus?: boolean;
+  /** Called after a successful save. */
+  onDone?: () => void;
+}
+
+/** Focuses and selects an input once it exists and `when` turns true. */
+function useFocusSelect(ref: React.RefObject<HTMLInputElement | null>, when: boolean, ready = true) {
+  React.useEffect(() => {
+    if (!when || !ready) return;
+    const id = requestAnimationFrame(() => {
+      ref.current?.focus();
+      ref.current?.select();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [ref, when, ready]);
+}
+
+function EditValue({ name, scope, ownerId, focus, onDone }: { name: string; scope: VariableScope; ownerId: string } & EditProps) {
   const vars = useVariables(scope, ownerId, true);
   const current = vars.data?.find((v) => v.key === name);
   const [value, setValue] = React.useState<string | null>(null);
   const [shown, setShown] = React.useState(false);
   const { save, saving } = useSaveVariable();
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  useFocusSelect(inputRef, !!focus, !!current);
   if (!current) return <LoaderIcon className="size-3.5 animate-spin text-muted-foreground" />;
   const text = value ?? current.value;
   const dirty = value !== null && value !== current.value;
   const submit = async () => {
-    if (dirty && (await save(scope, ownerId, name, text))) setValue(null);
+    if (!dirty) return onDone?.();
+    if (await save(scope, ownerId, name, text)) {
+      setValue(null);
+      onDone?.();
+    }
   };
   return (
     <form
@@ -80,6 +105,7 @@ function EditValue({ name, scope, ownerId }: { name: string; scope: VariableScop
       }}
     >
       <input
+        ref={inputRef}
         aria-label={`Value of ${name}`}
         className={field}
         type={current.isSecret && !shown ? 'password' : 'text'}
@@ -98,7 +124,7 @@ function EditValue({ name, scope, ownerId }: { name: string; scope: VariableScop
   );
 }
 
-function AddValue({ name }: { name: string }) {
+function AddValue({ name, focus, onDone }: { name: string } & EditProps) {
   const { owner } = useTemplateCtx();
   const tree = useTree();
   const active = useEnvironments().data?.find((e) => e.kind === 'environment' && e.isActive);
@@ -123,18 +149,21 @@ function AddValue({ name }: { name: string }) {
   const [target, setTarget] = React.useState<string | null>(null);
   const [value, setValue] = React.useState('');
   const { save, saving } = useSaveVariable();
+  const inputRef = React.useRef<HTMLInputElement>(null);
   const chosen = targets.find((t) => t.key === target) ?? targets[0];
+  useFocusSelect(inputRef, !!focus, !!chosen);
   if (!chosen) return null;
   return (
     <form
       className="flex flex-col gap-1.5"
       onSubmit={(e) => {
         e.preventDefault();
-        void save(chosen.scope, chosen.ownerId, name, value);
+        void save(chosen.scope, chosen.ownerId, name, value).then((ok) => ok && onDone?.());
       }}
     >
       <div className="flex items-center gap-1">
         <input
+          ref={inputRef}
           aria-label={`Value of ${name}`}
           className={field}
           placeholder="Value"
@@ -163,7 +192,7 @@ function AddValue({ name }: { name: string }) {
 }
 
 /** One `{{name}}` in the variable popup: its value, where it comes from, and a way to change it. */
-export function VariableRow({ name, preview }: { name: string; preview: PreviewRef | undefined }) {
+export function VariableRow({ name, preview, focus, onDone }: { name: string; preview: PreviewRef | undefined } & EditProps) {
   const editable = !!preview?.resolved && EDITABLE.includes(preview.source ?? '') && !!preview.ownerId;
   const builtIn = name.startsWith('$') && !name.startsWith('$res');
   return (
@@ -181,13 +210,13 @@ export function VariableRow({ name, preview }: { name: string; preview: PreviewR
         {preview?.resolved && preview.preview === '' && <span className="rounded bg-warning/15 px-1 text-[10px] text-warning">empty</span>}
       </div>
       {editable ? (
-        <EditValue name={name} scope={preview.source as VariableScope} ownerId={preview.ownerId!} />
+        <EditValue name={name} scope={preview.source as VariableScope} ownerId={preview.ownerId!} focus={focus} onDone={onDone} />
       ) : preview?.resolved ? (
         <div className="truncate font-mono text-[11.5px] text-muted-foreground" title={preview.preview ?? ''}>
           {preview.preview}
         </div>
       ) : preview && !builtIn && !/[.[]/.test(name) ? (
-        <AddValue name={name} />
+        <AddValue name={name} focus={focus} onDone={onDone} />
       ) : preview?.preview ? (
         <div className="text-[11px] text-destructive">{preview.preview}</div>
       ) : null}

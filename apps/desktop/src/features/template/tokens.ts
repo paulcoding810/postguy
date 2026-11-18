@@ -18,3 +18,11 @@ export function refsIn(input: string | undefined | null): string[] {
   if (!input) return [];
   return [...input.matchAll(REF)].map((m) => m[1]!);
 }
+
+/** The `{{ref}}` the caret is inside (between its braces, inclusive), if any. */
+export function refAt(input: string, caret: number): string | null {
+  for (const m of input.matchAll(REF)) {
+    if (caret >= m.index && caret <= m.index + m[0].length) return m[1]!;
+  }
+  return null;
+}

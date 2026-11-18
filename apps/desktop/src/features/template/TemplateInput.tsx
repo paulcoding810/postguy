@@ -1,10 +1,10 @@
 import * as React from 'react';
-import { cn } from '@/lib/utils';
+import { cn, modKey } from '@/lib/utils';
 import { inputClass } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/misc';
 import { useHoverPopup } from './useHoverPopup';
 import { VariableRow } from './VariableEditor';
-import { parseTokens } from './tokens';
+import { parseTokens, refAt } from './tokens';
 import { clearInsertTarget, useInsertTarget, useTemplateCtx, type Suggestion } from './TemplateContext';
 
 export interface TemplateInputProps {
@@ -124,10 +124,25 @@ export function TemplateInput({
 
   const names = [...new Set(refs.map((r) => r.ref))];
   const hover = useHoverPopup(names.length > 0);
+  /** The variable ⌘-clicked for editing; its value gets focus in the popup. */
+  const [editing, setEditing] = React.useState<string | null>(null);
+  const caretRef = React.useRef(0);
+  /** Closes the popup; after Esc or a save, the caret goes back to where it was in the field. */
+  const closePopup = (refocus = false) => {
+    hover.close();
+    if (!editing) return;
+    setEditing(null);
+    if (!refocus) return;
+    const el = inputRef.current;
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(caretRef.current, caretRef.current);
+    });
+  };
 
   return (
     <div className={cn('relative min-w-0', className)}>
-      <Popover open={hover.open} onOpenChange={(o) => !o && hover.close()}>
+      <Popover open={hover.open} onOpenChange={(o) => !o && closePopup()}>
         <PopoverAnchor asChild>
           <div className="relative" {...hover.triggerProps}>
             <div
@@ -163,6 +178,16 @@ export function TemplateInput({
               placeholder={placeholder}
               aria-label={fieldLabel}
               onFocus={register}
+              onClick={(e) => {
+                if (!(e.metaKey || e.ctrlKey)) return;
+                const el = e.currentTarget;
+                const ref = refAt(el.value, el.selectionStart ?? 0);
+                if (!ref) return;
+                caretRef.current = el.selectionStart ?? 0;
+                setMenu(null);
+                setEditing(ref);
+                hover.openNow();
+              }}
               onChange={(e) => {
                 onChange(e.target.value);
                 updateMenu(e.target.value, e.target.selectionStart ?? e.target.value.length);
@@ -193,11 +218,16 @@ export function TemplateInput({
           className="flex w-[min(26rem,90vw)] flex-col gap-2.5 p-2.5"
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
+          onEscapeKeyDown={(e) => {
+            e.preventDefault();
+            closePopup(true);
+          }}
           {...hover.contentProps}
         >
           {names.map((n) => (
-            <VariableRow key={n} name={n} preview={ctx.preview(n)} />
+            <VariableRow key={n} name={n} preview={ctx.preview(n)} focus={editing === n} onDone={editing ? () => closePopup(true) : undefined} />
           ))}
+          {!editing && <p className="text-[10.5px] text-muted-foreground">{modKey}-click a variable in the field to edit it straight away.</p>}
         </PopoverContent>
       </Popover>
       {menu && (

@@ -4,9 +4,11 @@ import { create } from 'zustand';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useResolvedTheme } from '@/hooks/useTheme';
 import { monaco } from '@/lib/monaco';
+import { modKey } from '@/lib/utils';
 import { clearInsertTarget, useInsertTarget, useTemplateCtx } from '@/features/template/TemplateContext';
 import { scopeLabel, shadowNotes } from '@/features/template/scopeNote';
 import { VariableRow } from '@/features/template/VariableEditor';
+import { refAt } from '@/features/template/tokens';
 
 export interface CodeEditorProps {
   value: string;
@@ -68,7 +70,7 @@ export function CodeEditor({
             value: [
               `\`${m[1]}\` → ${p ? (p.preview ?? '') : '…'}${p?.resolved && scopeLabel(p.source) ? ` (${scopeLabel(p.source)})` : ''}`,
               ...shadowNotes(p).map((n) => `⚠ ${n}`),
-              `[${p?.resolved ? 'Edit' : 'Add'} variable](command:${EDIT_VARIABLE}?${encodeURIComponent(JSON.stringify([idRef.current, m[1]]))})`,
+              `[${p?.resolved ? 'Edit' : 'Add'} variable](command:${EDIT_VARIABLE}?${encodeURIComponent(JSON.stringify([idRef.current, m[1]]))}) · or ${modKey}-click it`,
             ].join('\n\n'),
             isTrusted: true,
           },
@@ -85,6 +87,16 @@ export function CodeEditor({
   const handleMount: OnMount = (editor) => {
     editorRef.current = editor;
     decorate();
+    if (templates)
+      editor.onMouseDown((e) => {
+        const pos = e.target.position;
+        const model = editor.getModel();
+        if (!(e.event.metaKey || e.event.ctrlKey) || !pos || !model) return;
+        const ref = refAt(model.getValue(), model.getOffsetAt(pos));
+        if (!ref) return;
+        e.event.preventDefault();
+        useVariableDialog.setState({ editorId: idRef.current, name: ref });
+      });
     // Read-only editors (responses, history) are never insert targets.
     if (!readOnly)
       editor.onDidFocusEditorText(() =>
@@ -115,7 +127,15 @@ export function CodeEditor({
             <DialogHeader>
               <DialogTitle>Variable</DialogTitle>
             </DialogHeader>
-            <VariableRow name={editing} preview={ctx.preview(editing)} />
+            <VariableRow
+              name={editing}
+              preview={ctx.preview(editing)}
+              focus
+              onDone={() => {
+                useVariableDialog.setState({ editorId: null, name: null });
+                editorRef.current?.focus();
+              }}
+            />
           </DialogContent>
         </Dialog>
       )}

@@ -20,9 +20,14 @@ export function useHoverPopup(enabled: boolean, openDelay = 400, closeDelay = 25
       if (!content.current?.contains(document.activeElement)) setOpen(false);
     }, closeDelay);
   };
+  const openNow = React.useCallback(() => {
+    clear();
+    setOpen(true);
+  }, []);
   return {
     open: enabled && open,
     close,
+    openNow,
     triggerProps: {
       onMouseEnter: () => {
         clear();
