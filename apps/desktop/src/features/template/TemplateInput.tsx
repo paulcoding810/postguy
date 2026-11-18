@@ -225,7 +225,7 @@ export function TemplateInput({
           {...hover.contentProps}
         >
           {names.map((n) => (
-            <VariableRow key={n} name={n} preview={ctx.preview(n)} focus={editing === n} onDone={editing ? () => closePopup(true) : undefined} />
+            <VariableRow key={n} name={n} preview={ctx.preview(n)} focus={editing === n} onDone={() => closePopup(!!editing)} />
           ))}
           {!editing && <p className="text-[10.5px] text-muted-foreground">{modKey}-click a variable in the field to edit it straight away.</p>}
         </PopoverContent>
