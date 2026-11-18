@@ -91,7 +91,9 @@ export function CodeEditor({
         insert: (text) => {
           const sel = editor.getSelection();
           if (!sel) return;
-          editor.executeEdits('picker', [{ range: sel, text, forceMoveMarkers: true }]);
+          // Insert after any selected text instead of replacing it.
+          const end = sel.getEndPosition();
+          editor.executeEdits('picker', [{ range: new monaco.Range(end.lineNumber, end.column, end.lineNumber, end.column), text, forceMoveMarkers: true }]);
           editor.focus();
         },
       }),

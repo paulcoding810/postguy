@@ -63,13 +63,12 @@ export function TemplateInput({
     (text: string) => {
       const el = inputRef.current;
       const v = valueRef.current;
-      const start = el?.selectionStart ?? v.length;
-      const end = el?.selectionEnd ?? v.length;
-      const next = v.slice(0, start) + text + v.slice(end);
-      onChange(next);
+      // Insert after any selected text instead of replacing it.
+      const at = el?.selectionEnd ?? v.length;
+      onChange(v.slice(0, at) + text + v.slice(at));
       requestAnimationFrame(() => {
         el?.focus();
-        el?.setSelectionRange(start + text.length, start + text.length);
+        el?.setSelectionRange(at + text.length, at + text.length);
       });
     },
     [onChange],
