@@ -4,7 +4,7 @@ import { create } from 'zustand';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useResolvedTheme } from '@/hooks/useTheme';
 import { monaco } from '@/lib/monaco';
-import { useInsertTarget, useTemplateCtx } from '@/features/template/TemplateContext';
+import { clearInsertTarget, useInsertTarget, useTemplateCtx } from '@/features/template/TemplateContext';
 import { scopeLabel, shadowNotes } from '@/features/template/scopeNote';
 import { VariableRow } from '@/features/template/VariableEditor';
 
@@ -80,24 +80,27 @@ export function CodeEditor({
   }, [ctx, templates]);
 
   React.useEffect(decorate, [decorate, value]);
+  React.useEffect(() => () => clearInsertTarget(idRef.current), []);
 
   const handleMount: OnMount = (editor) => {
     editorRef.current = editor;
     decorate();
-    editor.onDidFocusEditorText(() =>
-      setLast({
-        id: idRef.current,
-        label: fieldLabel,
-        insert: (text) => {
-          const sel = editor.getSelection();
-          if (!sel) return;
-          // Insert after any selected text instead of replacing it.
-          const end = sel.getEndPosition();
-          editor.executeEdits('picker', [{ range: new monaco.Range(end.lineNumber, end.column, end.lineNumber, end.column), text, forceMoveMarkers: true }]);
-          editor.focus();
-        },
-      }),
-    );
+    // Read-only editors (responses, history) are never insert targets.
+    if (!readOnly)
+      editor.onDidFocusEditorText(() =>
+        setLast({
+          id: idRef.current,
+          label: fieldLabel,
+          insert: (text) => {
+            const sel = editor.getSelection();
+            if (!sel) return;
+            // Insert after any selected text instead of replacing it.
+            const end = sel.getEndPosition();
+            editor.executeEdits('picker', [{ range: new monaco.Range(end.lineNumber, end.column, end.lineNumber, end.column), text, forceMoveMarkers: true }]);
+            editor.focus();
+          },
+        }),
+      );
     onMount?.(editor as unknown as monaco.editor.IStandaloneCodeEditor);
   };
 

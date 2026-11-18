@@ -5,7 +5,7 @@ import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/misc';
 import { useHoverPopup } from './useHoverPopup';
 import { VariableRow } from './VariableEditor';
 import { parseTokens } from './tokens';
-import { useInsertTarget, useTemplateCtx, type Suggestion } from './TemplateContext';
+import { clearInsertTarget, useInsertTarget, useTemplateCtx, type Suggestion } from './TemplateContext';
 
 export interface TemplateInputProps {
   value: string;
@@ -75,6 +75,7 @@ export function TemplateInput({
   );
 
   const register = () => setLast({ id: idRef.current, label: fieldLabel, insert: insertText });
+  React.useEffect(() => () => clearInsertTarget(idRef.current), []);
 
   React.useEffect(() => {
     const cur = useInsertTarget.getState().last;

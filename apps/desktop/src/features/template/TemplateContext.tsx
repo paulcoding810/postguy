@@ -48,3 +48,8 @@ export const useInsertTarget = create<InsertRegistry>((set) => ({
   last: null,
   setLast: (last) => set({ last }),
 }));
+
+/** Forgets a field that is going away, so nothing is inserted into it afterwards. */
+export function clearInsertTarget(id: string) {
+  if (useInsertTarget.getState().last?.id === id) useInsertTarget.getState().setLast(null);
+}
