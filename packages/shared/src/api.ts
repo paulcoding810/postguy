@@ -107,6 +107,23 @@ export const UpdateMcpSettings = z.object({
   edit: z.boolean().optional(),
 });
 
+/** One recorded change to a collection, folder, request or collection variables. Secrets are masked. */
+export interface ChangeEntry {
+  id: string;
+  rootId: string;
+  entityType: 'request' | 'collection' | 'variables';
+  entityId: string;
+  label: string;
+  action: 'create' | 'update' | 'delete';
+  /** app: you in Postguy; api: another program; mcp: Claude; sync: OpenAPI sync; import: an import. */
+  source: 'app' | 'api' | 'mcp' | 'sync' | 'import';
+  before: unknown;
+  after: unknown;
+  createdAt: number;
+  updatedAt: number;
+  restorable: boolean;
+}
+
 export interface McpSetup {
   /** The command Claude Code runs to talk to this Postguy, e.g. for `claude mcp add`. */
   command: string;
@@ -369,6 +386,9 @@ export interface ApiRoutes {
   'GET /environments': { response: Environment[] };
   'POST /environments': { body: { name: string }; response: Environment };
   'PATCH /environments/:id': { body: z.input<typeof UpdateEnvironmentInput>; response: Environment };
+  'GET /collections/:id/changes': { query: { entityId?: string }; response: ChangeEntry[] };
+  'GET /changes/deleted': { response: ChangeEntry[] };
+  'POST /changes/:id/restore': { body: Empty; response: { message: string } };
   'GET /settings/mcp': { response: McpSettings };
   'PATCH /settings/mcp': { body: z.input<typeof UpdateMcpSettings>; response: McpSettings };
   'GET /settings/mcp/setup': { response: McpSetup };

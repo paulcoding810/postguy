@@ -3,10 +3,12 @@ import cors from '@fastify/cors';
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Db } from './db/client.ts';
 import { registerErrorHandler } from './lib/errors.ts';
+import { withSource } from './services/changelog.ts';
 import { VERSION } from './lib/version.ts';
 import { flowRoutes } from './routes/flows.ts';
 import { openapiRoutes } from './routes/openapi.ts';
 import { sendRoutes } from './routes/send.ts';
+import { changeRoutes } from './routes/changes.ts';
 import { eventRoutes } from './routes/events.ts';
 import { mcpRoutes } from './routes/mcp.ts';
 import { workspaceRoutes } from './routes/workspace.ts';
@@ -39,6 +41,11 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
   });
   registerErrorHandler(app);
 
+  // Attributes changes made while handling this request: the desktop app tags its requests.
+  app.addHook('onRequest', (req, _reply, done) => {
+    withSource(req.headers['x-postguy-client'] ? 'app' : 'api', done);
+  });
+
   app.addHook('onRequest', async (req, reply) => {
     if (req.method === 'OPTIONS' || req.url === '/health' || req.url.startsWith('/oauth/callback?')) return;
     if (!tokenMatches(req.headers.authorization, opts.token)) {
@@ -53,5 +60,6 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
   openapiRoutes(app, opts.db);
   flowRoutes(app, opts.db);
   mcpRoutes(app, opts.db, opts.dataDir ?? null);
+  changeRoutes(app, opts.db);
   return app;
 }

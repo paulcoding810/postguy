@@ -3,7 +3,8 @@ import { MASK } from '@postguy/core';
 import { newId, VariableInput, type Variable, type VariableScope } from '@postguy/shared';
 import type { z } from 'zod';
 import type { Db } from '../db/client.ts';
-import { variables } from '../db/schema.ts';
+import { collections, variables } from '../db/schema.ts';
+import { recordChange, rootIdOf, variablesSnapshot } from './changelog.ts';
 import { badRequest } from '../lib/errors.ts';
 
 export function listVariables(db: Db, scope: VariableScope, ownerId: string, reveal = false): Variable[] {
@@ -29,6 +30,7 @@ export function replaceVariables(
     keys.add(v.key);
   }
   const existing = new Map(listVariables(db, scope, ownerId, true).map((v) => [v.key, v]));
+  const before = scope === 'collection' ? variablesSnapshot(db, ownerId) : null;
   const now = Date.now();
   db.transaction((tx) => {
     tx.delete(variables).where(and(eq(variables.scope, scope), eq(variables.ownerId, ownerId))).run();
@@ -51,6 +53,11 @@ export function replaceVariables(
         .run();
     });
   });
+  if (before) {
+    const label = db.select({ name: collections.name }).from(collections).where(eq(collections.id, ownerId)).get()?.name;
+    if (label !== undefined)
+      recordChange(db, { rootId: rootIdOf(db, ownerId), entityType: 'variables', entityId: ownerId, label, action: 'update', before, after: variablesSnapshot(db, ownerId) });
+  }
   return listVariables(db, scope, ownerId);
 }
 

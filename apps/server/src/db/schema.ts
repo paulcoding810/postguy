@@ -324,3 +324,23 @@ export const appSettings = sqliteTable('app_settings', {
   value: json<unknown>('value').notNull(),
   updatedAt: updatedAt(),
 });
+
+/** Edits to collections, folders, requests and collection variables, for history and restore. */
+export const changeLog = sqliteTable(
+  'change_log',
+  {
+    id: id(),
+    /** The top-level collection; kept as plain text so entries outlive a deleted collection. */
+    rootId: text('root_id').notNull(),
+    entityType: text('entity_type').$type<'request' | 'collection' | 'variables'>().notNull(),
+    entityId: text('entity_id').notNull(),
+    label: text('label').notNull(),
+    action: text('action').$type<'create' | 'update' | 'delete'>().notNull(),
+    source: text('source').$type<'app' | 'api' | 'mcp' | 'sync' | 'import'>().notNull(),
+    before: json<unknown>('before_json'),
+    after: json<unknown>('after_json'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [index('change_log_root_idx').on(t.rootId, t.updatedAt), index('change_log_entity_idx').on(t.entityId, t.updatedAt)],
+);

@@ -104,6 +104,10 @@ Collections import from a Postguy export or a Postman v2.0/v2.1 file. Postman sc
 
 Variables marked secret, and auth credentials, are masked in history, previews and logs. Collection exports and OpenAPI exports never contain secret values. The local server only accepts requests carrying its per-session token.
 
+## Change history
+
+Each collection keeps a history of edits to its requests, folders, scripts, auth and collection variables: what changed, when, and who did it (you, Claude, another program through the API, OpenAPI sync, or an import). Open it from a collection's **Change history**, or **Show history** on a request or folder, to see a before/after diff and **Restore previous version**. Deleted requests and folders come back with **Bring back**, including their scripts and variables and their place in flows; deleted collections are under **Recently deleted** in the sidebar. Quick successive edits merge into one entry, reorders and values set by scripts are not recorded, and each collection keeps its latest 200 entries for up to 90 days. Secret values are masked in the history view.
+
 ## Claude (MCP)
 
 Claude Code can use Postguy through the Model Context Protocol: find and send requests, read variables, history and flow runs, run flows, and create or change requests. Turn it on in **Claude (MCP)** (the robot icon in the top bar, or ⌘K), then run the setup command shown there once, e.g. `claude mcp add postguy -- node apps/server/bin/postguy-mcp.mjs`. The bridge finds the running app through `server.json` in its data folder, so Claude reaches Postguy only while it is open.

@@ -10,6 +10,7 @@ import {
   FolderInputIcon,
   FolderOpenIcon,
   FolderPlusIcon,
+  HistoryIcon,
   LibraryIcon,
   MoreHorizontalIcon,
   PencilIcon,
@@ -282,6 +283,9 @@ function FolderNode({
       <Item onSelect={() => useMoveDialog.getState().open({ kind: 'collection', id: node.id, name: node.name, parentId: node.parentId })}>
         <FolderInputIcon /> Move to…
       </Item>
+      <Item onSelect={() => openSettings(node.id, 'history', node.kind === 'folder' ? node.id : null)}>
+        <HistoryIcon /> {node.kind === 'folder' ? 'Show history' : 'Change history'}
+      </Item>
       {node.kind === 'collection' && (
         <>
           <Item onSelect={() => actions.exportCollection(node)}>
@@ -443,6 +447,9 @@ function RequestRow({
         <ContextMenuItem onSelect={() => open(true)}>Open in tab</ContextMenuItem>
         <ContextMenuItem onSelect={() => useMoveDialog.getState().open({ kind: 'request', id: request.id, name: request.name, parentId: folder.id })}>
           <FolderInputIcon /> Move to…
+        </ContextMenuItem>
+        <ContextMenuItem onSelect={() => useCollectionSettings.getState().open(folder.id, 'history', request.id)}>
+          <HistoryIcon /> Show history
         </ContextMenuItem>
         <ContextMenuItem disabled={index <= 0} onSelect={() => actions.placeRequest(request.id, folder, folder.requests[index - 1]!.id, 'before')}>
           <ArrowUpIcon /> Move up

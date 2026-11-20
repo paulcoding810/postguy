@@ -18,6 +18,7 @@ import type { Db } from '../db/client.ts';
 import { collections, requests } from '../db/schema.ts';
 import { badRequest } from '../lib/errors.ts';
 import { createCollection, getCollection, subtreeIds } from './collections.ts';
+import { withSource } from './changelog.ts';
 import { recordSnapshot } from './memory.ts';
 import { createFlow, getFlow, listFlows, saveGraph, updateFlow } from './flows.ts';
 import { createRequest } from './requests.ts';
@@ -122,6 +123,10 @@ const ExportSchema = z.object({
 
 /** Imports a Postguy export, a Postman v2.0/v2.1 collection or a HAR recording. */
 export function importCollection(db: Db, data: unknown): { root: Collection; warnings: string[] } {
+  return withSource('import', () => importCollectionAs(db, data));
+}
+
+function importCollectionAs(db: Db, data: unknown): { root: Collection; warnings: string[] } {
   const postman = isPostmanCollection(data);
   let har: HarImport | null = null;
   if (!postman && isHar(data)) {

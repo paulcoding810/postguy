@@ -17,6 +17,7 @@ import { showImportNotes } from '@/lib/importNotes';
 import { cn } from '@/lib/utils';
 import { useUi, type SidebarSection } from '@/stores/ui';
 import { CollectionTree, useTreeActions } from '@/features/collections/CollectionTree';
+import { RecentlyDeleted } from '@/features/collections/RecentlyDeleted';
 import { pickFile } from '@/features/collections/transfer';
 import { EnvironmentList } from '@/features/environments/EnvironmentList';
 import { importEnvironmentData, looksLikePostmanEnvironment } from '@/features/environments/exchange';
@@ -132,7 +133,10 @@ export function SidebarPanel() {
       <div className="min-h-0 flex-1 overflow-auto">
         {sidebar === 'collections' &&
           (tree.data?.length ? (
-            <CollectionTree tree={tree.data} filter={filter} />
+            <>
+              <CollectionTree tree={tree.data} filter={filter} />
+              <RecentlyDeleted />
+            </>
           ) : tree.isLoading ? null : tree.isError ? (
             <EmptyState title="Server unavailable">{errorMessage(tree.error)}</EmptyState>
           ) : (
@@ -152,6 +156,7 @@ export function SidebarPanel() {
                   <UploadIcon /> Import cURL
                 </Button>
               </div>
+              <RecentlyDeleted />
             </EmptyState>
           ))}
         {sidebar === 'flows' && <FlowList filter={filter} />}

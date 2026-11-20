@@ -1,4 +1,3 @@
-import { DiffEditor } from '@monaco-editor/react';
 import { useQuery } from '@tanstack/react-query';
 import { ExternalLinkIcon, GitCompareIcon, LoaderIcon, XIcon } from 'lucide-react';
 import * as React from 'react';
@@ -11,10 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CodeEditor } from '@/components/CodeEditor';
 import { keys, useHistory } from '@/hooks/queries';
-import { useResolvedTheme } from '@/hooks/useTheme';
 import { api, errorMessage } from '@/lib/api';
 import { cn, formatBytes, formatMs, statusTone, timeAgo, tryParseJson } from '@/lib/utils';
 import { comparableBody, headersText } from './compare';
+import { TextDiff } from '@/components/TextDiff';
 
 function useHistoryEntry(id: string | null) {
   return useQuery({ queryKey: keys.historyEntry(id ?? ''), queryFn: () => api('GET /history/:id', { params: { id: id! } }), enabled: !!id, staleTime: Infinity });
@@ -63,20 +62,10 @@ function Summary({ e }: { e: HistoryEntry }) {
 }
 
 function Compare({ a, b }: { a: HistoryEntry; b: HistoryEntry }) {
-  const theme = useResolvedTheme();
   const [what, setWhat] = React.useState<'body' | 'headers'>('body');
   const left = what === 'body' ? comparableBody(b.responseBody) : { text: headersText(b.responseHeaders), json: false };
   const right = what === 'body' ? comparableBody(a.responseBody) : { text: headersText(a.responseHeaders), json: false };
   const same = left.text === right.text;
-  const models = React.useRef<{ original: { dispose(): void }; modified: { dispose(): void } } | null>(null);
-  // The diff editor must drop its models before they are disposed, or Monaco throws on close.
-  React.useEffect(
-    () => () => {
-      const m = models.current;
-      if (m) setTimeout(() => (m.original.dispose(), m.modified.dispose()), 0);
-    },
-    [],
-  );
   return (
     <div className="flex h-full min-h-0 flex-col gap-2">
       <div className="flex items-center gap-2 text-xs">
@@ -94,29 +83,7 @@ function Compare({ a, b }: { a: HistoryEntry; b: HistoryEntry }) {
         {what === 'body' && (left.json || right.json) && <span className="ml-auto text-muted-foreground">JSON keys sorted</span>}
       </div>
       <div className="min-h-0 flex-1 overflow-hidden rounded-md border">
-        <DiffEditor
-          original={left.text}
-          modified={right.text}
-          language={left.json && right.json ? 'json' : 'plaintext'}
-          theme={theme === 'dark' ? 'postguy-dark' : 'postguy-light'}
-          keepCurrentOriginalModel
-          keepCurrentModifiedModel
-          onMount={(editor) => {
-            models.current = editor.getModel();
-          }}
-          loading={<div className="p-3 text-xs text-muted-foreground">Loading editor…</div>}
-          options={{
-            readOnly: true,
-            originalEditable: false,
-            renderSideBySide: true,
-            minimap: { enabled: false },
-            fontSize: 12.5,
-            fontFamily: "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace",
-            scrollBeyondLastLine: false,
-            automaticLayout: true,
-            wordWrap: 'on',
-          }}
-        />
+        <TextDiff original={left.text} modified={right.text} language={left.json && right.json ? 'json' : 'plaintext'} />
       </div>
     </div>
   );

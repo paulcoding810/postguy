@@ -15,19 +15,28 @@ import { VariablesTable } from '@/features/environments/VariablesTable';
 import { PRECEDENCE_HINT } from '@/features/environments/EnvironmentManager';
 import { TemplateProvider } from '@/features/template/TemplateProvider';
 import { blankRequest } from '@/stores/tabs';
+import { ChangeHistory } from './ChangeHistory';
 import { findNode, inheritedAuthSource } from './treeUtils';
 
-export const useCollectionSettings = create<{ id: string | null; tab: string; open: (id: string, tab?: string) => void; close: () => void }>(
-  (set) => ({
-    id: null,
-    tab: 'overview',
-    open: (id, tab = 'overview') => set({ id, tab }),
-    close: () => set({ id: null }),
-  }),
-);
+export const useCollectionSettings = create<{
+  id: string | null;
+  tab: string;
+  /** Narrows the History tab to one request or folder. */
+  entityId: string | null;
+  open: (id: string, tab?: string, entityId?: string | null) => void;
+  setEntity: (entityId: string | null) => void;
+  close: () => void;
+}>((set) => ({
+  id: null,
+  tab: 'overview',
+  entityId: null,
+  open: (id, tab = 'overview', entityId = null) => set({ id, tab, entityId }),
+  setEntity: (entityId) => set({ entityId }),
+  close: () => set({ id: null }),
+}));
 
 export function CollectionSettings() {
-  const { id, tab, close } = useCollectionSettings();
+  const { id, tab, close, entityId, setEntity } = useCollectionSettings();
   const tree = useTree();
   const qc = useQueryClient();
   const invalidateVars = useInvalidateVariables();
@@ -85,6 +94,7 @@ export function CollectionSettings() {
                 Scripts {(scripts.pre.trim() || scripts.post.trim()) && <span className="size-1.5 rounded-full bg-success" />}
               </TabsTrigger>
               <TabsTrigger value="variables">Variables</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
             <TabsContent value="overview" className="flex flex-col gap-3 overflow-auto p-4">
               <div className="grid gap-1.5">
@@ -139,6 +149,9 @@ export function CollectionSettings() {
                   path={`collection-${node.id}-${phase}.js`}
                 />
               </div>
+            </TabsContent>
+            <TabsContent value="history" className="flex min-h-0 flex-col">
+              <ChangeHistory collectionId={node.id} entityId={entityId} onClearFilter={() => setEntity(null)} />
             </TabsContent>
             <TabsContent value="variables" className="flex min-h-0 flex-col p-4">
               <TemplateProvider draft={blankRequest()} collectionId={node.id} requestId={null}>

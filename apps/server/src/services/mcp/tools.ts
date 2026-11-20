@@ -13,6 +13,7 @@ import { getHistoryEntry, listHistory } from '../history.ts';
 import { importOpenApi } from '../openapi.ts';
 import { buildReport } from '../report.ts';
 import { createRequest, getRequest, updateRequest } from '../requests.ts';
+import { withSource } from '../changelog.ts';
 import { notifyChange } from '../changes.ts';
 import { send } from '../send.ts';
 import { setVariable } from '../variables.ts';
@@ -83,7 +84,7 @@ export function createMcpServer(db: Db): McpServer {
       (async (args: any) => {
         try {
           requirePermission(db, need);
-          const result = json(await handler(args));
+          const result = json(await withSource('mcp', () => handler(args)));
           if (need !== 'read') notifyChange({ origin: null, what: `mcp:${name}` });
           return result;
         } catch (e) {

@@ -29,6 +29,7 @@ import { createCollection, rootOf, subtreeIds, updateCollection } from './collec
 import { createRequest, getRequest } from './requests.ts';
 import { exportCollection, importCollection } from './transfer.ts';
 import { replaceVariables } from './variables.ts';
+import { withSource } from './changelog.ts';
 
 const MAX_SPEC_BYTES = 15 * 1024 * 1024;
 
@@ -76,6 +77,10 @@ function asCollectionExport(text: string): { kind: 'postman' | 'postguy' | 'har'
 }
 
 export async function importOpenApi(db: Db, input: z.output<typeof OpenApiImportInput>): Promise<OpenApiImportResult> {
+  return withSource('import', () => importOpenApiAs(db, input));
+}
+
+async function importOpenApiAs(db: Db, input: z.output<typeof OpenApiImportInput>): Promise<OpenApiImportResult> {
   let text: string;
   if (input.sourceType === 'url') {
     if (!input.url) throw badRequest('url is required');

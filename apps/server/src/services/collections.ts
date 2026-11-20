@@ -10,6 +10,7 @@ import {
 import type { Db } from '../db/client.ts';
 import { collections, requests, scripts as scriptsTable, variables } from '../db/schema.ts';
 import { badRequest, notFound } from '../lib/errors.ts';
+import { collectionSnapshot, recordChange, rootIdOf } from './changelog.ts';
 import { deleteScripts, loadScripts, saveScripts } from './scripts.ts';
 
 export function getCollection(db: Db, id: string): Collection {
@@ -62,13 +63,13 @@ function nextSortOrder(db: Db, parentId: string | null): number {
   return (row?.m ?? -1) + 1;
 }
 
-export function createCollection(db: Db, input: CreateCollectionInput & { openapiSpecId?: string | null }): Collection {
+export function createCollection(db: Db, input: CreateCollectionInput & { openapiSpecId?: string | null; id?: string }): Collection {
   const parentId = input.parentId ?? null;
   if (parentId) getCollection(db, parentId);
   const kind = input.kind ?? (parentId ? 'folder' : 'collection');
   const now = Date.now();
   const row = {
-    id: newId(),
+    id: input.id ?? newId(),
     parentId,
     kind,
     name: input.name,
@@ -81,6 +82,7 @@ export function createCollection(db: Db, input: CreateCollectionInput & { openap
   };
   db.insert(collections).values(row).run();
   if (input.scripts) saveScripts(db, 'collection', row.id, { pre: input.scripts.pre ?? '', post: input.scripts.post ?? '' });
+  recordChange(db, { rootId: parentId ? rootIdOf(db, parentId) : row.id, entityType: 'collection', entityId: row.id, label: row.name, action: 'create', before: null, after: collectionSnapshot(db, row.id) });
   return row;
 }
 
@@ -94,6 +96,7 @@ export function subtreeIds(db: Db, id: string): string[] {
 
 export function updateCollection(db: Db, id: string, input: UpdateCollectionInput): Collection {
   const current = getCollection(db, id);
+  const before = collectionSnapshot(db, id);
   if (input.parentId !== undefined && input.parentId !== current.parentId) {
     if (input.parentId && subtreeIds(db, id).includes(input.parentId))
       throw badRequest('Cannot move a folder into itself');
@@ -115,11 +118,15 @@ export function updateCollection(db: Db, id: string, input: UpdateCollectionInpu
     const current = loadScripts(db, 'collection', id);
     saveScripts(db, 'collection', id, { pre: input.scripts.pre ?? current.pre, post: input.scripts.post ?? current.post });
   }
+  const after = collectionSnapshot(db, id)!;
+  recordChange(db, { rootId: rootIdOf(db, id), entityType: 'collection', entityId: id, label: after.collection.name, action: 'update', before, after });
   return getCollection(db, id);
 }
 
 export function deleteCollection(db: Db, id: string): void {
-  getCollection(db, id);
+  const doomed = getCollection(db, id);
+  const before = collectionSnapshot(db, id, true)!;
+  recordChange(db, { rootId: doomed.parentId ? rootIdOf(db, doomed.parentId) : id, entityType: 'collection', entityId: id, label: doomed.name, action: 'delete', before, after: null });
   const ids = subtreeIds(db, id);
   const reqIds = db.select({ id: requests.id }).from(requests).where(inArray(requests.collectionId, ids)).all().map((r) => r.id);
   db.transaction((tx) => {

@@ -21,6 +21,7 @@ import { createCollection, rootOf, subtreeIds } from './collections.ts';
 import { fetchSpec } from './openapi.ts';
 import { createRequest, getRequest, updateRequest } from './requests.ts';
 import { listVariables, setVariable } from './variables.ts';
+import { withSource } from './changelog.ts';
 
 function sha256(text: string) {
   return createHash('sha256').update(text).digest('hex');
@@ -155,6 +156,10 @@ export async function previewSync(db: Db, specId: string, input: z.output<typeof
  * Merged requests keep their old fingerprint, so later syncs still treat them as edited.
  */
 export async function applySync(db: Db, specId: string, input: z.output<typeof SyncInput>): Promise<SyncResult> {
+  return withSource('sync', () => applySyncAs(db, specId, input));
+}
+
+async function applySyncAs(db: Db, specId: string, input: z.output<typeof SyncInput>): Promise<SyncResult> {
   const p = await prepare(db, specId, input);
   const result = plan(db, p);
   if (result.upToDate) return { ...result, versionId: null };

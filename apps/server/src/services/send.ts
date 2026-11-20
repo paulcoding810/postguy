@@ -41,6 +41,7 @@ import { exchangeToken, needsTokenExchange } from './oauth.ts';
 import { getRequest } from './requests.ts';
 import { loadScripts } from './scripts.ts';
 import { listVariables, replaceVariables, setVariable } from './variables.ts';
+import { withSource } from './changelog.ts';
 
 export const HISTORY_BODY_LIMIT = 5 * 1024 * 1024;
 export const SCRIPT_TIMEOUT_MS = 2000;
@@ -223,8 +224,8 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
           : envTarget();
       if (value === null) {
         const rest = listVariables(db, t.scope, t.ownerId, true).filter((v) => v.key !== key);
-        replaceVariables(db, t.scope, t.ownerId, rest.map(({ key: k, value: val, isSecret, enabled }) => ({ key: k, value: val, isSecret, enabled })));
-      } else setVariable(db, t.scope, t.ownerId, key, typeof value === 'string' ? value : JSON.stringify(value));
+        withSource('script', () => replaceVariables(db, t.scope, t.ownerId, rest.map(({ key: k, value: val, isSecret, enabled }) => ({ key: k, value: val, isSecret, enabled }))));
+      } else withSource('script', () => setVariable(db, t.scope, t.ownerId, key, typeof value === 'string' ? value : JSON.stringify(value)));
     },
   });
 

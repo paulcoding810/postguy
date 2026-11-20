@@ -10,6 +10,7 @@ import type { Db } from '../db/client.ts';
 import { requests, variables } from '../db/schema.ts';
 import { notFound } from '../lib/errors.ts';
 import { getCollection } from './collections.ts';
+import { recordChange, requestSnapshot, rootIdOf } from './changelog.ts';
 import { deleteScripts, loadScripts, saveScripts } from './scripts.ts';
 
 export function getRequest(db: Db, id: string): SavedRequest {
@@ -26,6 +27,8 @@ function nextSortOrder(db: Db, collectionId: string): number {
 export interface CreateRequestExtras {
   openapiOperationId?: string | null;
   openapiFingerprint?: string | null;
+  /** Reuse an id, when bringing back a deleted request. */
+  id?: string;
 }
 
 export function createRequest(
@@ -36,7 +39,7 @@ export function createRequest(
   getCollection(db, input.collectionId);
   const now = Date.now();
   const row = {
-    id: newId(),
+    id: extras.id ?? newId(),
     collectionId: input.collectionId,
     name: input.name,
     description: input.description ?? null,
@@ -60,11 +63,13 @@ export function createRequest(
     db.insert(requests).values(row).run();
     saveScripts(db, 'request', row.id, input.scripts);
   });
+  recordChange(db, { rootId: rootIdOf(db, row.collectionId), entityType: 'request', entityId: row.id, label: row.name, action: 'create', before: null, after: requestSnapshot(db, row.id) });
   return { ...row, scripts: input.scripts };
 }
 
 export function updateRequest(db: Db, id: string, input: UpdateRequestInput): SavedRequest {
   getRequest(db, id);
+  const before = requestSnapshot(db, id);
   if (input.collectionId) getCollection(db, input.collectionId);
   const { scripts, ...rest } = input;
   const patch = Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined));
@@ -78,11 +83,15 @@ export function updateRequest(db: Db, id: string, input: UpdateRequestInput): Sa
       saveScripts(db, 'request', id, { pre: scripts.pre ?? current.pre, post: scripts.post ?? current.post });
     }
   });
+  const after = requestSnapshot(db, id)!;
+  recordChange(db, { rootId: rootIdOf(db, after.request.collectionId), entityType: 'request', entityId: id, label: after.request.name, action: 'update', before, after });
   return getRequest(db, id);
 }
 
 export function deleteRequest(db: Db, id: string): void {
   getRequest(db, id);
+  const before = requestSnapshot(db, id, true)!;
+  recordChange(db, { rootId: rootIdOf(db, before.request.collectionId), entityType: 'request', entityId: id, label: before.request.name, action: 'delete', before, after: null });
   db.transaction((tx) => {
     tx.delete(variables).where(and(eq(variables.scope, 'request'), eq(variables.ownerId, id))).run();
     tx.delete(requests).where(eq(requests.id, id)).run();
