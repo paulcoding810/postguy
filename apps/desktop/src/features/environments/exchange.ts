@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import type { Environment } from '@postguy/shared';
 import { keys } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
+import { showImportNotes } from '@/lib/importNotes';
 import { downloadJson, pickFile } from '@/features/collections/transfer';
 
 export function looksLikePostmanEnvironment(data: unknown): boolean {
@@ -17,7 +18,7 @@ export async function importEnvironmentData(qc: QueryClient, data: unknown): Pro
     await qc.invalidateQueries({ queryKey: keys.environments });
     qc.invalidateQueries({ queryKey: ['variables'] });
     toast.success(environment.kind === 'global' ? 'Imported Postman globals' : `Imported environment "${environment.name}"`);
-    warnings.forEach((w) => toast.warning(w));
+    showImportNotes(warnings);
     return environment;
   } catch (e) {
     toast.error(errorMessage(e));

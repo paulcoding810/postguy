@@ -1,5 +1,5 @@
 import { asc, eq, inArray } from 'drizzle-orm';
-import { compatibilityWarnings, isPostmanCollection, postmanToCollection, redactAuth } from '@postguy/core';
+import { compatibilityWarnings, harToCollection, isHar, isPostmanCollection, postmanToCollection, redactAuth, type HarImport } from '@postguy/core';
 import {
   Auth,
   RequestDefinition,
@@ -18,6 +18,7 @@ import type { Db } from '../db/client.ts';
 import { collections, requests } from '../db/schema.ts';
 import { badRequest } from '../lib/errors.ts';
 import { createCollection, getCollection, subtreeIds } from './collections.ts';
+import { recordSnapshot } from './memory.ts';
 import { createFlow, getFlow, listFlows, saveGraph, updateFlow } from './flows.ts';
 import { createRequest } from './requests.ts';
 import { loadScripts } from './scripts.ts';
@@ -119,11 +120,19 @@ const ExportSchema = z.object({
   collection: ExportedCollectionSchema,
 });
 
-/** Imports a Postguy export or a Postman v2.0/v2.1 collection. */
+/** Imports a Postguy export, a Postman v2.0/v2.1 collection or a HAR recording. */
 export function importCollection(db: Db, data: unknown): { root: Collection; warnings: string[] } {
   const postman = isPostmanCollection(data);
-  const parsed = ExportSchema.safeParse(postman ? postmanToCollection(data) : data);
-  if (!parsed.success) throw badRequest('Not a Postguy or Postman collection', parsed.error.issues.slice(0, 5));
+  let har: HarImport | null = null;
+  if (!postman && isHar(data)) {
+    try {
+      har = harToCollection(data);
+    } catch (e) {
+      throw badRequest((e as Error).message);
+    }
+  }
+  const parsed = ExportSchema.safeParse(har ? har.collection : postman ? postmanToCollection(data) : data);
+  if (!parsed.success) throw badRequest('Not a Postguy or Postman collection, or a HAR file', parsed.error.issues.slice(0, 5));
   let root: Collection | null = null;
   const refs = new Map<string, string>();
   const flowWarnings: string[] = [];
@@ -131,7 +140,12 @@ export function importCollection(db: Db, data: unknown): { root: Collection; war
     root = importNode(db, parsed.data.collection, null, refs);
     for (const f of parsed.data.collection.flows ?? []) flowWarnings.push(...importFlow(db, f, root.id, refs));
   });
-  const warnings = [...flowWarnings, ...compatibilityWarnings(parsed.data.collection as ExportedCollection)];
+  // Recorded responses become remembered responses, so {{Name.path}} references work straight away.
+  for (const r of har?.responses ?? []) {
+    const requestId = refs.get(r.ref);
+    if (requestId) recordSnapshot(db, { requestId, historyId: null, status: r.status, contentType: r.contentType, body: r.body });
+  }
+  const warnings = [...(har?.warnings ?? []), ...flowWarnings, ...compatibilityWarnings(parsed.data.collection as ExportedCollection)];
   return { root: root!, warnings };
 }
 

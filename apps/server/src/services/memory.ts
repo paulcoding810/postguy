@@ -39,7 +39,7 @@ function parseJsonBody(contentType: string | null, body: string): { ok: true; va
 
 export interface RecordInput {
   requestId: string;
-  historyId: string;
+  historyId: string | null;
   status: number;
   contentType: string | null;
   body: string;

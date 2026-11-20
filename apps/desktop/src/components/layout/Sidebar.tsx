@@ -13,6 +13,7 @@ import {
 import { EmptyState, Tooltip } from '@/components/ui/misc';
 import { keys, useTree } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
+import { showImportNotes } from '@/lib/importNotes';
 import { cn } from '@/lib/utils';
 import { useUi, type SidebarSection } from '@/stores/ui';
 import { CollectionTree, useTreeActions } from '@/features/collections/CollectionTree';
@@ -66,7 +67,7 @@ export function SidebarPanel() {
   const label = SECTIONS.find((s) => s.id === sidebar)?.label;
 
   const importCollection = async () => {
-    const file = await pickFile('.json,application/json');
+    const file = await pickFile('.json,.har,application/json');
     if (!file) return;
     try {
       const data: unknown = JSON.parse(file.text);
@@ -77,7 +78,7 @@ export function SidebarPanel() {
       const c = await api('POST /collections/import', { body: { data } });
       await qc.invalidateQueries({ queryKey: keys.tree });
       toast.success(`Imported "${c.name}"`);
-      c.warnings.forEach((w) => toast.warning(w));
+      showImportNotes(c.warnings);
     } catch (e) {
       toast.error(errorMessage(e));
     }
@@ -99,7 +100,7 @@ export function SidebarPanel() {
                 <PlusIcon /> New collection
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={importCollection}>
-                <UploadIcon /> Import collection or environment file…
+                <UploadIcon /> Import collection, environment or HAR file…
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => useImportDialog.getState().setOpen(true)}>
                 <FileCode2Icon /> Import OpenAPI / Swagger…
@@ -145,7 +146,7 @@ export function SidebarPanel() {
                   <FileCode2Icon /> Import OpenAPI or Postman
                 </Button>
                 <Button size="sm" variant="outline" onClick={importCollection}>
-                  <UploadIcon /> Import collection or environment file
+                  <UploadIcon /> Import collection, environment or HAR file
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => useCurlDialog.getState().setOpen(true)}>
                   <UploadIcon /> Import cURL

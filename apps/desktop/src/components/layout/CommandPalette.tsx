@@ -83,7 +83,7 @@ export function CommandPalette() {
       }));
     const actions: Item[] = [
       { id: 'a:new', group: 'Actions', label: 'New request', shortcut: `${modKey}T`, icon: <FilePlusIcon className="size-3.5" />, run: () => useTabs.getState().newRequest() },
-      { id: 'a:import', group: 'Actions', label: 'Import OpenAPI or Postman…', icon: <FileCode2Icon className="size-3.5" />, run: () => useImportDialog.getState().setOpen(true) },
+      { id: 'a:import', group: 'Actions', label: 'Import OpenAPI, Postman or HAR…', icon: <FileCode2Icon className="size-3.5" />, run: () => useImportDialog.getState().setOpen(true) },
       { id: 'a:curl', group: 'Actions', label: 'Import cURL…', icon: <FilePlusIcon className="size-3.5" />, run: () => useCurlDialog.getState().setOpen(true) },
       { id: 'a:env', group: 'Actions', label: 'Manage environments', shortcut: `${modKey}⇧E`, icon: <SettingsIcon className="size-3.5" />, run: () => openEnvManager() },
       { id: 'a:smart', group: 'Actions', label: 'Toggle smart data panel', shortcut: `${modKey}J`, icon: <PanelRightIcon className="size-3.5" />, run: () => useUi.getState().toggleSmartPanel() },

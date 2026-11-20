@@ -10,6 +10,7 @@ import { Input, Label, Textarea } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { keys } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
+import { showImportNotes } from '@/lib/importNotes';
 import { useUi } from '@/stores/ui';
 import { pickFile } from '@/features/collections/transfer';
 
@@ -38,7 +39,7 @@ export function OpenApiImportDialog() {
   }, [open]);
 
   const choose = async () => {
-    const f = await pickFile('.json,.yaml,.yml,application/json,application/yaml');
+    const f = await pickFile('.json,.yaml,.yml,.har,application/json,application/yaml');
     if (f) {
       setContent(f.text);
       setFileName(f.name);
@@ -53,9 +54,9 @@ export function OpenApiImportDialog() {
         body: mode === 'url' ? { sourceType: 'url', url, name: name || undefined } : { sourceType: mode, content, name: name || undefined },
       });
       await Promise.all([qc.invalidateQueries({ queryKey: keys.tree }), qc.invalidateQueries({ queryKey: ['openapi'] })]);
-      const what = res.kind === 'postman' ? 'Postman collection' : res.kind === 'postguy' ? 'collection' : 'spec';
+      const what = res.kind === 'postman' ? 'Postman collection' : res.kind === 'postguy' ? 'collection' : res.kind === 'har' ? 'HAR recording' : 'spec';
       toast.success(`Imported ${res.requestCount} requests from the ${what} "${res.name}"`);
-      res.warnings.forEach((w) => toast.warning(w));
+      showImportNotes(res.warnings);
       useUi.getState().setSidebar('collections');
       setOpen(false);
     } catch (err) {
@@ -74,7 +75,8 @@ export function OpenApiImportDialog() {
           <DialogHeader>
             <DialogTitle>Import</DialogTitle>
             <DialogDescription>
-              OpenAPI 3.0, 3.1 and Swagger 2.0 in JSON or YAML, grouped into folders by tag. Postman (v2.0, v2.1) and Postguy collection exports work here too.
+              OpenAPI 3.0, 3.1 and Swagger 2.0 in JSON or YAML, grouped into folders by tag. Postman (v2.0, v2.1) and Postguy collection exports work here too, and so
+              do HAR recordings (DevTools → Network → Save all as HAR): their API calls become requests.
             </DialogDescription>
           </DialogHeader>
           <Tabs value={mode} onValueChange={(v) => setMode(v as OpenApiSourceType)}>
@@ -90,7 +92,7 @@ export function OpenApiImportDialog() {
                 className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed text-muted-foreground hover:border-ring hover:text-foreground"
               >
                 <FileUpIcon className="size-6" />
-                {fileName ? <span className="font-medium text-foreground">{fileName}</span> : 'Choose a .json, .yaml or .yml file'}
+                {fileName ? <span className="font-medium text-foreground">{fileName}</span> : 'Choose a .json, .yaml, .yml or .har file'}
               </button>
             </TabsContent>
             <TabsContent value="paste" className="pt-3">

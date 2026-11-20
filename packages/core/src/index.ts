@@ -27,3 +27,4 @@ export * from './import/postman.ts';
 export * from './import/curl.ts';
 export * from './import/compat.ts';
 export * from './import/postmanEnvironment.ts';
+export * from './import/har.ts';

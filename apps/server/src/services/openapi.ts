@@ -3,6 +3,7 @@ import axios from 'axios';
 import { desc, eq, inArray } from 'drizzle-orm';
 import { stringify as toYaml } from 'yaml';
 import {
+  isHar,
   isPostmanCollection,
   collectionToOpenApi,
   generateCollection,
@@ -60,7 +61,7 @@ function sha256(text: string): string {
 }
 
 /** Recognizes a Postman or Postguy collection export, so either import entry point accepts it. */
-function asCollectionExport(text: string): { kind: 'postman' | 'postguy'; data: unknown } | null {
+function asCollectionExport(text: string): { kind: 'postman' | 'postguy' | 'har'; data: unknown } | null {
   if (!/^\s*\{/.test(text)) return null;
   let data: unknown;
   try {
@@ -70,6 +71,7 @@ function asCollectionExport(text: string): { kind: 'postman' | 'postguy'; data: 
   }
   if (isPostmanCollection(data)) return { kind: 'postman', data };
   if ((data as { format?: unknown })?.format === 'postguy-collection') return { kind: 'postguy', data };
+  if (isHar(data)) return { kind: 'har', data };
   return null;
 }
 

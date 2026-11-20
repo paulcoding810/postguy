@@ -154,7 +154,7 @@ export type OpenApiImportInput = z.input<typeof OpenApiImportInput>;
 
 export interface OpenApiImportResult {
   /** What the file turned out to be; collections are imported without a spec. */
-  kind: 'openapi' | 'postman' | 'postguy';
+  kind: 'openapi' | 'postman' | 'postguy' | 'har';
   name: string;
   spec: OpenApiSpec | null;
   collectionId: string;
