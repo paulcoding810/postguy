@@ -100,7 +100,8 @@ export function StepInspector(props: StepInspectorProps) {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="inputs" className="overflow-auto">
+        {/* Inputs and Scripts stay mounted while hidden, so the field you clicked stays the Data tab's insert target. */}
+        <TabsContent value="inputs" forceMount className="overflow-auto data-[state=inactive]:hidden">
           <div className="flex flex-col gap-3 border-b p-3">
             <div className="grid gap-1">
               <Label>Step name (used in references)</Label>
@@ -196,7 +197,7 @@ export function StepInspector(props: StepInspectorProps) {
           )}
         </TabsContent>
 
-        <TabsContent value="scripts" className="flex min-h-0 flex-col">
+        <TabsContent value="scripts" forceMount className="flex min-h-0 flex-col data-[state=inactive]:hidden">
           <RequestScripts request={request} />
           <p className="border-b px-3 py-1.5 text-[11px] text-muted-foreground">
             <span className="font-semibold text-foreground">This step’s scripts</span> run after the request’s own, only in this flow. Use flow.set()

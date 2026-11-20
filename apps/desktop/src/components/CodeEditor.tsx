@@ -8,7 +8,7 @@ import { modKey } from '@/lib/utils';
 import { clearInsertTarget, useInsertTarget, useTemplateCtx } from '@/features/template/TemplateContext';
 import { scopeLabel, shadowNotes } from '@/features/template/scopeNote';
 import { VariableRow } from '@/features/template/VariableEditor';
-import { refAt } from '@/features/template/tokens';
+import { refAtChar } from '@/features/template/tokens';
 
 export interface CodeEditorProps {
   value: string;
@@ -92,7 +92,9 @@ export function CodeEditor({
         const pos = e.target.position;
         const model = editor.getModel();
         if (!(e.event.metaKey || e.event.ctrlKey) || !pos || !model) return;
-        const ref = refAt(model.getValue(), model.getOffsetAt(pos));
+        // The character under the pointer (mouseColumn), not the nearest caret position.
+        const column = e.target.mouseColumn || pos.column;
+        const ref = refAtChar(model.getValue(), model.getOffsetAt({ lineNumber: pos.lineNumber, column }));
         if (!ref) return;
         e.event.preventDefault();
         useVariableDialog.setState({ editorId: idRef.current, name: ref });
@@ -108,7 +110,12 @@ export function CodeEditor({
             if (!sel) return;
             // Insert after any selected text instead of replacing it.
             const end = sel.getEndPosition();
-            editor.executeEdits('picker', [{ range: new monaco.Range(end.lineNumber, end.column, end.lineNumber, end.column), text, forceMoveMarkers: true }]);
+            const model = editor.getModel();
+            if (!model) return;
+            const after = model.getOffsetAt(end) + text.length;
+            editor.executeEdits('picker', [{ range: new monaco.Range(end.lineNumber, end.column, end.lineNumber, end.column), text }]);
+            // A caret after the reference, so the next keystroke doesn't replace it.
+            editor.setPosition(model.getPositionAt(after));
             editor.focus();
           },
         }),
@@ -123,7 +130,14 @@ export function CodeEditor({
     <>
       {editing && (
         <Dialog open onOpenChange={(o) => !o && useVariableDialog.setState({ editorId: null, name: null })}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent
+          className="sm:max-w-md"
+          onCloseAutoFocus={(e) => {
+            // Runs once the dialog has let go of focus; it has no trigger button to return to.
+            e.preventDefault();
+            editorRef.current?.focus();
+          }}
+        >
             <DialogHeader>
               <DialogTitle>Variable</DialogTitle>
             </DialogHeader>
@@ -131,10 +145,7 @@ export function CodeEditor({
               name={editing}
               preview={ctx.preview(editing)}
               focus
-              onDone={() => {
-                useVariableDialog.setState({ editorId: null, name: null });
-                editorRef.current?.focus();
-              }}
+              onDone={() => useVariableDialog.setState({ editorId: null, name: null })}
             />
           </DialogContent>
         </Dialog>

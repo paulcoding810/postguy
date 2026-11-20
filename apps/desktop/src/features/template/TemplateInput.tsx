@@ -4,7 +4,7 @@ import { inputClass } from '@/components/ui/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/misc';
 import { useHoverPopup } from './useHoverPopup';
 import { VariableRow } from './VariableEditor';
-import { parseTokens, refAt } from './tokens';
+import { parseTokens } from './tokens';
 import { clearInsertTarget, useInsertTarget, useTemplateCtx, type Suggestion } from './TemplateContext';
 
 export interface TemplateInputProps {
@@ -127,6 +127,8 @@ export function TemplateInput({
   /** The variable ⌘-clicked for editing; its value gets focus in the popup. */
   const [editing, setEditing] = React.useState<string | null>(null);
   const caretRef = React.useRef(0);
+  /** The field and its highlight layer; clicks and focus here never dismiss the popup. */
+  const anchorRef = React.useRef<HTMLDivElement>(null);
   /** Closes the popup; after Esc or a save, the caret goes back to where it was in the field. */
   const closePopup = (refocus = false) => {
     hover.close();
@@ -144,7 +146,7 @@ export function TemplateInput({
     <div className={cn('relative min-w-0', className)}>
       <Popover open={hover.open} onOpenChange={(o) => !o && closePopup()}>
         <PopoverAnchor asChild>
-          <div className="relative" {...hover.triggerProps}>
+          <div ref={anchorRef} className="relative" {...hover.triggerProps}>
             <div
               ref={layerRef}
               aria-hidden
@@ -161,7 +163,7 @@ export function TemplateInput({
                   t.kind === 'text' ? (
                     <span key={i}>{t.value}</span>
                   ) : (
-                    <span key={i} className={cn('tpl-ref', `tpl-${ctx.status(t.ref)}`)}>
+                    <span key={i} data-ref={t.ref} className={cn('tpl-ref', `tpl-${ctx.status(t.ref)}`)}>
                       {t.raw}
                     </span>
                   ),
@@ -181,7 +183,12 @@ export function TemplateInput({
               onClick={(e) => {
                 if (!(e.metaKey || e.ctrlKey)) return;
                 const el = e.currentTarget;
-                const ref = refAt(el.value, el.selectionStart ?? 0);
+                // The highlighted reference under the pointer, not the caret: a caret between {{a}}{{b}} is ambiguous.
+                const hit = [...(layerRef.current?.querySelectorAll<HTMLElement>('[data-ref]') ?? [])].find((n) => {
+                  const r = n.getBoundingClientRect();
+                  return e.clientX >= r.left && e.clientX < r.right;
+                });
+                const ref = hit?.dataset.ref ?? null;
                 if (!ref) return;
                 caretRef.current = el.selectionStart ?? 0;
                 setMenu(null);
@@ -193,7 +200,7 @@ export function TemplateInput({
                 updateMenu(e.target.value, e.target.selectionStart ?? e.target.value.length);
               }}
               onKeyDown={(e) => {
-                hover.close();
+                if (!['Meta', 'Control', 'Shift', 'Alt'].includes(e.key)) hover.close();
                 onKeyDown(e);
               }}
               onPaste={onPaste}
@@ -218,6 +225,12 @@ export function TemplateInput({
           className="flex w-[min(26rem,90vw)] flex-col gap-2.5 p-2.5"
           onOpenAutoFocus={(e) => e.preventDefault()}
           onCloseAutoFocus={(e) => e.preventDefault()}
+          onPointerDownOutside={(e) => {
+            if (anchorRef.current?.contains(e.target as Node)) e.preventDefault();
+          }}
+          onFocusOutside={(e) => {
+            if (anchorRef.current?.contains(e.target as Node)) e.preventDefault();
+          }}
           onEscapeKeyDown={(e) => {
             e.preventDefault();
             closePopup(true);

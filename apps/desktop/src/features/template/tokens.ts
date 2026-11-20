@@ -19,10 +19,10 @@ export function refsIn(input: string | undefined | null): string[] {
   return [...input.matchAll(REF)].map((m) => m[1]!);
 }
 
-/** The `{{ref}}` the caret is inside (between its braces, inclusive), if any. */
-export function refAt(input: string, caret: number): string | null {
+/** The `{{ref}}` containing the character at `index` (the one under the pointer), if any. */
+export function refAtChar(input: string, index: number): string | null {
   for (const m of input.matchAll(REF)) {
-    if (caret >= m.index && caret <= m.index + m[0].length) return m[1]!;
+    if (index >= m.index && index < m.index + m[0].length) return m[1]!;
   }
   return null;
 }
