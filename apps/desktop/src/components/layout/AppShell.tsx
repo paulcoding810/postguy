@@ -14,6 +14,7 @@ import { SidebarPanel, SidebarRail } from './Sidebar';
 import { closeTab, TabBar } from './TabBar';
 import { TopBar } from './TopBar';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useLiveChanges } from '@/hooks/useLiveChanges';
 
 function useShortcuts() {
   const send = useSendRequest();
@@ -86,6 +87,7 @@ function Workspace() {
 
 export function AppShell() {
   useShortcuts();
+  useLiveChanges();
   const smartPanel = useUi((s) => s.smartPanel);
   return (
     <div className="flex h-full flex-col">

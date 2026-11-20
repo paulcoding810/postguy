@@ -7,6 +7,7 @@ import { VERSION } from './lib/version.ts';
 import { flowRoutes } from './routes/flows.ts';
 import { openapiRoutes } from './routes/openapi.ts';
 import { sendRoutes } from './routes/send.ts';
+import { eventRoutes } from './routes/events.ts';
 import { mcpRoutes } from './routes/mcp.ts';
 import { workspaceRoutes } from './routes/workspace.ts';
 
@@ -46,6 +47,7 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
   });
 
   app.get('/health', async () => ({ ok: true as const, version: VERSION }));
+  eventRoutes(app);
   workspaceRoutes(app, opts.db);
   sendRoutes(app, opts.db);
   openapiRoutes(app, opts.db);

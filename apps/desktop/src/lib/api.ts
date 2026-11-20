@@ -1,6 +1,9 @@
 import type { RouteBody, RouteKey, RouteQuery, RouteResponse } from '@postguy/shared';
 import { getServerInfo } from './server';
 
+/** Identifies this window to the server, so it can skip reloading changes it made itself. */
+export const CLIENT_ID = Math.random().toString(36).slice(2);
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -37,6 +40,7 @@ export async function api<K extends RouteKey>(key: K, opts: ApiOptions<K> = {}):
       method,
       headers: {
         Authorization: `Bearer ${token}`,
+        'X-Postguy-Client': CLIENT_ID,
         ...(o.body !== undefined && { 'Content-Type': 'application/json' }),
       },
       body: o.body !== undefined ? JSON.stringify(o.body) : undefined,
