@@ -15,6 +15,7 @@ export function listHistory(db: Db, opts: { requestId?: string; limit: number })
       timing: requestHistory.timing,
       bodySize: requestHistory.bodySize,
       error: requestHistory.error,
+      source: requestHistory.source,
       createdAt: requestHistory.createdAt,
     })
     .from(requestHistory)

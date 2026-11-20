@@ -1,10 +1,11 @@
-import { MonitorIcon, MoonIcon, PanelRightIcon, SearchIcon, SunIcon } from 'lucide-react';
+import { BotIcon, MonitorIcon, MoonIcon, PanelRightIcon, SearchIcon, SunIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Kbd, Tooltip } from '@/components/ui/misc';
 import { isTauri } from '@/lib/server';
 import { cn, isMac, modKey } from '@/lib/utils';
 import { useUi } from '@/stores/ui';
 import { EnvironmentSwitcher } from '@/features/environments/EnvironmentSwitcher';
+import { useMcpDialog } from '@/features/mcp/McpSettings';
 
 export function TopBar() {
   const { theme, setTheme, setSearchOpen, smartPanel, toggleSmartPanel } = useUi();
@@ -27,6 +28,11 @@ export function TopBar() {
         <Kbd className="ml-auto">{modKey}K</Kbd>
       </button>
       <EnvironmentSwitcher />
+      <Tooltip content="Claude (MCP)">
+        <Button variant="ghost" size="icon-sm" onClick={() => useMcpDialog.getState().setOpen(true)} aria-label="Claude (MCP) settings">
+          <BotIcon />
+        </Button>
+      </Tooltip>
       <Tooltip content={`Theme: ${theme}`}>
         <Button variant="ghost" size="icon-sm" onClick={() => setTheme(nextTheme)} aria-label="Toggle theme">
           <ThemeIcon />

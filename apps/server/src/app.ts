@@ -7,6 +7,7 @@ import { VERSION } from './lib/version.ts';
 import { flowRoutes } from './routes/flows.ts';
 import { openapiRoutes } from './routes/openapi.ts';
 import { sendRoutes } from './routes/send.ts';
+import { mcpRoutes } from './routes/mcp.ts';
 import { workspaceRoutes } from './routes/workspace.ts';
 
 export { VERSION } from './lib/version.ts';
@@ -15,6 +16,8 @@ export interface ServerOptions {
   db: Db;
   token: string;
   logger?: boolean;
+  /** Where the database lives; shown in Claude's setup command. */
+  dataDir?: string;
 }
 
 const ALLOWED_ORIGIN = /^(tauri:\/\/localhost|https?:\/\/tauri\.localhost|https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?)$/;
@@ -47,5 +50,6 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
   sendRoutes(app, opts.db);
   openapiRoutes(app, opts.db);
   flowRoutes(app, opts.db);
+  mcpRoutes(app, opts.db, opts.dataDir ?? null);
   return app;
 }

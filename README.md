@@ -104,6 +104,16 @@ Collections import from a Postguy export or a Postman v2.0/v2.1 file. Postman sc
 
 Variables marked secret, and auth credentials, are masked in history, previews and logs. Collection exports and OpenAPI exports never contain secret values. The local server only accepts requests carrying its per-session token.
 
+## Claude (MCP)
+
+Claude Code can use Postguy through the Model Context Protocol: find and send requests, read variables, history and flow runs, run flows, and create or change requests. Turn it on in **Claude (MCP)** (the robot icon in the top bar, or ⌘K), then run the setup command shown there once, e.g. `claude mcp add postguy -- node apps/server/bin/postguy-mcp.mjs`. The bridge finds the running app through `server.json` in its data folder, so Claude reaches Postguy only while it is open.
+
+- **Off by default.** Once on, Claude may only read until you also allow **Send requests** and **Edit**. Each tool call checks the current switches.
+- **Secrets stay hidden.** Secret values are masked in everything Claude reads, including response bodies that echo them; `decode_jwt` returns a token's claims but never the token. Claude writes `{{name}}` and Postguy fills it in when sending.
+- **Secrets only go where they already go.** A request carrying a secret is refused unless its host is one your saved requests already use, so a prompt injection in a response cannot send your token elsewhere.
+- **Per environment**, in the environment manager: keep an environment away from Claude entirely, or let it see that environment's secret values (for a throwaway local one).
+- Everything Claude sends is labelled **MCP** in History.
+
 ## Packaging
 
 `pnpm build:app` bundles the server with esbuild into `src-tauri/resources/server` (with the native SQLite module, QuickJS WebAssembly and migrations) and ships Node as a Tauri sidecar. If the local Node links shared libraries (Homebrew's does), the official build of the same version is downloaded from nodejs.org and verified against its published SHA-256 checksums. The app starts the server on a free port with a random token, stores data in the OS app-data folder (`server.log` sits there too), and stops it on exit.

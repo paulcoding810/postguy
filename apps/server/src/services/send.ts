@@ -58,6 +58,10 @@ export interface SendOptions {
   extraScripts?: Scripts;
   /** The name `flow.response(name)` uses for the current response in post scripts; defaults to the request name. */
   selfName?: string;
+  /** Recorded in history; 'mcp' when Claude sent it. */
+  source?: 'mcp';
+  /** Last check before sending; returning an error stops the request (e.g. a secret going to an unknown host). */
+  guard?: (request: ResolvedRequest, usedSecrets: string[]) => { code: string; message: string } | null;
 }
 
 function queryString(params: KeyValue[]): string {
@@ -277,6 +281,8 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
       redactedRequest,
     );
   }
+  const refused = opts.guard?.(resolution.request, resolution.secrets);
+  if (refused) return failure(def, refused, resolution.unresolved, scripts, redactedRequest);
   const loaded = loadBodyFiles(resolution.request.body);
   if ('error' in loaded) return failure(def, loaded.error, [], scripts, redactedRequest);
   resolution.request.body = loaded.body;
@@ -307,6 +313,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
       contentType,
       timing: raw.timing,
       error: raw.error ? `${raw.error.code}: ${raw.error.message}` : null,
+      source: opts.source ?? null,
       createdAt: Date.now(),
     })
     .run();

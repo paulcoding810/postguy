@@ -29,6 +29,8 @@ await build({
   logLevel: 'warning',
 });
 cpSync(join(serverDir, 'drizzle'), join(out, 'drizzle'), { recursive: true });
+// The Claude (MCP) bridge; Claude Code runs it with the bundled Node.
+copyFileSync(join(serverDir, 'bin', 'postguy-mcp.mjs'), join(out, 'postguy-mcp.mjs'));
 
 /** Copies a package and its runtime dependencies, following pnpm's symlinked layout. */
 const copied = new Set();

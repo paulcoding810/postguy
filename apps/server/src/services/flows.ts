@@ -45,7 +45,7 @@ import { activeEnvironment } from './environments.ts';
 import { getRequest } from './requests.ts';
 import { deleteScripts, loadScripts, saveScripts, stepOwnerId } from './scripts.ts';
 import { pruneExecutions } from './maintenance.ts';
-import { send } from './send.ts';
+import { send, type SendOptions } from './send.ts';
 import { listVariables, replaceVariables } from './variables.ts';
 
 const BODY_TEXT_LIMIT = 1024 * 1024;
@@ -312,6 +312,8 @@ interface StepContext {
   /** Values set by scripts with flow.set, shared by every step of the run. */
   runtime: Map<string, unknown>;
   executionId: string;
+  /** Passed to every step's send, e.g. Claude's label and host check. */
+  sendOptions?: Pick<SendOptions, 'source' | 'guard'>;
 }
 
 function runtimeVars(runtime: Map<string, unknown>) {
@@ -367,7 +369,7 @@ async function runStep(
   const res = await send(
     c.db,
     { requestId: saved.id, collectionId: saved.collectionId, environmentId: c.environmentId, request: def },
-    { signal: c.signal, responses: lookup, flowId: c.flow.id, failOnUnresolved: true, runtime: c.runtime, extraScripts: step.scripts, selfName: step.name },
+    { signal: c.signal, responses: lookup, flowId: c.flow.id, failOnUnresolved: true, runtime: c.runtime, extraScripts: step.scripts, selfName: step.name, ...c.sendOptions },
   );
   c.db.update(flowExecutions).set({ runtime: Object.fromEntries(c.runtime) }).where(eq(flowExecutions.id, c.executionId)).run();
   sink.scripts = res.scripts.length ? res.scripts : null;
@@ -504,7 +506,13 @@ function persistence(db: Db, c: StepContext, executionId: string, emit: (e: Flow
   };
 }
 
-export function runFlow(db: Db, flowId: string, environmentId?: string | null, debug = false): FlowExecution {
+export function runFlow(
+  db: Db,
+  flowId: string,
+  environmentId?: string | null,
+  debug = false,
+  sendOptions?: Pick<SendOptions, 'source' | 'guard'>,
+): FlowExecution {
   const flow = getFlowRow(db, flowId);
   const graph = getGraph(db, flowId);
   const issues = validateGraph(graph);
@@ -517,7 +525,7 @@ export function runFlow(db: Db, flowId: string, environmentId?: string | null, d
   return startRun(db, executionId, flowId, async (run, emit) => {
     emit({ type: 'execution', execution: executionRow(db, executionId) });
     run.stepMode = debug;
-    const c: StepContext = { db, flow, environmentId: envId, signal: run.controller.signal, runtime: new Map(), executionId };
+    const c: StepContext = { db, flow, environmentId: envId, signal: run.controller.signal, runtime: new Map(), executionId, sendOptions };
     const result = await executeFlow(graph, {
       stopOnError: flow.settings.stopOnError,
       signal: run.controller.signal,

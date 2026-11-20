@@ -85,6 +85,10 @@ export const environments = sqliteTable('environments', {
   name: text('name').notNull(),
   isActive: integer('is_active', { mode: 'boolean' }).notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
+  /** Claude (MCP) may not use this environment at all. */
+  mcpBlocked: integer('mcp_blocked', { mode: 'boolean' }).notNull().default(false),
+  /** Claude (MCP) may read this environment's secret values. */
+  mcpRevealSecrets: integer('mcp_reveal_secrets', { mode: 'boolean' }).notNull().default(false),
   createdAt: createdAt(),
 });
 
@@ -123,6 +127,8 @@ export const requestHistory = sqliteTable(
     contentType: text('content_type'),
     timing: json<Timing>('timing_json').notNull(),
     error: text('error'),
+    /** Who sent it: null for the app, 'mcp' for Claude. */
+    source: text('source').$type<'mcp'>(),
     createdAt: createdAt(),
   },
   (t) => [
@@ -311,3 +317,10 @@ export const cookies = sqliteTable(
   },
   (t) => [uniqueIndex('cookies_jar_key_uq').on(t.jar, t.domain, t.path, t.name)],
 );
+
+/** App-wide settings as JSON values, one row per key. */
+export const appSettings = sqliteTable('app_settings', {
+  key: text('key').primaryKey(),
+  value: json<unknown>('value').notNull(),
+  updatedAt: updatedAt(),
+});

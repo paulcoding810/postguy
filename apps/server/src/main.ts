@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { buildServer } from './app.ts';
@@ -18,13 +19,25 @@ const { values } = parseArgs({
 const dataDir = resolve(values['data-dir']!);
 const token = values.token ?? randomBytes(24).toString('hex');
 const { db, close } = openDatabase(join(dataDir, 'postguy.db'));
-const app = await buildServer({ db, token, logger: values.verbose });
+const app = await buildServer({ db, token, logger: values.verbose, dataDir });
 void loadSandbox();
 await app.listen({ port: Number(values.port), host: '127.0.0.1' });
 const address = app.server.address();
 const port = typeof address === 'object' && address ? address.port : Number(values.port);
 
 process.stdout.write(`${JSON.stringify({ event: 'ready', port, token, dataDir })}\n`);
+
+// Lets the Claude (MCP) bridge find this server; readable by this user only.
+const discovery = join(dataDir, 'server.json');
+writeFileSync(discovery, JSON.stringify({ url: `http://127.0.0.1:${port}`, token, pid: process.pid }), { mode: 0o600 });
+const forget = () => {
+  try {
+    if (JSON.parse(readFileSync(discovery, 'utf8')).pid === process.pid) unlinkSync(discovery);
+  } catch {
+    /* already gone */
+  }
+};
+process.on('exit', forget);
 
 const shutdown = async () => {
   await app.close();

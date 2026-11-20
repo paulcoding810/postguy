@@ -125,6 +125,10 @@ export interface Environment {
   name: string;
   isActive: boolean;
   sortOrder: number;
+  /** Claude (MCP) may not use this environment. */
+  mcpBlocked: boolean;
+  /** Claude (MCP) may read its secret values. */
+  mcpRevealSecrets: boolean;
   createdAt: number;
 }
 
@@ -283,12 +287,14 @@ export interface HistoryEntry {
   contentType: string | null;
   timing: Timing;
   error: string | null;
+  /** 'mcp' when Claude sent it. */
+  source: 'mcp' | null;
   createdAt: number;
 }
 
 export type HistorySummary = Pick<
   HistoryEntry,
-  'id' | 'requestId' | 'method' | 'url' | 'status' | 'timing' | 'bodySize' | 'error' | 'createdAt'
+  'id' | 'requestId' | 'method' | 'url' | 'status' | 'timing' | 'bodySize' | 'error' | 'source' | 'createdAt'
 >;
 
 export type JsonType = 'object' | 'array' | 'string' | 'number' | 'integer' | 'boolean' | 'null';

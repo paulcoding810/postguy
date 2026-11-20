@@ -88,7 +88,32 @@ export const CreateEnvironmentInput = z.object({ name: z.string().min(1) });
 export const UpdateEnvironmentInput = z.object({
   name: z.string().min(1).optional(),
   sortOrder: z.number().int().optional(),
+  mcpBlocked: z.boolean().optional(),
+  mcpRevealSecrets: z.boolean().optional(),
 });
+
+/** What Claude may do through MCP. Off by default; once on, it may only read until more is allowed. */
+export const McpSettings = z.object({
+  enabled: z.boolean().default(false),
+  read: z.boolean().default(true),
+  send: z.boolean().default(false),
+  edit: z.boolean().default(false),
+});
+export type McpSettings = z.output<typeof McpSettings>;
+export const UpdateMcpSettings = z.object({
+  enabled: z.boolean().optional(),
+  read: z.boolean().optional(),
+  send: z.boolean().optional(),
+  edit: z.boolean().optional(),
+});
+
+export interface McpSetup {
+  /** The command Claude Code runs to talk to this Postguy, e.g. for `claude mcp add`. */
+  command: string;
+  args: string[];
+  /** Ready to paste into a terminal. */
+  claudeCode: string;
+}
 
 export const VariableInput = z.object({
   key: z.string().min(1),
@@ -343,7 +368,10 @@ export interface ApiRoutes {
 
   'GET /environments': { response: Environment[] };
   'POST /environments': { body: { name: string }; response: Environment };
-  'PATCH /environments/:id': { body: { name?: string; sortOrder?: number }; response: Environment };
+  'PATCH /environments/:id': { body: z.input<typeof UpdateEnvironmentInput>; response: Environment };
+  'GET /settings/mcp': { response: McpSettings };
+  'PATCH /settings/mcp': { body: z.input<typeof UpdateMcpSettings>; response: McpSettings };
+  'GET /settings/mcp/setup': { response: McpSetup };
   'DELETE /environments/:id': { response: { ok: true } };
   'POST /environments/import': { body: { data: unknown }; response: { environment: Environment; warnings: string[] } };
   'GET /environments/:id/export': { response: PostmanEnvironmentExport };

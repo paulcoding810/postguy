@@ -38,13 +38,19 @@ export function createEnvironment(db: Db, name: string): Environment {
     name,
     isActive: false,
     sortOrder: (m?.m ?? 0) + 1,
+    mcpBlocked: false,
+    mcpRevealSecrets: false,
     createdAt: Date.now(),
   };
   db.insert(environments).values(row).run();
   return row;
 }
 
-export function updateEnvironment(db: Db, id: string, input: { name?: string; sortOrder?: number }): Environment {
+export function updateEnvironment(
+  db: Db,
+  id: string,
+  input: { name?: string; sortOrder?: number; mcpBlocked?: boolean; mcpRevealSecrets?: boolean },
+): Environment {
   getEnvironment(db, id);
   const patch = Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined));
   if (Object.keys(patch).length) db.update(environments).set(patch).where(eq(environments.id, id)).run();

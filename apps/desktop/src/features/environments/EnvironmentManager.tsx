@@ -1,11 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { CheckIcon, DownloadIcon, GlobeIcon, LayersIcon, PencilIcon, PlusIcon, Trash2Icon, UploadIcon } from 'lucide-react';
+import { BotIcon, CheckIcon, DownloadIcon, GlobeIcon, LayersIcon, PencilIcon, PlusIcon, Trash2Icon, UploadIcon } from 'lucide-react';
 import * as React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { confirm, prompt } from '@/components/dialogs';
-import { Tooltip } from '@/components/ui/misc';
+import { Switch, Tooltip } from '@/components/ui/misc';
 import { keys, useActivateEnvironment, useEnvironments, useInvalidateVariables } from '@/hooks/queries';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -45,6 +45,11 @@ export function EnvironmentManager() {
     const next = await prompt({ title: 'Rename environment', initial: name });
     if (!next) return;
     await api('PATCH /environments/:id', { params: { id }, body: { name: next } });
+    qc.invalidateQueries({ queryKey: keys.environments });
+  };
+
+  const setMcp = async (id: string, patch: { mcpBlocked?: boolean; mcpRevealSecrets?: boolean }) => {
+    await api('PATCH /environments/:id', { params: { id }, body: patch });
     qc.invalidateQueries({ queryKey: keys.environments });
   };
 
@@ -133,6 +138,30 @@ export function EnvironmentManager() {
                     </div>
                   )}
                 </div>
+                {current.kind === 'environment' && (
+                  <div className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <BotIcon className="size-3.5" /> Claude
+                    </span>
+                    <label className="flex items-center gap-2">
+                      <Switch
+                        checked={!current.mcpBlocked}
+                        onCheckedChange={(v) => setMcp(current.id, { mcpBlocked: !v })}
+                        aria-label="Claude can use this environment"
+                      />
+                      Can use this environment
+                    </label>
+                    <label className={cn('flex items-center gap-2', current.mcpBlocked && 'opacity-50')}>
+                      <Switch
+                        checked={current.mcpRevealSecrets}
+                        disabled={current.mcpBlocked}
+                        onCheckedChange={(v) => setMcp(current.id, { mcpRevealSecrets: v })}
+                        aria-label="Claude may see secret values"
+                      />
+                      May see secret values
+                    </label>
+                  </div>
+                )}
                 <TemplateProvider draft={blankRequest()} collectionId={null} requestId={null}>
                   <VariablesTable key={current.id} scope={current.kind === 'global' ? 'global' : 'environment'} ownerId={current.id} />
                 </TemplateProvider>

@@ -149,6 +149,11 @@ export function HistoryList({ filter }: { filter: string }) {
                     </span>
                   )}
                 </span>
+                {h.source === 'mcp' && (
+                  <span className="shrink-0 rounded bg-info/15 px-1 text-[9.5px] font-medium text-info" title="Sent by Claude (MCP)">
+                    MCP
+                  </span>
+                )}
                 <span className={cn('shrink-0 font-mono text-[10px]', statusTone(h.status))}>
                   {h.status ?? 'ERR'}
                 </span>
