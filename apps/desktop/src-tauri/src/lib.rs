@@ -128,16 +128,50 @@ async fn pick_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
+/// Adds "Check for Updates…" under the app menu; the window does the checking.
+#[cfg(target_os = "macos")]
+fn add_update_menu_item(app: &mut tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, MenuItemKind};
+    use tauri::Emitter;
+    let menu = Menu::default(app.handle())?;
+    if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
+        let item = MenuItem::with_id(app, "check-updates", "Check for Updates…", true, None::<&str>)?;
+        app_menu.insert(&item, 1)?;
+    }
+    app.set_menu(menu)?;
+    app.on_menu_event(|app, event| {
+        if event.id() == "check-updates" {
+            let _ = app.emit("check-updates", ());
+        }
+    });
+    Ok(())
+}
+
+/// Whether this build can update itself: release builds with an updater key, and on Linux only the AppImage.
+#[tauri::command]
+fn update_support(app: tauri::AppHandle) -> serde_json::Value {
+    let enabled = app.config().plugins.0.contains_key("updater");
+    let can_install = !cfg!(target_os = "linux") || std::env::var_os("APPIMAGE").is_some();
+    serde_json::json!({ "enabled": enabled, "canInstall": can_install })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let sidecar = Arc::new(Sidecar::default());
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
         .manage(sidecar.clone())
         .setup({
             let sidecar = sidecar.clone();
             move |app| {
+                #[cfg(desktop)]
+                if app.config().plugins.0.contains_key("updater") {
+                    app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
+                }
+                #[cfg(target_os = "macos")]
+                add_update_menu_item(app)?;
                 if let Some(script) = sidecar_script(app.handle()) {
                     if let Err(e) = start_sidecar(app.handle(), script, sidecar.clone()) {
                         set_info(&sidecar, Err(e));
@@ -146,7 +180,7 @@ pub fn run() {
                 Ok(())
             }
         })
-        .invoke_handler(tauri::generate_handler![server_info, save_text_file, pick_file])
+        .invoke_handler(tauri::generate_handler![server_info, save_text_file, pick_file, update_support])
         .build(tauri::generate_context!())
         .expect("error while building Postguy");
     app.run(move |_, event| {

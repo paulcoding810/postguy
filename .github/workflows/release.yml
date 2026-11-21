@@ -106,13 +106,34 @@ jobs:
             echo "APPLE_TEAM_ID=$APPLE_TEAM_ID"
           } >> "$GITHUB_ENV"
 
+      # Signed updates, once the signing key (secrets) and its public key (variable) are set up; see docs/reference/releasing.md.
+      - name: Configure updates
+        id: updater
+        shell: bash
+        env:
+          PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: |
+          if [ -n "$PUBKEY" ] && [ "$HAS_KEY" = "true" ]; then
+            node -e 'require("fs").writeFileSync("apps/desktop/src-tauri/tauri.updater.conf.json", JSON.stringify({
+              bundle: { createUpdaterArtifacts: true },
+              plugins: { updater: { pubkey: process.env.PUBKEY, endpoints: ["https://github.com/${{ github.repository }}/releases/latest/download/latest.json"] } }
+            }))'
+            echo "args=--config src-tauri/tauri.updater.conf.json" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Updates are off for this build: set the TAURI_SIGNING_PRIVATE_KEY secret and the TAURI_UPDATER_PUBKEY variable."
+          fi
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           tauriScript: pnpm tauri
-          args: --target ${{ matrix.target }} --config src-tauri/tauri.bundle.conf.json
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.bundle.conf.json ${{ steps.updater.outputs.args }}
+          includeUpdaterJson: true
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: Postguy ${{ github.ref_name }}
           releaseBody: See the commits since the previous release for changes.

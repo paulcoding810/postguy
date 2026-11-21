@@ -69,6 +69,27 @@ Windows builds are unsigned, so SmartScreen warns on first run. To sign, add a c
 
 The Node version comes from `.node-version`.
 
+## Signed updates
+
+Installed apps check the latest **published** release for `latest.json` and offer to update. Drafts and pre-releases are never offered. Each update is signed, and the app refuses one whose signature doesn't match the public key built into it.
+
+Set this up once:
+
+1. Generate a key pair, and keep the private key and its password somewhere safe. Losing them means existing installs can't be updated again.
+
+   ```sh
+   pnpm --filter @postguy/desktop tauri signer generate -w ~/.tauri/postguy.key
+   ```
+
+2. In the repository settings, add the secrets `TAURI_SIGNING_PRIVATE_KEY` (the contents of `~/.tauri/postguy.key`) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+3. Add the **variable** `TAURI_UPDATER_PUBKEY` with the contents of `~/.tauri/postguy.key.pub`.
+
+From then on, the release workflow builds the update bundles and signatures and attaches `latest.json` to the release. Without these settings, releases still build, with a warning, and those installs don't update themselves.
+
+Updates install on macOS, Windows and the Linux AppImage. `.deb` and `.rpm` installs are told about new versions and linked to the release.
+
+Before an update's database migrations run, the app copies the database to `postguy.db.bak-before-<migration>` in its data folder, keeping the latest three copies.
+
 ## Documentation site
 
 `.github/workflows/docs.yml` builds this site with VitePress and publishes it to GitHub Pages whenever `docs/` changes on `main`, or when run by hand. In the repository settings, set **Pages → Source** to **GitHub Actions** once. Preview locally with `pnpm docs:dev`.

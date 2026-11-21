@@ -1,4 +1,5 @@
-import { ArrowLeftIcon, ArrowRightIcon, BotIcon, CookieIcon, FileCode2Icon, FilePlusIcon, HistoryIcon, LayersIcon, MoonIcon, PanelRightIcon, SearchIcon, SendIcon, SettingsIcon, WorkflowIcon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowRightIcon, BotIcon, CookieIcon, DownloadIcon, FileCode2Icon, FilePlusIcon, HistoryIcon, LayersIcon, MoonIcon, PanelRightIcon, SearchIcon, SendIcon, SettingsIcon, WorkflowIcon } from 'lucide-react';
+import { checkForUpdates, useAutoUpdateCheck } from '@/lib/updates';
 import * as React from 'react';
 import { toast } from 'sonner';
 import { Dialog as DialogPrimitive } from 'radix-ui';
@@ -35,6 +36,7 @@ interface Item {
 
 export function CommandPalette() {
   const { searchOpen, setSearchOpen, openEnvManager, setTheme, theme } = useUi();
+  const { on: autoUpdate, set: setAutoUpdate } = useAutoUpdateCheck();
   const tree = useTree();
   const envs = useEnvironments();
   const flows = useFlows();
@@ -92,6 +94,14 @@ export function CommandPalette() {
       { id: 'a:prev-tab', group: 'Actions', label: 'Previous tab', shortcut: isMac ? '⌃⇧Tab' : 'Ctrl+⇧Tab', icon: <ArrowLeftIcon className="size-3.5" />, run: () => switchTab(-1) },
       { id: 'a:cookies', group: 'Actions', label: 'Manage cookies', icon: <CookieIcon className="size-3.5" />, run: () => useCookieManager.getState().setOpen(true) },
       { id: 'a:mcp', group: 'Actions', label: 'Claude (MCP) settings', icon: <BotIcon className="size-3.5" />, run: () => useMcpDialog.getState().setOpen(true) },
+      { id: 'a:update', group: 'Actions', label: 'Check for updates…', icon: <DownloadIcon className="size-3.5" />, run: () => void checkForUpdates() },
+      {
+        id: 'a:auto-update',
+        group: 'Actions',
+        label: autoUpdate ? 'Turn off automatic update checks' : 'Turn on automatic update checks',
+        icon: <DownloadIcon className="size-3.5" />,
+        run: () => setAutoUpdate(!autoUpdate),
+      },
       { id: 'a:history', group: 'Actions', label: 'Show history', icon: <HistoryIcon className="size-3.5" />, run: () => useUi.getState().setSidebar('history') },
       {
         id: 'a:theme',
@@ -105,7 +115,7 @@ export function CommandPalette() {
     const needle = q.trim().toLowerCase();
     if (!needle) return all.slice(0, 60);
     return all.filter((i) => `${i.label} ${i.detail ?? ''} ${i.keywords ?? ''}`.toLowerCase().includes(needle)).slice(0, 60);
-  }, [tree.data, flows.data, envs.data, q, theme, activate, openEnvManager, setTheme]);
+  }, [tree.data, flows.data, envs.data, q, theme, activate, openEnvManager, setTheme, autoUpdate, setAutoUpdate]);
 
   const choose = (item: Item | undefined) => {
     if (!item) return;

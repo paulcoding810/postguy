@@ -12,6 +12,10 @@ Auth credentials (bearer tokens, passwords, API keys and OAuth tokens) are maske
 
 **Copy as cURL** resolves everything so the command runs outside Postguy. It warns you when the result contains a secret.
 
+## What leaves your machine
+
+Only the requests you send, and the daily update check: a single request to GitHub for the latest release, which you can turn off with <kbd>⌘K</kbd> → *Turn off automatic update checks*.
+
 ## The local server
 
 The app talks to its own server on `127.0.0.1`, which accepts only requests carrying a token generated for that session. Other programs on your machine can't use it unless you give them the token. Claude reaches it through the MCP bridge, with the limits above.
