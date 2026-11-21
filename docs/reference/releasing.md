@@ -68,3 +68,7 @@ Windows builds are unsigned, so SmartScreen warns on first run. To sign, add a c
 - ships Node as the Tauri sidecar. It reuses the running Node when it is a self-contained build for the same platform; otherwise it downloads the official build of the same version from nodejs.org and verifies it against the published SHA-256 checksums. Downloads are cached in `src-tauri/.node-cache`.
 
 The Node version comes from `.node-version`.
+
+## Documentation site
+
+`.github/workflows/docs.yml` builds this site with VitePress and publishes it to GitHub Pages whenever `docs/` changes on `main`, or when run by hand. In the repository settings, set **Pages → Source** to **GitHub Actions** once. Preview locally with `pnpm docs:dev`.

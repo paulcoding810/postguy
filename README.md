@@ -4,6 +4,8 @@ A local-first desktop API workspace: import OpenAPI specs, send requests, rememb
 
 Built with Tauri, React, Vite and TypeScript on the front end, and a Node/Fastify server with SQLite (Drizzle ORM) behind it.
 
+User documentation: [paulcoding810.github.io/postguy](https://paulcoding810.github.io/postguy/) (source in `docs/`, run locally with `pnpm docs:dev`).
+
 ## Getting started
 
 Requirements: Node 22+, pnpm 10, Rust (for the desktop shell).
@@ -122,7 +124,7 @@ Claude Code can use Postguy through the Model Context Protocol: find and send re
 
 `pnpm build:app` bundles the server with esbuild into `src-tauri/resources/server` (with the native SQLite module, QuickJS WebAssembly and migrations) and ships Node as a Tauri sidecar. If the local Node links shared libraries (Homebrew's does), the official build of the same version is downloaded from nodejs.org and verified against its published SHA-256 checksums. The app starts the server on a free port with a random token, stores data in the OS app-data folder (`server.log` sits there too), and stops it on exit.
 
-Releases for macOS (Apple Silicon and Intel), Windows and Linux are built by GitHub Actions, with macOS signing and notarization when Apple credentials are configured. See [docs/RELEASING.md](docs/RELEASING.md).
+Releases for macOS (Apple Silicon and Intel), Windows and Linux are built by GitHub Actions, with macOS signing and notarization when Apple credentials are configured. See [docs/reference/releasing.md](docs/reference/releasing.md).
 
 ## Status
 
