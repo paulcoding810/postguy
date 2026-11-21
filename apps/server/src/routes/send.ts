@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { CurlParseError, parseCurl, resolveRequest, resolveTemplate, redactText, toCurl, MASK, type RefResolution } from '@postguy/core';
+import { CurlParseError, parseCurl, swapInVariables, resolveRequest, resolveTemplate, redactText, toCurl, MASK, type RefResolution } from '@postguy/core';
 import { CurlExportInput, CurlImportInput, OAuthTokenInput, ResolvePreviewInput, SendInput, type ContextVariable, type ResolvedPreview } from '@postguy/shared';
 import { HttpError } from '../lib/errors.ts';
 import { needsTokenExchange } from '../services/oauth.ts';
@@ -37,7 +37,14 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
 
   app.post('/import/curl', async (req) => {
     try {
-      return parseCurl(parse(CurlImportInput, req.body).command);
+      const input = parse(CurlImportInput, req.body);
+      const parsed = parseCurl(input.command);
+      if (!input.useVariables) return { ...parsed, variables: [] };
+      const saved = input.requestId ? getRequest(db, input.requestId) : null;
+      const { ctx } = buildContext(db, { collectionId: input.collectionId ?? saved?.collectionId ?? null, requestId: saved?.id ?? null });
+      const values = [...ctx.variables.entries()].filter(([, v]) => v.source !== 'runtime').map(([key, v]) => ({ key, value: resolveTemplate(v.value, ctx).value, source: v.source }));
+      const { request, used } = swapInVariables(parsed.request, values);
+      return used.length ? { request, warnings: parsed.warnings, variables: used, raw: parsed.request } : { ...parsed, variables: [] };
     } catch (e) {
       if (e instanceof CurlParseError) throw new HttpError(422, e.message, 'invalid_curl');
       throw e;

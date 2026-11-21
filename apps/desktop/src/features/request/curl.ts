@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { create } from 'zustand';
-import type { RequestDefinition } from '@postguy/shared';
+import type { CurlImportResult, RequestDefinition } from '@postguy/shared';
 import { api, errorMessage } from '@/lib/api';
 import { useTabs, type RequestTab } from '@/stores/tabs';
 
@@ -11,20 +11,26 @@ export const useCurlDialog = create<{ open: boolean; setOpen: (v: boolean) => vo
   setOpen: (open) => set({ open }),
 }));
 
-function warn(warnings: string[]) {
-  return warnings.length ? `${warnings.length} note${warnings.length > 1 ? 's' : ''}: ${warnings.join('; ')}` : undefined;
+function describe(r: CurlImportResult) {
+  const lines = [
+    r.variables.length ? `Used ${r.variables.map((v) => `{{${v}}}`).join(', ')} in place of the values pasted.` : '',
+    r.warnings.length ? `${r.warnings.length} note${r.warnings.length > 1 ? 's' : ''}: ${r.warnings.join('; ')}` : '',
+  ].filter(Boolean);
+  return lines.length ? lines.join(' ') : undefined;
 }
 
 /** Replaces a tab's draft with a pasted cURL command; Undo restores the previous draft. */
 export async function applyCurlToTab(tab: RequestTab, command: string) {
   try {
-    const { request, warnings } = await api('POST /import/curl', { body: { command } });
+    const result = await api('POST /import/curl', { body: { command, collectionId: tab.collectionId, requestId: tab.requestId } });
     const previous = tab.draft;
-    const name = tab.requestId ? previous.name : request.name;
-    useTabs.getState().updateDraft(tab.id, () => ({ ...request, name, scripts: previous.scripts }));
+    const fill = (request: RequestDefinition) => ({ ...request, name: tab.requestId ? previous.name : request.name, scripts: previous.scripts });
+    useTabs.getState().updateDraft(tab.id, () => fill(result.request));
+    const raw = result.raw;
     toast.success('Request filled from cURL', {
-      description: warn(warnings),
+      description: describe(result),
       action: { label: 'Undo', onClick: () => useTabs.getState().updateDraft(tab.id, () => previous) },
+      ...(raw && { cancel: { label: 'Keep raw values', onClick: () => useTabs.getState().updateDraft(tab.id, () => fill(raw)) } }),
     });
   } catch (e) {
     toast.error(errorMessage(e));
@@ -33,9 +39,13 @@ export async function applyCurlToTab(tab: RequestTab, command: string) {
 
 export async function openCurlInNewTab(command: string): Promise<boolean> {
   try {
-    const { request, warnings } = await api('POST /import/curl', { body: { command } });
-    useTabs.getState().newRequest(null, request as RequestDefinition);
-    toast.success('Imported cURL as a new request', { description: warn(warnings) });
+    const result = await api('POST /import/curl', { body: { command } });
+    const id = useTabs.getState().newRequest(null, result.request as RequestDefinition);
+    const raw = result.raw;
+    toast.success('Imported cURL as a new request', {
+      description: describe(result),
+      ...(raw && { action: { label: 'Keep raw values', onClick: () => useTabs.getState().updateDraft(id, () => raw) } }),
+    });
     return true;
   } catch (e) {
     toast.error(errorMessage(e));

@@ -288,10 +288,20 @@ export interface OAuthSignInStatus {
   token: OAuthTokenResult | null;
 }
 
-export const CurlImportInput = z.object({ command: z.string().min(1).max(1_000_000) });
+export const CurlImportInput = z.object({
+  command: z.string().min(1).max(1_000_000),
+  /** Where the request goes; its variables replace the values they hold. Omit both to use the active environment only. */
+  collectionId: z.string().nullable().optional(),
+  requestId: z.string().nullable().optional(),
+  useVariables: z.boolean().default(true),
+});
 export interface CurlImportResult {
   request: z.output<typeof RequestDefinition>;
   warnings: string[];
+  /** Variables used in place of the values pasted. */
+  variables: string[];
+  /** The request as pasted, when variables were used. */
+  raw?: z.output<typeof RequestDefinition>;
 }
 export const CurlExportInput = z.object({
   request: RequestDefinition,
@@ -406,7 +416,7 @@ export interface ApiRoutes {
   'POST /oauth/token': { body: OAuthTokenInput; response: OAuthTokenResult };
   'POST /oauth/authorize': { body: OAuthTokenInput; response: OAuthAuthorizeResult };
   'GET /oauth/authorize/:state': { response: OAuthSignInStatus };
-  'POST /import/curl': { body: { command: string }; response: CurlImportResult };
+  'POST /import/curl': { body: z.input<typeof CurlImportInput>; response: CurlImportResult };
   'POST /export/curl': { body: CurlExportInput; response: CurlExportResult };
   'POST /resolve-preview': { body: ResolvePreviewInput; response: ResolvedPreview[] };
   'GET /context-variables': { query: { collectionId?: string; requestId?: string; flowId?: string }; response: ContextVariable[] };

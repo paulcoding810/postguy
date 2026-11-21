@@ -25,6 +25,7 @@ export * from './openapi/diff.ts';
 export * from './openapi/merge.ts';
 export * from './import/postman.ts';
 export * from './import/curl.ts';
+export * from './import/curlVariables.ts';
 export * from './import/compat.ts';
 export * from './import/postmanEnvironment.ts';
 export * from './import/har.ts';
