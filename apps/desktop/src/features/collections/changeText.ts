@@ -45,6 +45,7 @@ export function changeText(entry: ChangeEntry, side: 'before' | 'after'): string
         : []),
       ...scripts(snap.scripts),
       ...variables(snap.variables),
+      ...(snap.examples?.length ? ['Examples:', ...snap.examples.map((e: Obj) => `  ${e.name}${e.status ? ` (${e.status})` : ''}`)] : []),
     ].join('\n');
   }
   const c = snap.collection as Obj;

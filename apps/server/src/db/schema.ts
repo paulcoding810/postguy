@@ -5,6 +5,7 @@ import type {
   Body,
   CollectionKind,
   EnvironmentKind,
+  ExampleRequest,
   ExecutionStatus,
   ExecutionStep,
   FlowHandle,
@@ -175,6 +176,28 @@ export const responseSchemas = sqliteTable('response_schemas', {
   lastSeenAt: integer('last_seen_at').notNull(),
   seenCount: integer('seen_count').notNull().default(1),
 });
+
+export const responseExamples = sqliteTable(
+  'response_examples',
+  {
+    id: id(),
+    requestId: text('request_id')
+      .notNull()
+      .references(() => requests.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    status: integer('status'),
+    statusText: text('status_text'),
+    headers: json<Record<string, string>>('headers_json').notNull(),
+    contentType: text('content_type'),
+    body: text('body').notNull(),
+    bodyEncoding: text('body_encoding').$type<'utf8' | 'base64'>().notNull(),
+    request: json<ExampleRequest>('request_json').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('examples_request_idx').on(t.requestId, t.sortOrder)],
+);
 
 export const responseSnapshots = sqliteTable(
   'response_snapshots',

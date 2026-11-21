@@ -50,6 +50,13 @@
       "when": 1795182886959,
       "tag": "0006_change_log",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1795275323455,
+      "tag": "0007_examples",
+      "breakpoints": true
     }
   ]
 }

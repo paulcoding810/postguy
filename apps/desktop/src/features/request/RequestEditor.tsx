@@ -165,6 +165,16 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
               requestName={tab.requestId ? (tab.saved?.name ?? tab.draft.name) : null}
               hasCollection={!!tab.collectionId}
               onAddScript={addPostScript}
+              exampleRequest={() => {
+                const d = useTabs.getState().tabs.find((t) => t.id === tab.id);
+                const cur = d && isRequestTab(d) ? d.draft : draft;
+                return { method: cur.method, url: cur.url, params: cur.params, headers: cur.headers, body: cur.body };
+              }}
+              onUseRequest={(r, name) => {
+                const previous = draft;
+                updateDraft(tab.id, (d) => ({ ...d, method: r.method as RequestDefinition['method'], url: r.url, params: r.params, headers: r.headers, body: r.body }));
+                toast.success(`Filled from example “${name}”`, { action: { label: 'Undo', onClick: () => updateDraft(tab.id, () => previous) } });
+              }}
               onResend={() => {
                 const latest = useTabs.getState().tabs.find((t) => t.id === tab.id);
                 if (isRequestTab(latest)) void send(latest);

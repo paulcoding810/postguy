@@ -1,8 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { and, desc, eq, lt, notInArray } from 'drizzle-orm';
-import { newId } from '@postguy/shared';
+import { newId, type ResponseExample } from '@postguy/shared';
 import type { Db } from '../db/client.ts';
 import { changeLog, collections, flowSteps, requests, variables } from '../db/schema.ts';
+import { examplesOf } from './examples.ts';
 import { loadScripts } from './scripts.ts';
 
 /** 'restore' is internal: a restore records one entry itself, not one per object it brings back. */
@@ -34,6 +35,8 @@ export interface RequestSnapshot {
   variables: Vars;
   /** Flow steps that used the request, relinked when it is restored. */
   flowSteps?: { flowId: string; stepId: string }[];
+  /** Saved examples, kept on deletions so they come back with the request. */
+  examples?: ResponseExample[];
 }
 
 export interface CollectionSnapshot {
@@ -62,7 +65,10 @@ export function requestSnapshot(db: Db, id: string, withFlows = false): RequestS
     request: row as RequestSnapshot['request'],
     scripts: loadScripts(db, 'request', id),
     variables: vars(db, 'request', id),
-    ...(withFlows && { flowSteps: db.select({ flowId: flowSteps.flowId, stepId: flowSteps.id }).from(flowSteps).where(eq(flowSteps.requestId, id)).all() }),
+    ...(withFlows && {
+      flowSteps: db.select({ flowId: flowSteps.flowId, stepId: flowSteps.id }).from(flowSteps).where(eq(flowSteps.requestId, id)).all(),
+      examples: examplesOf(db, id),
+    }),
   };
 }
 

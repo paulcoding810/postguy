@@ -21,6 +21,9 @@ import {
   type OpenApiSpecDetail,
   type PathEntry,
   type ResponseSnapshot,
+  ExampleRequest,
+  type ExampleSummary,
+  type ResponseExample,
   type SavedRequest,
   type SendResult,
   type SnapshotSummary,
@@ -373,6 +376,18 @@ export interface ExportedFlow {
   connections: FlowConnection[];
 }
 
+export const CreateExampleInput = z.object({
+  name: z.string().trim().min(1).max(200),
+  status: z.number().int().nullable(),
+  statusText: z.string().nullable().default(null),
+  headers: z.record(z.string(), z.string()).default({}),
+  contentType: z.string().nullable().default(null),
+  body: z.string().max(5 * 1024 * 1024 * 4 / 3 + 16),
+  bodyEncoding: z.enum(['utf8', 'base64']).default('utf8'),
+  request: ExampleRequest,
+});
+export const UpdateExampleInput = z.object({ name: z.string().trim().min(1).max(200) });
+
 type Empty = Record<string, never>;
 
 export interface ApiRoutes {
@@ -444,6 +459,11 @@ export interface ApiRoutes {
   'GET /reference-sources': { query: { collectionId?: string }; response: ReferenceSource[] };
   'GET /requests/:id/snapshots': { response: SnapshotSummary[] };
   'GET /snapshots/:id': { response: ResponseSnapshot };
+  'GET /requests/:id/examples': { response: ExampleSummary[] };
+  'POST /requests/:id/examples': { body: z.input<typeof CreateExampleInput>; response: ResponseExample };
+  'GET /examples/:id': { response: ResponseExample };
+  'PATCH /examples/:id': { body: z.input<typeof UpdateExampleInput>; response: ResponseExample };
+  'DELETE /examples/:id': { response: { ok: true } };
   'POST /requests/:id/pin-snapshot': { body: { snapshotId: string | null }; response: SavedRequest };
   'GET /requests/:id/schema': { response: EffectiveSchema };
 

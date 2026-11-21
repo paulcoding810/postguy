@@ -16,6 +16,7 @@ import {
 } from './changelog.ts';
 import { createCollection, updateCollection } from './collections.ts';
 import { createRequest, updateRequest } from './requests.ts';
+import { copyExamples } from './examples.ts';
 import { replaceVariables } from './variables.ts';
 
 const MASK = '••••••';
@@ -30,6 +31,7 @@ export function maskSnapshot(value: unknown): unknown {
   for (const [k, v] of Object.entries(value)) {
     if (k === 'auth' && v && typeof v === 'object' && 'type' in v) out[k] = redactAuth(v as Auth);
     else if (k === 'variables' && Array.isArray(v)) out[k] = v.map((x) => (x?.isSecret ? { ...x, value: MASK } : x));
+    else if (k === 'examples' && Array.isArray(v)) out[k] = v.map((x) => ({ name: x?.name, status: x?.status }));
     else out[k] = maskSnapshot(v);
   }
   return out;
@@ -68,6 +70,7 @@ function restoreRequest(db: Db, snap: RequestSnapshot) {
       { ...definition(snap), collectionId: snap.request.collectionId },
       { id, openapiOperationId: (snap.request.openapiOperationId as string | null) ?? null, openapiFingerprint: (snap.request.openapiFingerprint as string | null) ?? null },
     );
+    copyExamples(db, snap.examples ?? [], id, true);
     const steps = snap.flowSteps ?? [];
     if (steps.length) db.update(flowSteps).set({ requestId: id }).where(and(inArray(flowSteps.id, steps.map((s) => s.stepId)), isNull(flowSteps.requestId))).run();
   }

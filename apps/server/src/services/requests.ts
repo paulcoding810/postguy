@@ -11,6 +11,7 @@ import { requests, variables } from '../db/schema.ts';
 import { notFound } from '../lib/errors.ts';
 import { getCollection } from './collections.ts';
 import { recordChange, requestSnapshot, rootIdOf } from './changelog.ts';
+import { copyExamples, examplesOf } from './examples.ts';
 import { deleteScripts, loadScripts, saveScripts } from './scripts.ts';
 
 export function getRequest(db: Db, id: string): SavedRequest {
@@ -101,7 +102,7 @@ export function deleteRequest(db: Db, id: string): void {
 
 export function duplicateRequest(db: Db, id: string): SavedRequest {
   const src = getRequest(db, id);
-  return createRequest(db, {
+  const copy = createRequest(db, {
     collectionId: src.collectionId,
     name: `${src.name} copy`,
     description: src.description,
@@ -115,4 +116,6 @@ export function duplicateRequest(db: Db, id: string): SavedRequest {
     settings: src.settings,
     scripts: src.scripts,
   });
+  copyExamples(db, examplesOf(db, id), copy.id);
+  return copy;
 }

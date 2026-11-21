@@ -1,28 +1,18 @@
-import { AlertTriangleIcon, CookieIcon, CopyIcon, LoaderIcon, SendIcon, WifiOffIcon } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { AlertTriangleIcon, BookmarkPlusIcon, CookieIcon, LoaderIcon, SendIcon, WifiOffIcon } from 'lucide-react';
 import * as React from 'react';
-import { toast } from 'sonner';
-import type { SendResult } from '@postguy/shared';
+import type { ExampleRequest, SendResult } from '@postguy/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { EmptyState, Kbd } from '@/components/ui/misc';
+import { EmptyState, Kbd, Tooltip } from '@/components/ui/misc';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CodeEditor } from '@/components/CodeEditor';
 import { useCookieManager } from '@/features/cookies/CookieManager';
-import { cn, formatBytes, formatMs, modKey, statusTone, tryParseJson } from '@/lib/utils';
+import { cn, formatBytes, formatMs, modKey, statusTone } from '@/lib/utils';
 import { EmptyAuthBanner } from './EmptyAuthBanner';
-import { ResponseTree } from './ResponseTree';
+import { ExamplesView, saveExample, useExamples, useOpenExample } from './Examples';
+import { ResponseBody } from './ResponseBody';
 import { SchemaTab } from './SchemaTab';
 import { TestsTab, testCounts } from './TestsTab';
-
-function languageFor(contentType: string | null): string {
-  if (!contentType) return 'plaintext';
-  if (/json/i.test(contentType)) return 'json';
-  if (/html/i.test(contentType)) return 'html';
-  if (/xml/i.test(contentType)) return 'xml';
-  if (/javascript/i.test(contentType)) return 'javascript';
-  if (/css/i.test(contentType)) return 'css';
-  return 'plaintext';
-}
 
 function Table({ rows, empty }: { rows: [string, React.ReactNode][]; empty: string }) {
   if (!rows.length) return <p className="p-4 text-xs text-muted-foreground">{empty}</p>;
@@ -42,30 +32,6 @@ function Table({ rows, empty }: { rows: [string, React.ReactNode][]; empty: stri
   );
 }
 
-type BodyView = 'pretty' | 'raw' | 'tree';
-const VIEW_KEY = 'postguy.responseView';
-
-/** The body view, remembered across responses and restarts. */
-function useBodyView(): [BodyView, (v: BodyView) => void] {
-  const [view, setView] = React.useState<BodyView>(() => {
-    try {
-      const saved = localStorage.getItem(VIEW_KEY);
-      return saved === 'raw' || saved === 'tree' ? saved : 'pretty';
-    } catch {
-      return 'pretty';
-    }
-  });
-  const set = (v: BodyView) => {
-    setView(v);
-    try {
-      localStorage.setItem(VIEW_KEY, v);
-    } catch {
-      /* storage unavailable */
-    }
-  };
-  return [view, set];
-}
-
 export function ResponsePanel({
   response,
   sending,
@@ -74,7 +40,13 @@ export function ResponsePanel({
   onResend,
   hasCollection = false,
   onAddScript,
+  exampleRequest,
+  onUseRequest,
 }: {
+  /** The request as written, saved with an example. */
+  exampleRequest?: () => ExampleRequest;
+  /** Fills the editor from an example's request. */
+  onUseRequest?: (request: ExampleRequest, name: string) => void;
   hasCollection?: boolean;
   /** Appends lines to the post-response script, from the tree view's save and test actions. */
   onAddScript?: (code: string, message: string) => void;
@@ -85,26 +57,49 @@ export function ResponsePanel({
   requestName?: string | null;
   onResend?: () => void;
 }) {
-  const [view, setView] = useBodyView();
+  const qc = useQueryClient();
+  const [section, setSection] = React.useState('body');
+  const [example, setExample] = React.useState<string | null>(null);
+  const examples = useExamples(requestId);
+  const exampleCount = examples.data?.length ?? 0;
+  const openRequest = useOpenExample();
+  React.useEffect(() => {
+    if (!openRequest.nonce || openRequest.requestId !== requestId) return;
+    setSection('examples');
+    setExample(openRequest.exampleId);
+  }, [openRequest.nonce]);
+
+  const examplesView = requestId ? <ExamplesView requestId={requestId} selected={example} onSelect={setExample} onUseRequest={onUseRequest} /> : null;
 
   if (!response) {
-    return sending ? (
-      <EmptyState icon={<LoaderIcon className="size-6 animate-spin" />} title="Sending request…" />
-    ) : (
+    if (sending) return <EmptyState icon={<LoaderIcon className="size-6 animate-spin" />} title="Sending request…" />;
+    const idle = (
       <EmptyState icon={<SendIcon className="size-6" />} title="No response yet">
         Press Send or <Kbd>{modKey}↵</Kbd> to execute the request.
       </EmptyState>
     );
+    if (!exampleCount) return idle;
+    return (
+      <Tabs value={section === 'examples' ? 'examples' : 'none'} onValueChange={setSection} className="flex h-full min-h-0 flex-col">
+        <TabsList>
+          <TabsTrigger value="none">Response</TabsTrigger>
+          <TabsTrigger value="examples">
+            Examples <span className="text-muted-foreground">{exampleCount}</span>
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="none">{idle}</TabsContent>
+        <TabsContent value="examples" className="flex min-h-0 flex-col">
+          {examplesView}
+        </TabsContent>
+      </Tabs>
+    );
   }
 
-  const json = response.bodyEncoding === 'utf8' && /json/i.test(response.contentType ?? '') ? tryParseJson(response.body) : null;
-  const pretty = json?.ok ? JSON.stringify(json.value, null, 2) : response.body;
-  const shown: BodyView = view === 'tree' && !json?.ok ? 'pretty' : view;
-  const isBinary = response.bodyEncoding === 'base64';
-  const isImage = isBinary && /^image\//.test(response.contentType ?? '');
+  const canSave = !!requestId && !response.error && !response.truncated && !!exampleRequest;
+
 
   return (
-    <Tabs defaultValue="body" className="flex h-full min-h-0 flex-col">
+    <Tabs value={section} onValueChange={setSection} className="flex h-full min-h-0 flex-col">
       <div className="flex items-center border-b pr-3">
         <TabsList className="border-0">
           <TabsTrigger value="body">Body</TabsTrigger>
@@ -125,6 +120,11 @@ export function ResponsePanel({
             })()}
           </TabsTrigger>
           <TabsTrigger value="request">Request</TabsTrigger>
+          {requestId && (
+            <TabsTrigger value="examples">
+              Examples {exampleCount > 0 && <span className="text-muted-foreground">{exampleCount}</span>}
+            </TabsTrigger>
+          )}
         </TabsList>
         <div className="ml-auto flex items-center gap-3 text-xs">
           {sending && <LoaderIcon className="size-3.5 animate-spin text-muted-foreground" />}
@@ -155,49 +155,33 @@ export function ResponsePanel({
           <EmptyState icon={<WifiOffIcon className="size-6 text-destructive" />} title={response.error.code}>
             <span className="select-text">{response.error.message}</span>
           </EmptyState>
-        ) : isImage ? (
-          <div className="flex flex-1 items-center justify-center overflow-auto p-4">
-            <img alt="Response" src={`data:${response.contentType};base64,${response.body}`} className="max-h-full max-w-full" />
-          </div>
-        ) : isBinary ? (
-          <EmptyState title="Binary response">{formatBytes(response.size)} of {response.contentType ?? 'unknown type'}</EmptyState>
         ) : (
-          <>
-            <div className="flex items-center gap-1 border-b px-3 py-1">
-              {(json?.ok ? (['pretty', 'raw', 'tree'] as const) : (['pretty', 'raw'] as const)).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  onClick={() => setView(v)}
-                  className={cn('rounded px-2 py-0.5 text-xs capitalize text-muted-foreground', shown === v && 'bg-secondary text-foreground')}
-                >
-                  {v}
-                </button>
-              ))}
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                className="ml-auto"
-                aria-label="Copy body"
-                onClick={() => navigator.clipboard.writeText(response.body).then(() => toast.success('Copied'))}
-              >
-                <CopyIcon className="size-3.5" />
-              </Button>
-            </div>
-            {shown === 'tree' && json?.ok ? (
-              <ResponseTree value={json.value} requestName={requestName} hasCollection={hasCollection} onAddScript={onAddScript} />
-            ) : (
-              <div className="min-h-0 flex-1">
-                <CodeEditor
-                  key={shown}
-                  readOnly
-                  wordWrap={shown === 'raw'}
-                  language={shown === 'raw' ? 'plaintext' : languageFor(response.contentType)}
-                  value={shown === 'raw' ? response.body : pretty}
-                />
-              </div>
-            )}
-          </>
+          <ResponseBody
+            body={response.body}
+            bodyEncoding={response.bodyEncoding}
+            contentType={response.contentType}
+            size={response.size}
+            requestName={requestName}
+            hasCollection={hasCollection}
+            onAddScript={onAddScript}
+            actions={
+              requestId && (
+                <Tooltip content={canSave ? 'Save as example' : response.truncated ? 'The response was cut short, so it can’t be kept as an example' : 'Save the request first'}>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    disabled={!canSave}
+                    onClick={async () => {
+                      const id = await saveExample(qc, requestId, response, exampleRequest!());
+                      if (id) setExample(id);
+                    }}
+                  >
+                    <BookmarkPlusIcon /> Save as example
+                  </Button>
+                </Tooltip>
+              )
+            }
+          />
         )}
       </TabsContent>
       <TabsContent value="headers">
@@ -244,6 +228,9 @@ export function ResponsePanel({
       </TabsContent>
       <TabsContent value="tests">
         <TestsTab runs={response.scripts} />
+      </TabsContent>
+      <TabsContent value="examples" className="flex min-h-0 flex-col">
+        {examplesView}
       </TabsContent>
       <TabsContent value="request">
         <Table

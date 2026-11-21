@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import {
   CreateCollectionInput,
+  CreateExampleInput,
+  UpdateExampleInput,
   CreateEnvironmentInput,
   CreateRequestInput,
   HistoryQuery,
@@ -18,6 +20,7 @@ import { parse } from '../lib/errors.ts';
 import * as collections from '../services/collections.ts';
 import * as cookies from '../services/cookies.ts';
 import * as envs from '../services/environments.ts';
+import * as examples from '../services/examples.ts';
 import * as history from '../services/history.ts';
 import * as memory from '../services/memory.ts';
 import * as reqs from '../services/requests.ts';
@@ -55,6 +58,14 @@ export function workspaceRoutes(app: FastifyInstance, db: Db) {
     return { ok: true };
   });
   app.post('/requests/:id/duplicate', async (req) => reqs.duplicateRequest(db, id(req.params)));
+  app.get('/requests/:id/examples', async (req) => examples.listExamples(db, id(req.params)));
+  app.post('/requests/:id/examples', async (req) => examples.createExample(db, id(req.params), parse(CreateExampleInput, req.body)));
+  app.get('/examples/:id', async (req) => examples.getExample(db, id(req.params)));
+  app.patch('/examples/:id', async (req) => examples.renameExample(db, id(req.params), parse(UpdateExampleInput, req.body).name));
+  app.delete('/examples/:id', async (req) => {
+    examples.deleteExample(db, id(req.params));
+    return { ok: true };
+  });
 
   app.get('/environments', async () => envs.listEnvironments(db));
   app.post('/environments', async (req) => envs.createEnvironment(db, parse(CreateEnvironmentInput, req.body).name));

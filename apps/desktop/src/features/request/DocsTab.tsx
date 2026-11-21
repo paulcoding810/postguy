@@ -10,6 +10,7 @@ import { SchemaView } from '@/components/SchemaView';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { isDirty, isRequestTab, useTabs } from '@/stores/tabs';
+import { DocsExamples, useExamples } from '@/features/response/Examples';
 
 export function useOperation(requestId: string | null) {
   return useQuery({
@@ -71,10 +72,17 @@ function MissingParams({ requestId }: { requestId: string }) {
 export function DocsTab({ requestId }: { requestId: string | null }) {
   const q = useOperation(requestId);
   const op = q.data?.operation;
+  const examples = useExamples(requestId);
   if (!op) {
+    if (requestId && examples.data?.length)
+      return (
+        <div className="flex flex-col gap-4 p-4 text-[13px]">
+          <DocsExamples requestId={requestId} />
+        </div>
+      );
     return (
       <EmptyState icon={<BookOpenIcon className="size-6" />} title="No documentation">
-        {requestId ? 'This request was not generated from an OpenAPI specification.' : 'Save the request first.'}
+        {requestId ? 'This request was not generated from an OpenAPI specification. Save responses as examples to list them here.' : 'Save the request first.'}
       </EmptyState>
     );
   }
@@ -137,6 +145,7 @@ export function DocsTab({ requestId }: { requestId: string | null }) {
           ))}
         </div>
       </section>
+      {requestId && <DocsExamples requestId={requestId} />}
     </div>
   );
 }

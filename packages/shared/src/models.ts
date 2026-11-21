@@ -321,6 +321,34 @@ export interface ResponseSnapshot {
 
 export type SnapshotSummary = Omit<ResponseSnapshot, 'body' | 'paths'>;
 
+/** The request an example was saved from, as written (templates unresolved). */
+export const ExampleRequest = z.object({
+  method: z.string(),
+  url: z.string(),
+  params: z.array(KeyValue).default([]),
+  headers: z.array(KeyValue).default([]),
+  body: Body.default({ mode: 'none' }),
+});
+export type ExampleRequest = z.infer<typeof ExampleRequest>;
+
+/** A named response kept with a request, never pruned. */
+export interface ResponseExample {
+  id: string;
+  requestId: string;
+  name: string;
+  status: number | null;
+  statusText: string | null;
+  headers: Record<string, string>;
+  contentType: string | null;
+  body: string;
+  bodyEncoding: 'utf8' | 'base64';
+  request: ExampleRequest;
+  sortOrder: number;
+  createdAt: number;
+  updatedAt: number;
+}
+export type ExampleSummary = Omit<ResponseExample, 'body' | 'headers' | 'request'> & { size: number };
+
 export type JsonSchema = Record<string, unknown>;
 
 export interface ResponseSchemaRecord {
