@@ -1,14 +1,12 @@
 import Editor, { type OnMount } from '@monaco-editor/react';
 import * as React from 'react';
-import { create } from 'zustand';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/misc';
 import { useResolvedTheme } from '@/hooks/useTheme';
 import { monaco } from '@/lib/monaco';
 import { modKey } from '@/lib/utils';
 import { clearInsertTarget, useInsertTarget, useTemplateCtx } from '@/features/template/TemplateContext';
-import { scopeLabel, shadowNotes } from '@/features/template/scopeNote';
 import { VariableRow } from '@/features/template/VariableEditor';
-import { refAtChar } from '@/features/template/tokens';
+import { refRangeAt } from '@/features/template/tokens';
 
 export interface CodeEditorProps {
   value: string;
@@ -22,16 +20,16 @@ export interface CodeEditorProps {
   onMount?: (editor: monaco.editor.IStandaloneCodeEditor) => void;
 }
 
-const EDIT_VARIABLE = 'postguy.editVariable';
-const useVariableDialog = create<{ editorId: string | null; name: string | null }>(() => ({
-  editorId: null,
-  name: null,
-}));
-monaco.editor.registerCommand(EDIT_VARIABLE, (_accessor, editorId: string, name: string) =>
-  useVariableDialog.setState({ editorId, name }),
-);
-
 const REF = /\{\{\s*([^{}]+?)\s*\}\}/g;
+const OPEN_MS = 400;
+const CLOSE_MS = 250;
+
+/** The variable popup: which `{{name}}` it is for, where its token sits on screen, and whether its value takes focus. */
+interface VariablePopup {
+  name: string;
+  anchor: { left: number; top: number; height: number };
+  focus: boolean;
+}
 
 export function CodeEditor({
   value,
@@ -50,6 +48,37 @@ export function CodeEditor({
   const decorations = React.useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
   const idRef = React.useRef(Math.random().toString(36).slice(2));
   const setLast = useInsertTarget((s) => s.setLast);
+  const [popup, setPopupState] = React.useState<VariablePopup | null>(null);
+  const popupRef = React.useRef<VariablePopup | null>(null);
+  const popupContent = React.useRef<HTMLDivElement>(null);
+  /** The editor reports leaving after the popup reports entering, so the pointer's place is tracked here. */
+  const overPopup = React.useRef(false);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setPopup = (p: VariablePopup | null) => {
+    popupRef.current = p;
+    setPopupState(p);
+  };
+  const clearTimer = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  /** Closes the popup; after Esc or a save it hands the keyboard back to the editor. */
+  const closePopup = (refocus = false) => {
+    clearTimer();
+    if (!popupRef.current) return;
+    overPopup.current = false;
+    setPopup(null);
+    if (refocus) requestAnimationFrame(() => editorRef.current?.focus());
+  };
+  /** Closes after a moment, unless the pointer comes back or the popup holds the keyboard. */
+  const scheduleClose = () => {
+    clearTimer();
+    if (!popupRef.current) return;
+    timer.current = setTimeout(() => {
+      if (!overPopup.current && !popupContent.current?.contains(document.activeElement)) closePopup();
+    }, CLOSE_MS);
+  };
+  React.useEffect(() => clearTimer, []);
 
   const decorate = React.useCallback(() => {
     const editor = editorRef.current;
@@ -60,21 +89,9 @@ export function CodeEditor({
     for (const m of text.matchAll(REF)) {
       const start = model.getPositionAt(m.index);
       const end = model.getPositionAt(m.index + m[0].length);
-      const status = ctx.status(m[1]!);
-      const p = ctx.preview(m[1]!);
       items.push({
         range: new monaco.Range(start.lineNumber, start.column, end.lineNumber, end.column),
-        options: {
-          inlineClassName: status === 'bad' ? 'monaco-tpl-bad' : 'monaco-tpl-ok',
-          hoverMessage: {
-            value: [
-              `\`${m[1]}\` → ${p ? (p.preview ?? '') : '…'}${p?.resolved && scopeLabel(p.source) ? ` (${scopeLabel(p.source)})` : ''}`,
-              ...shadowNotes(p).map((n) => `⚠ ${n}`),
-              `[${p?.resolved ? 'Edit' : 'Add'} variable](command:${EDIT_VARIABLE}?${encodeURIComponent(JSON.stringify([idRef.current, m[1]]))}) · or ${modKey}-click it`,
-            ].join('\n\n'),
-            isTrusted: true,
-          },
-        },
+        options: { inlineClassName: ctx.status(m[1]!) === 'bad' ? 'monaco-tpl-bad' : 'monaco-tpl-ok' },
       });
     }
     decorations.current ??= editor.createDecorationsCollection();
@@ -87,18 +104,41 @@ export function CodeEditor({
   const handleMount: OnMount = (editor) => {
     editorRef.current = editor;
     decorate();
-    if (templates)
-      editor.onMouseDown((e) => {
+    if (templates) {
+      /** The `{{ref}}` under the pointer (its character, not the nearest caret position) and where it starts. */
+      const refUnder = (e: monaco.editor.IEditorMouseEvent) => {
         const pos = e.target.position;
         const model = editor.getModel();
-        if (!(e.event.metaKey || e.event.ctrlKey) || !pos || !model) return;
-        // The character under the pointer (mouseColumn), not the nearest caret position.
-        const column = e.target.mouseColumn || pos.column;
-        const ref = refAtChar(model.getValue(), model.getOffsetAt({ lineNumber: pos.lineNumber, column }));
-        if (!ref) return;
-        e.event.preventDefault();
-        useVariableDialog.setState({ editorId: idRef.current, name: ref });
+        if (!pos || !model || e.target.type !== monaco.editor.MouseTargetType.CONTENT_TEXT) return null;
+        return refRangeAt(model.getValue(), model.getOffsetAt({ lineNumber: pos.lineNumber, column: e.target.mouseColumn || pos.column }));
+      };
+      const anchorAt = (start: number) => {
+        const model = editor.getModel()!;
+        const v = editor.getScrolledVisiblePosition(model.getPositionAt(start));
+        const r = editor.getDomNode()!.getBoundingClientRect();
+        return { left: r.left + (v?.left ?? 0), top: r.top + (v?.top ?? 0), height: v?.height ?? 18 };
+      };
+      editor.onMouseMove((e) => {
+        const hit = refUnder(e);
+        if (!hit) return scheduleClose();
+        if (popupRef.current?.name === hit.name) return clearTimer();
+        clearTimer();
+        timer.current = setTimeout(() => setPopup({ name: hit.name, anchor: anchorAt(hit.start), focus: false }), OPEN_MS);
       });
+      editor.onMouseLeave(() => scheduleClose());
+      editor.onMouseDown((e) => {
+        if (!(e.event.metaKey || e.event.ctrlKey)) return;
+        const hit = refUnder(e);
+        if (!hit) return;
+        e.event.preventDefault();
+        clearTimer();
+        setPopup({ name: hit.name, anchor: anchorAt(hit.start), focus: true });
+      });
+      editor.onDidScrollChange(() => closePopup());
+      editor.onKeyDown((e) => {
+        if (![monaco.KeyCode.Meta, monaco.KeyCode.Ctrl, monaco.KeyCode.Shift, monaco.KeyCode.Alt].includes(e.keyCode)) closePopup();
+      });
+    }
     // Read-only editors (responses, history) are never insert targets.
     if (!readOnly)
       editor.onDidFocusEditorText(() =>
@@ -123,32 +163,41 @@ export function CodeEditor({
     onMount?.(editor as unknown as monaco.editor.IStandaloneCodeEditor);
   };
 
-  const dialog = useVariableDialog();
-  const editing = dialog.editorId === idRef.current ? dialog.name : null;
-
   return (
     <>
-      {editing && (
-        <Dialog open onOpenChange={(o) => !o && useVariableDialog.setState({ editorId: null, name: null })}>
-          <DialogContent
-          className="sm:max-w-md"
-          onCloseAutoFocus={(e) => {
-            // Runs once the dialog has let go of focus; it has no trigger button to return to.
-            e.preventDefault();
-            editorRef.current?.focus();
-          }}
-        >
-            <DialogHeader>
-              <DialogTitle>Variable</DialogTitle>
-            </DialogHeader>
-            <VariableRow
-              name={editing}
-              preview={ctx.preview(editing)}
-              focus
-              onDone={() => useVariableDialog.setState({ editorId: null, name: null })}
-            />
-          </DialogContent>
-        </Dialog>
+      {popup && (
+        <Popover open onOpenChange={(o) => !o && closePopup()}>
+          <PopoverAnchor asChild>
+            <span aria-hidden style={{ position: 'fixed', left: popup.anchor.left, top: popup.anchor.top, width: 1, height: popup.anchor.height, pointerEvents: 'none' }} />
+          </PopoverAnchor>
+          <PopoverContent
+            side="bottom"
+            className="flex w-[min(26rem,90vw)] flex-col gap-2.5 p-2.5"
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            onCloseAutoFocus={(e) => e.preventDefault()}
+            onMouseEnter={() => {
+              overPopup.current = true;
+              clearTimer();
+            }}
+            onMouseLeave={() => {
+              overPopup.current = false;
+              scheduleClose();
+            }}
+            onPointerDownOutside={(e) => {
+              // A ⌘-click on another variable in the editor opens that one instead of just closing.
+              const ev = e.detail.originalEvent;
+              if ((ev.metaKey || ev.ctrlKey) && editorRef.current?.getDomNode()?.contains(e.target as Node)) e.preventDefault();
+            }}
+            onEscapeKeyDown={(e) => {
+              e.preventDefault();
+              closePopup(true);
+            }}
+            ref={popupContent}
+          >
+            <VariableRow key={popup.name} name={popup.name} preview={ctx.preview(popup.name)} focus={popup.focus} onDone={() => closePopup(popup.focus)} />
+            {!popup.focus && <p className="text-[10.5px] text-muted-foreground">{modKey}-click a variable in the editor to edit it straight away.</p>}
+          </PopoverContent>
+        </Popover>
       )}
       <Editor
         value={value}

@@ -19,10 +19,10 @@ export function refsIn(input: string | undefined | null): string[] {
   return [...input.matchAll(REF)].map((m) => m[1]!);
 }
 
-/** The `{{ref}}` containing the character at `index` (the one under the pointer), if any. */
-export function refAtChar(input: string, index: number): string | null {
+/** The `{{ref}}` containing the character at `index` (the one under the pointer), and where it starts. */
+export function refRangeAt(input: string, index: number): { name: string; start: number } | null {
   for (const m of input.matchAll(REF)) {
-    if (index >= m.index && index < m.index + m[0].length) return m[1]!;
+    if (index >= m.index && index < m.index + m[0].length) return { name: m[1]!, start: m.index };
   }
   return null;
 }

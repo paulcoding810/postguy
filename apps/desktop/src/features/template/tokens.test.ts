@@ -1,21 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { refAtChar } from './tokens';
+import { refRangeAt } from './tokens';
 
-describe('refAtChar', () => {
+describe('refRangeAt', () => {
   const url = '{{baseUrl}}/users/{{ userId }}?q=1';
   it('finds the reference containing the character, braces included', () => {
-    expect(refAtChar(url, 0)).toBe('baseUrl');
-    expect(refAtChar(url, 5)).toBe('baseUrl');
-    expect(refAtChar(url, 10)).toBe('baseUrl');
-    expect(refAtChar(url, 22)).toBe('userId');
+    expect(refRangeAt(url, 0)).toEqual({ name: 'baseUrl', start: 0 });
+    expect(refRangeAt(url, 10)?.name).toBe('baseUrl');
+    expect(refRangeAt(url, 22)).toEqual({ name: 'userId', start: 18 });
   });
   it('returns null for characters outside references', () => {
-    expect(refAtChar(url, 11)).toBeNull();
-    expect(refAtChar(url, url.length)).toBeNull();
-    expect(refAtChar('', 0)).toBeNull();
+    expect(refRangeAt(url, 11)).toBeNull();
+    expect(refRangeAt(url, url.length)).toBeNull();
+    expect(refRangeAt('', 0)).toBeNull();
   });
   it('tells adjacent references apart', () => {
-    expect(refAtChar('{{a}}{{b}}', 4)).toBe('a');
-    expect(refAtChar('{{a}}{{b}}', 5)).toBe('b');
+    expect(refRangeAt('{{a}}{{b}}', 4)?.name).toBe('a');
+    expect(refRangeAt('{{a}}{{b}}', 5)).toEqual({ name: 'b', start: 5 });
   });
 });
