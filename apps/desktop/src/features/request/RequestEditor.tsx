@@ -1,3 +1,4 @@
+import * as React from 'react';
 import type { KeyValue, RequestDefinition } from '@postguy/shared';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -31,6 +32,7 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
   const preTypes = useRequestScriptTypes(tab.collectionId, tab.requestId, 'pre', draft.name);
   const postTypes = useRequestScriptTypes(tab.collectionId, tab.requestId, 'post', draft.name);
   const dot = <span className="size-1.5 rounded-full bg-success" />;
+  const nameFocused = React.useRef(false);
 
   return (
     <TemplateProvider draft={draft} collectionId={tab.collectionId} requestId={tab.requestId}>
@@ -42,6 +44,15 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
             aria-label="Request name"
             value={draft.name}
             onChange={(e) => set('name', e.target.value)}
+            onFocus={(e) => {
+              e.target.select();
+              nameFocused.current = true;
+            }}
+            onMouseUp={(e) => {
+              if (nameFocused.current) e.preventDefault();
+              nameFocused.current = false;
+            }}
+            onBlur={() => (nameFocused.current = false)}
             className="min-w-24 flex-1 bg-transparent font-medium text-foreground outline-none"
           />
         </div>

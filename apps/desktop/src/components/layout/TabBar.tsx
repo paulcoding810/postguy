@@ -1,4 +1,5 @@
 import { PlusIcon, WorkflowIcon, XIcon } from 'lucide-react';
+import * as React from 'react';
 import { Button } from '@/components/ui/button';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from '@/components/ui/menu';
 import { Kbd, Tooltip } from '@/components/ui/misc';
@@ -26,9 +27,27 @@ export function TabBar() {
     if (next) activate(next.id);
   };
   const ctrl = isMac ? '⌃' : 'Ctrl+';
+  const strip = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const el = strip.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || el.scrollWidth <= el.clientWidth) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  React.useEffect(() => {
+    strip.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [activeId, tabs.length]);
+
   return (
     <div className="flex h-9 shrink-0 items-stretch border-b bg-sidebar" role="tablist">
-      <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto [scrollbar-width:none]">
+      <div ref={strip} className="flex min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden [scrollbar-width:none]">
         {tabs.map((t) => {
           const dirty = isDirty(t);
           const req = isRequestTab(t) ? t : null;

@@ -3,6 +3,7 @@ import * as monaco from 'monaco-editor';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
 import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
 import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker';
+import { openExternal } from './openExternal';
 
 self.MonacoEnvironment = {
   getWorker(_id: string, label: string) {
@@ -34,6 +35,14 @@ monaco.typescript.javascriptDefaults.setCompilerOptions({
 });
 monaco.typescript.javascriptDefaults.setDiagnosticsOptions({ noSemanticValidation: false, noSyntaxValidation: false, diagnosticCodesToIgnore: [1108, 2304] });
 monaco.typescript.javascriptDefaults.setEagerModelSync(true);
+
+monaco.editor.registerLinkOpener({
+  open(uri) {
+    if (!['http', 'https', 'mailto'].includes(uri.scheme)) return false;
+    void openExternal(uri.toString(true));
+    return true;
+  },
+});
 
 loader.config({ monaco });
 
