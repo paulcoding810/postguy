@@ -163,3 +163,6 @@
   color: var(--ref-bad) !important;
   text-decoration: underline wavy;
 }
+.script-added-line {
+  background: color-mix(in oklch, var(--primary) 18%, transparent);
+}

@@ -5,14 +5,29 @@ import { Button } from '@/components/ui/button';
 import { Tooltip } from '@/components/ui/misc';
 import { JsonTree } from '@/features/memory/JsonTree';
 import { refFor } from '@/features/memory/refs';
+import { formatSegs, type Seg } from '@/features/memory/refs';
 import { useInsertTarget } from '@/features/template/TemplateContext';
+import { SaveVariableDialog } from './SaveVariableDialog';
+import { testLine } from './scriptSuggestions';
 
 /**
  * A collapsible view of a JSON response. For a saved request, rows copy or insert a
  * `{{Name.path}}` reference; otherwise they copy the plain path, since only saved requests are remembered.
  */
-export function ResponseTree({ value, requestName }: { value: unknown; requestName: string | null }) {
+export function ResponseTree({
+  value,
+  requestName,
+  hasCollection = false,
+  onAddScript,
+}: {
+  value: unknown;
+  requestName: string | null;
+  hasCollection?: boolean;
+  /** Appends lines to the request's post-response script; enables the save and test actions. */
+  onAddScript?: (code: string, message: string) => void;
+}) {
   const [filter, setFilter] = React.useState('');
+  const [saving, setSaving] = React.useState<Seg[] | null>(null);
   const [depth, setDepth] = React.useState(3);
   const [generation, setGeneration] = React.useState(0);
   const target = useInsertTarget((s) => s.last);
@@ -63,8 +78,21 @@ export function ResponseTree({ value, requestName }: { value: unknown; requestNa
           onCopy={(path) => copy(reference(path), requestName ? 'Reference' : 'Path')}
           copyLabel={(path) => (requestName ? `Copy ${reference(path)}` : `Copy path ${path} (save the request to reference it)`)}
           onCopyValue={(v) => copy(typeof v === 'string' ? v : JSON.stringify(v, null, 2), 'Value')}
+          onSave={onAddScript && ((segs) => setSaving(segs))}
+          onTest={onAddScript && ((segs, v) => onAddScript(testLine(segs, v), `Added a test for ${formatSegs(segs) || 'the body'}`))}
         />
       </div>
+      {onAddScript && (
+        <SaveVariableDialog
+          target={saving}
+          hasCollection={hasCollection}
+          onClose={() => setSaving(null)}
+          onSave={(code, name) => {
+            onAddScript(code, `Saves {{${name}}} after each response`);
+            setSaving(null);
+          }}
+        />
+      )}
     </div>
   );
 }

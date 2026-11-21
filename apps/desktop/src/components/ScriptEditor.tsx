@@ -2,13 +2,23 @@ import { useQueries } from '@tanstack/react-query';
 import { BookOpenIcon } from 'lucide-react';
 import * as React from 'react';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/menu';
 import { CodeEditor } from '@/components/CodeEditor';
 import { api } from '@/lib/api';
 import { scriptLib, setScriptLib, type ScriptTypeInput } from '@/lib/scriptTypes';
 import type { monaco } from '@/lib/monaco';
 import { useReferenceSources, useSnapshot } from '@/features/memory/queries';
 import { useFlowSources, useSavedRequest } from '@/features/flows/queries';
+import { useSaveScope } from '@/features/response/SaveVariableDialog';
+import { responseSnippets, type Suggestion } from '@/features/response/scriptSuggestions';
+
+export interface LastResponse {
+  status?: number;
+  contentType: string | null;
+  body: unknown;
+}
+
+const HIGHLIGHT_MS = 2500;
 
 const SNIPPETS: Record<'pre' | 'post', { label: string; code: string }[]> = {
   pre: [
@@ -30,12 +40,18 @@ export function ScriptEditor({
   phase,
   types,
   path,
+  lastResponse,
+  highlight,
 }: {
   value: string;
   onChange: (v: string) => void;
   phase: 'pre' | 'post';
   types: ScriptTypeInput;
   path: string;
+  /** The response snippets are written for; read when the menu opens. */
+  lastResponse?: () => LastResponse | null;
+  /** Lines just added elsewhere, revealed and highlighted; `key` changes for each addition. */
+  highlight?: { text: string; key: number } | null;
 }) {
   const editor = React.useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const lib = React.useMemo(() => scriptLib(types), [types]);
@@ -45,6 +61,36 @@ export function ScriptEditor({
   React.useEffect(() => {
     if (focused.current) setScriptLib(lib);
   }, [lib]);
+
+  const [fromResponse, setFromResponse] = React.useState<Suggestion[]>([]);
+  const scope = useSaveScope((s) => s.scope);
+  const onMenu = (open: boolean) => {
+    if (!open || phase !== 'post') return;
+    const r = lastResponse?.() ?? (types.self ? { contentType: null, body: types.self.body } : null);
+    setFromResponse(r ? responseSnippets(r, scope) : []);
+  };
+
+  const pendingHighlight = React.useRef(highlight);
+  pendingHighlight.current = highlight;
+  const shown = React.useRef<number | null>(null);
+  const showHighlight = React.useCallback(() => {
+    const ed = editor.current;
+    const h = pendingHighlight.current;
+    if (!ed || !h || shown.current === h.key) return;
+    const model = ed.getModel();
+    const at = model?.getValue().lastIndexOf(h.text.trimEnd()) ?? -1;
+    if (!model || at < 0) return;
+    shown.current = h.key;
+    const start = model.getPositionAt(at).lineNumber;
+    const end = model.getPositionAt(at + h.text.trimEnd().length).lineNumber;
+    ed.revealLinesInCenterIfOutsideViewport(start, end);
+    const decorations = ed.createDecorationsCollection([{ range: { startLineNumber: start, startColumn: 1, endLineNumber: end, endColumn: 1 }, options: { isWholeLine: true, className: 'script-added-line' } }]);
+    setTimeout(() => decorations.clear(), HIGHLIGHT_MS);
+  }, []);
+  React.useEffect(() => {
+    const t = setTimeout(showHighlight, 0);
+    return () => clearTimeout(t);
+  }, [highlight?.key, showHighlight]);
 
   const insert = (code: string) => {
     const ed = editor.current;
@@ -61,13 +107,25 @@ export function ScriptEditor({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 border-b px-3 py-1 text-[11px] text-muted-foreground">
         {phase === 'pre' ? 'Runs before variables are resolved; edit `request` to change what is sent.' : 'Runs after the response; `response` holds it. Failed assertions fail the request.'}
-        <DropdownMenu>
+        <DropdownMenu onOpenChange={onMenu}>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="xs" className="ml-auto">
               <BookOpenIcon /> Snippets
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          <DropdownMenuContent align="end" className="max-w-96">
+            {phase === 'post' && fromResponse.length > 0 && (
+              <>
+                <DropdownMenuLabel className="text-[11px] text-muted-foreground">From the last response</DropdownMenuLabel>
+                {fromResponse.map((s) => (
+                  <DropdownMenuItem key={s.label} onSelect={() => insert(s.code)}>
+                    <span className="truncate">{s.label}</span>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-[11px] text-muted-foreground">Examples</DropdownMenuLabel>
+              </>
+            )}
             {SNIPPETS[phase].map((s) => (
               <DropdownMenuItem key={s.label} onSelect={() => insert(s.code)}>
                 {s.label}
@@ -85,6 +143,7 @@ export function ScriptEditor({
           fieldLabel={phase === 'pre' ? 'Pre-request script' : 'Post-response script'}
           onMount={(ed) => {
             editor.current = ed;
+            setTimeout(showHighlight, 0);
             ed.onDidFocusEditorText(() => {
               focused.current = true;
               setScriptLib(libRef.current);

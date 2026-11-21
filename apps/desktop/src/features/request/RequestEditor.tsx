@@ -1,5 +1,6 @@
 import * as React from 'react';
 import type { KeyValue, RequestDefinition } from '@postguy/shared';
+import { toast } from 'sonner';
 import { ResizableGroup, ResizableHandle, ResizablePanel } from '@/components/ui/resizable';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useTree } from '@/hooks/queries';
@@ -8,7 +9,7 @@ import { useSendRequest } from './actions';
 import { TemplateProvider } from '@/features/template/TemplateProvider';
 import { inheritedAuthSource, chainTo } from '@/features/collections/treeUtils';
 import { ResponsePanel } from '@/features/response/ResponsePanel';
-import { ScriptEditor, useRequestScriptTypes } from '@/components/ScriptEditor';
+import { ScriptEditor, useRequestScriptTypes, type LastResponse } from '@/components/ScriptEditor';
 import { AuthEditor } from './AuthEditor';
 import { BodyEditor } from './BodyEditor';
 import { DocsTab } from './DocsTab';
@@ -33,6 +34,29 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
   const postTypes = useRequestScriptTypes(tab.collectionId, tab.requestId, 'post', draft.name);
   const dot = <span className="size-1.5 rounded-full bg-success" />;
   const nameFocused = React.useRef(false);
+  const [section, setSection] = React.useState('params');
+  const [added, setAdded] = React.useState<{ text: string; key: number } | null>(null);
+
+  const addPostScript = (code: string, message: string) => {
+    const current = useTabs.getState().tabs.find((t) => t.id === tab.id);
+    const post = current && isRequestTab(current) ? current.draft.scripts.post : draft.scripts.post;
+    const next = post.trim() ? `${post.replace(/\n*$/, '\n')}${code}` : code;
+    updateDraft(tab.id, (d) => ({ ...d, scripts: { ...d.scripts, post: next } }));
+    setSection('post');
+    setAdded({ text: code, key: Date.now() });
+    toast.success(message, { description: code.trim() });
+  };
+  const lastResponse = (): LastResponse | null => {
+    const r = tab.response;
+    if (!r || r.bodyEncoding !== 'utf8') return null;
+    let body: unknown;
+    try {
+      body = JSON.parse(r.body);
+    } catch {
+      body = r.body;
+    }
+    return { status: r.status ?? undefined, contentType: r.contentType, body };
+  };
 
   return (
     <TemplateProvider draft={draft} collectionId={tab.collectionId} requestId={tab.requestId}>
@@ -59,7 +83,7 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
         <UrlBar tab={tab} />
         <ResizableGroup id="request-response" orientation="vertical" className="min-h-0 flex-1">
           <ResizablePanel id="request" defaultSize="45%" minSize="15%">
-            <Tabs defaultValue="params" className="flex h-full min-h-0 flex-col">
+            <Tabs value={section} onValueChange={setSection} className="flex h-full min-h-0 flex-col">
               <TabsList>
                 <TabsTrigger value="params">Params {count([...draft.params, ...draft.pathParams])}</TabsTrigger>
                 <TabsTrigger value="headers">Headers {count(draft.headers)}</TabsTrigger>
@@ -120,6 +144,8 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
                   onChange={(v) => set('scripts', { ...draft.scripts, post: v })}
                   types={postTypes}
                   path={`file:///post-${tab.id}.js`}
+                  lastResponse={lastResponse}
+                  highlight={added}
                 />
               </TabsContent>
               <TabsContent value="docs" className="overflow-auto">
@@ -137,6 +163,8 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
               sending={tab.sending}
               requestId={tab.requestId}
               requestName={tab.requestId ? (tab.saved?.name ?? tab.draft.name) : null}
+              hasCollection={!!tab.collectionId}
+              onAddScript={addPostScript}
               onResend={() => {
                 const latest = useTabs.getState().tabs.find((t) => t.id === tab.id);
                 if (isRequestTab(latest)) void send(latest);

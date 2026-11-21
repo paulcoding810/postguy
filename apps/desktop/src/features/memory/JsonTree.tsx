@@ -1,4 +1,4 @@
-import { ChevronRightIcon, ClipboardIcon, CopyIcon, CornerDownLeftIcon } from 'lucide-react';
+import { BookmarkPlusIcon, ChevronRightIcon, ClipboardIcon, CopyIcon, CornerDownLeftIcon, FlaskConicalIcon } from 'lucide-react';
 import * as React from 'react';
 import { Tooltip } from '@/components/ui/misc';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,10 @@ export interface JsonTreeProps {
   onCopyValue?: (value: unknown) => void;
   /** Tooltip for the copy action; defaults to copying a reference. */
   copyLabel?: (path: string) => string;
+  /** Shows a save-as-variable action on each row. */
+  onSave?: (segs: Seg[], value: unknown) => void;
+  /** Shows an add-a-test action on each row. */
+  onTest?: (segs: Seg[], value: unknown) => void;
 }
 
 function kind(v: unknown): string {
@@ -117,6 +121,20 @@ function Row({ row, props, onToggle }: { row: FlatRow; props: JsonTreeProps; onT
         <span className={cn('truncate', TONE[k])}>{scalarText(value)}</span>
       )}
       <span className="ml-auto flex shrink-0 gap-0.5 opacity-0 group-hover:opacity-100">
+        {props.onSave && (
+          <Tooltip content="Save as a variable (adds a line to the post-response script)">
+            <button type="button" className="rounded p-0.5 hover:bg-background" onClick={() => props.onSave!(row.segs, value)} aria-label="Save as variable">
+              <BookmarkPlusIcon className="size-3" />
+            </button>
+          </Tooltip>
+        )}
+        {props.onTest && (
+          <Tooltip content="Test this value (adds a line to the post-response script)">
+            <button type="button" className="rounded p-0.5 hover:bg-background" onClick={() => props.onTest!(row.segs, value)} aria-label="Test this value">
+              <FlaskConicalIcon className="size-3" />
+            </button>
+          </Tooltip>
+        )}
         {props.onCopyValue && (
           <Tooltip content="Copy value">
             <button type="button" className="rounded p-0.5 hover:bg-background" onClick={() => props.onCopyValue!(value)} aria-label="Copy value">

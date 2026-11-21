@@ -72,7 +72,12 @@ export function ResponsePanel({
   requestId,
   requestName = null,
   onResend,
+  hasCollection = false,
+  onAddScript,
 }: {
+  hasCollection?: boolean;
+  /** Appends lines to the post-response script, from the tree view's save and test actions. */
+  onAddScript?: (code: string, message: string) => void;
   response: SendResult | null;
   sending: boolean;
   requestId: string | null;
@@ -180,7 +185,7 @@ export function ResponsePanel({
               </Button>
             </div>
             {shown === 'tree' && json?.ok ? (
-              <ResponseTree value={json.value} requestName={requestName} />
+              <ResponseTree value={json.value} requestName={requestName} hasCollection={hasCollection} onAddScript={onAddScript} />
             ) : (
               <div className="min-h-0 flex-1">
                 <CodeEditor
