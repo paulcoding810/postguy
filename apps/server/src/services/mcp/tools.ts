@@ -17,7 +17,8 @@ import { withSource } from '../changelog.ts';
 import { notifyChange } from '../changes.ts';
 import { send } from '../send.ts';
 import { setVariable } from '../variables.ts';
-import { environmentFor, hiddenSecrets, mask, requirePermission, secretHostGuard, type Permission } from './policy.ts';
+import { markUntrusted } from '../settings.ts';
+import { allKnownHosts, environmentFor, hiddenSecrets, mask, requirePermission, secretHostGuard, type Permission } from './policy.ts';
 
 const BODY_LIMIT = 20_000;
 
@@ -84,7 +85,9 @@ export function createMcpServer(db: Db): McpServer {
       (async (args: any) => {
         try {
           requirePermission(db, need);
+          const hostsBefore = need === 'edit' ? allKnownHosts(db) : null;
           const result = json(await withSource('mcp', () => handler(args)));
+          if (hostsBefore) markUntrusted(db, [...allKnownHosts(db)].filter((h) => !hostsBefore.has(h)));
           if (need !== 'read') notifyChange({ origin: null, what: `mcp:${name}` });
           return result;
         } catch (e) {
@@ -101,7 +104,7 @@ export function createMcpServer(db: Db): McpServer {
 
   tool('get_request', 'read', 'Shows a saved request in full: URL, params, headers, auth, body and scripts. Secrets are masked.', { id: z.string() }, ({ id }) => {
     const r = getRequest(db, id);
-    return mask(r, hiddenSecrets(db, r.collectionId, environmentFor(db)));
+    return mask(r, hiddenSecrets(db, environmentFor(db)));
   });
 
   tool('list_environments', 'read', 'Lists environments and which one is active. Variables are not included; use get_variables.', {}, () =>
@@ -125,7 +128,7 @@ export function createMcpServer(db: Db): McpServer {
       const saved = requestId ? getRequest(db, requestId) : null;
       const cid = collectionId ?? saved?.collectionId ?? null;
       const { ctx } = buildContext(db, { collectionId: cid, requestId: saved?.id ?? null, environmentId: env?.id ?? null });
-      const hidden = hiddenSecrets(db, cid, env);
+      const hidden = hiddenSecrets(db, env);
       return {
         environment: env?.name ?? null,
         variables: [...ctx.variables].map(([key, v]) => ({ key, source: v.source, secret: v.secret, value: mask(v.value, hidden) })),
@@ -139,7 +142,7 @@ export function createMcpServer(db: Db): McpServer {
 
   tool('get_history_entry', 'read', 'Shows one past send: the request as sent and the response (body clipped). Secrets are masked.', { id: z.string() }, ({ id }) => {
     const h = getHistoryEntry(db, id);
-    return mask({ ...h, responseBody: clip(h.responseBody) }, hiddenSecrets(db, null, null));
+    return mask({ ...h, responseBody: clip(h.responseBody) }, hiddenSecrets(db, null));
   });
 
   tool('list_flows', 'read', 'Lists flows (chains of requests).', {}, () => listFlows(db).map((f) => ({ id: f.id, name: f.name, collectionId: f.collectionId })));
@@ -148,12 +151,12 @@ export function createMcpServer(db: Db): McpServer {
     const f = getFlow(db, id);
     return mask(
       { id: f.id, name: f.name, settings: f.settings, steps: f.steps.map((s) => ({ id: s.id, name: s.name, kind: s.kind, requestId: s.requestId, expression: s.expression })), connections: f.connections },
-      hiddenSecrets(db, f.collectionId, environmentFor(db)),
+      hiddenSecrets(db, environmentFor(db)),
     );
   });
 
   tool('get_flow_run', 'read', 'Shows the result of a flow run: each step, its status, response and test results.', { executionId: z.string() }, ({ executionId }) =>
-    mask(buildReport(db, executionId), hiddenSecrets(db, null, null)),
+    mask(buildReport(db, executionId), hiddenSecrets(db, null)),
   );
 
   tool(
@@ -198,7 +201,7 @@ export function createMcpServer(db: Db): McpServer {
         { requestId: saved?.id, collectionId: saved?.collectionId ?? null, environmentId: env?.id ?? null, request: def },
         { source: 'mcp', guard: secretHostGuard(db, env?.id ?? null) },
       );
-      const hidden = hiddenSecrets(db, saved?.collectionId ?? null, env);
+      const hidden = hiddenSecrets(db, env);
       return mask(
         {
           historyId: res.historyId,
@@ -229,7 +232,7 @@ export function createMcpServer(db: Db): McpServer {
       await Promise.race([waitForExecution(exec.id), new Promise((r) => setTimeout(r, 120_000))]);
       const done = getExecution(db, exec.id);
       if (done.status === 'running' || done.status === 'paused') return { executionId: exec.id, status: done.status, note: 'Still running; check get_flow_run later.' };
-      return mask(buildReport(db, exec.id), hiddenSecrets(db, getFlow(db, flowId).collectionId, env));
+      return mask(buildReport(db, exec.id), hiddenSecrets(db, env));
     },
   );
 
@@ -241,13 +244,13 @@ export function createMcpServer(db: Db): McpServer {
     { collectionId: z.string(), ...RequestFields, name: z.string().min(1), url: z.string() },
     ({ collectionId, ...patch }) => {
       const def = RequestDefinition.parse({ method: 'GET', ...toPatch(patch) });
-      return mask(createRequest(db, { ...def, collectionId }), hiddenSecrets(db, collectionId, environmentFor(db)));
+      return mask(createRequest(db, { ...def, collectionId }), hiddenSecrets(db, environmentFor(db)));
     },
   );
 
   tool('update_request', 'edit', 'Changes a saved request. Only the given fields change; headers and params replace the existing ones.', { id: z.string(), ...RequestFields }, ({ id, ...patch }) => {
     const r = updateRequest(db, id, toPatch(patch));
-    return mask(r, hiddenSecrets(db, r.collectionId, environmentFor(db)));
+    return mask(r, hiddenSecrets(db, environmentFor(db)));
   });
 
   tool(
@@ -258,7 +261,7 @@ export function createMcpServer(db: Db): McpServer {
     ({ collectionId, command, name }) => {
       const parsed = parseCurl(command);
       const r = createRequest(db, { ...parsed.request, ...(name && { name }), collectionId });
-      return { request: mask(r, hiddenSecrets(db, collectionId, environmentFor(db))), warnings: parsed.warnings };
+      return { request: mask(r, hiddenSecrets(db, environmentFor(db))), warnings: parsed.warnings };
     },
   );
 

@@ -1,12 +1,14 @@
-import { MASK, redactText, resolveTemplate, type ResolvedRequest } from '@postguy/core';
-import type { Environment } from '@postguy/shared';
+import { authSecretValues, MASK, redactAuth, redactText, resolveTemplate, type ResolvedRequest } from '@postguy/core';
+import type { Auth, Environment } from '@postguy/shared';
+import { eq } from 'drizzle-orm';
+import { collections, requests, variables } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
 import { HttpError } from '../../lib/errors.ts';
-import { ancestry, getTree } from '../collections.ts';
+import { getTree } from '../collections.ts';
 import { buildContext } from '../context.ts';
 import { activeEnvironment, getEnvironment, listEnvironments } from '../environments.ts';
 import { getRequest } from '../requests.ts';
-import { getMcpSettings } from '../settings.ts';
+import { getMcpSettings, untrustedHosts } from '../settings.ts';
 import { listVariables } from '../variables.ts';
 
 export type Permission = 'read' | 'send' | 'edit';
@@ -29,20 +31,38 @@ export function environmentFor(db: Db, ref?: string | null): Environment | null 
   return env;
 }
 
-/** Secret values in scope that Claude must not see, except those of an environment that allows it. */
-export function hiddenSecrets(db: Db, collectionId: string | null, environment: Environment | null): string[] {
+const MIN_LITERAL = 4;
+
+/**
+ * Values Claude must not see: every secret variable in any scope (except those of an environment
+ * that allows it), and credentials typed straight into requests' or folders' auth.
+ */
+export function hiddenSecrets(db: Db, environment: Environment | null): string[] {
   const reveal = environment?.mcpRevealSecrets ? environment.id : null;
-  const scopes = [
-    ...listEnvironments(db).filter((e) => e.id !== reveal).map((e) => ({ scope: e.kind === 'global' ? ('global' as const) : ('environment' as const), owner: e.id })),
-    ...ancestry(db, collectionId).map((c) => ({ scope: 'collection' as const, owner: c.id })),
-  ];
-  return scopes.flatMap(({ scope, owner }) => listVariables(db, scope, owner, true).filter((v) => v.isSecret && v.value).map((v) => v.value));
+  const fromVars = db
+    .select({ value: variables.value, scope: variables.scope, ownerId: variables.ownerId })
+    .from(variables)
+    .where(eq(variables.isSecret, true))
+    .all()
+    .filter((v) => v.value && !(v.scope === 'environment' && v.ownerId === reveal))
+    .map((v) => v.value);
+  const auths = [...db.select({ auth: requests.auth }).from(requests).all(), ...db.select({ auth: collections.auth }).from(collections).all()];
+  const literal = auths.flatMap((a) => authSecretValues(a.auth)).filter((v) => v.length >= MIN_LITERAL && !v.includes('{{'));
+  return [...new Set([...fromVars, ...literal])].sort((a, b) => b.length - a.length);
 }
 
-/** Replaces secret values anywhere in a JSON-able value. */
+/** Replaces secret values inside the strings of a JSON-able value, and hides auth credentials. */
 export function mask<T>(value: T, secrets: string[]): T {
-  if (!secrets.length) return value;
-  return JSON.parse(redactText(JSON.stringify(value), secrets.map((s) => JSON.stringify(s).slice(1, -1)))) as T;
+  const walk = (v: unknown, key?: string): unknown => {
+    if (typeof v === 'string') return secrets.length ? redactText(v, secrets) : v;
+    if (Array.isArray(v)) return v.map((x) => walk(x));
+    if (v && typeof v === 'object') {
+      if (key === 'auth' && 'type' in v) return redactAuth(v as Auth);
+      return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x, k)]));
+    }
+    return v;
+  };
+  return walk(value) as T;
 }
 
 function hostOf(url: string): string | null {
@@ -75,6 +95,13 @@ export function knownHosts(db: Db, environmentId: string | null): Set<string> {
   return hosts;
 }
 
+/** Hosts any environment's view of the workspace points at, to notice the ones an edit adds. */
+export function allKnownHosts(db: Db): Set<string> {
+  const out = new Set<string>();
+  for (const id of [null, ...listEnvironments(db).filter((e) => e.kind !== 'global').map((e) => e.id)]) for (const h of knownHosts(db, id)) out.add(h);
+  return out;
+}
+
 /** The send guard for Claude: secrets only travel to hosts the user already sends them to. */
 export function secretHostGuard(db: Db, environmentId: string | null) {
   let known: Set<string> | null = null;
@@ -82,7 +109,7 @@ export function secretHostGuard(db: Db, environmentId: string | null) {
     if (!usedSecrets.length) return null;
     known ??= knownHosts(db, environmentId);
     const host = hostOf(request.url);
-    if (host && known.has(host)) return null;
+    if (host && known.has(host) && !untrustedHosts(db).has(host)) return null;
     return {
       code: 'MCP_SECRET_HOST_BLOCKED',
       message: `Not sent: this request would carry a secret to ${host ?? 'an unknown host'}, which none of your saved requests use. Send it from Postguy yourself if it is intended.`,

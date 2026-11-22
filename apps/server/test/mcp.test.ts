@@ -200,3 +200,49 @@ describe('postguy-mcp bridge', () => {
     expect(out).toEqual([{ jsonrpc: '2.0', id: 7, error: { code: -32000, message: "Postguy isn't running. Open Postguy and try again." } }]);
   });
 });
+
+describe('Claude (MCP) secret handling', () => {
+  const other = () => h.mockUrl.replace('127.0.0.1', 'localhost');
+
+  it("can't open the host lock by saving a request or variable that points elsewhere", async () => {
+    await allow({ enabled: true, read: true, send: true, edit: true });
+    const steal = { requestId: ids.echo, url: `${other()}/echo` };
+    expect((await tool('send_request', steal)).value.error.code).toBe('MCP_SECRET_HOST_BLOCKED');
+    await tool('set_variable', { scope: 'collection', owner: ids.collection, key: 'mirror', value: other() });
+    await tool('create_request', { collectionId: ids.collection, name: 'Decoy', url: `${other()}/x` });
+    expect((await tool('send_request', steal)).value.error.code).toBe('MCP_SECRET_HOST_BLOCKED');
+
+    // Once the user sends there themselves, it is their host again.
+    const decoy = (await h.call('GET', '/collections/tree')).body[0].requests.find((r: any) => r.name === 'Decoy');
+    await h.call('POST', '/send', { requestId: decoy.id, collectionId: ids.collection, request: (await h.call('GET', `/requests/${decoy.id}`)).body });
+    expect((await tool('send_request', steal)).value.status).toBe(200);
+  });
+
+  it('masks request secrets, literal credentials and secrets in history bodies', async () => {
+    await allow({ enabled: true, read: true, send: true });
+    await h.call('PUT', `/variables/request/${ids.echo}`, { variables: [{ key: 'reqSecret', value: 'REQSECRET-xyz', isSecret: true }] });
+    await h.call('PATCH', `/requests/${ids.echo}`, {
+      headers: [{ id: 'h1', key: 'X-Req', value: '{{reqSecret}}', enabled: true }],
+      auth: { type: 'bearer', token: 'LITERAL-TOKEN-999' },
+    });
+    const vars = (await tool('get_variables', { requestId: ids.echo })).value.variables;
+    expect(vars.find((v: any) => v.key === 'reqSecret').value).toBe('••••••');
+    const req = (await tool('get_request', { id: ids.echo })).value;
+    expect(JSON.stringify(req)).not.toContain('LITERAL-TOKEN-999');
+    const sent = await tool('send_request', { requestId: ids.echo });
+    expect(sent.error).toBeNull();
+    expect(JSON.stringify(sent.value)).not.toMatch(/REQSECRET-xyz|LITERAL-TOKEN-999/);
+    const entry = await tool('get_history_entry', { id: sent.value.historyId });
+    expect(JSON.stringify(entry.value)).not.toMatch(/REQSECRET-xyz|LITERAL-TOKEN-999/);
+  });
+
+  it('keeps working when a secret looks like a number or true', async () => {
+    await allow({ enabled: true, read: true, send: true });
+    await h.call('PUT', `/variables/collection/${ids.collection}/pin`, { value: '200', isSecret: true });
+    await h.call('PUT', `/variables/collection/${ids.collection}/flag`, { value: 'true', isSecret: true });
+    const sent = await tool('send_request', { requestId: ids.echo });
+    expect(sent.error).toBeNull();
+    expect(sent.value.status).toBe(200);
+    expect((await tool('get_request', { id: ids.echo })).error).toBeNull();
+  });
+});

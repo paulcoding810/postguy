@@ -42,6 +42,7 @@ import { getRequest } from './requests.ts';
 import { loadScripts } from './scripts.ts';
 import { listVariables, replaceVariables, setVariable } from './variables.ts';
 import { withSource } from './changelog.ts';
+import { trustHostOf } from './settings.ts';
 
 export const HISTORY_BODY_LIMIT = 5 * 1024 * 1024;
 export const SCRIPT_TIMEOUT_MS = 2000;
@@ -320,6 +321,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     .run();
 
   afterSend(db);
+  if (opts.source !== 'mcp' && raw.status !== null) trustHostOf(db, resolution.request.url);
   let snapshotId: string | null = null;
   let validation: SendResult['validation'] = null;
   if (saved && raw.status !== null && textual) {
