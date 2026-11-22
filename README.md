@@ -112,7 +112,7 @@ Each collection keeps a history of edits to its requests, folders, scripts, auth
 
 ## Claude (MCP)
 
-Claude Code can use Postguy through the Model Context Protocol: find and send requests, read variables, history and flow runs, run flows, and create or change requests. Turn it on in **Claude (MCP)** (the robot icon in the top bar, or ⌘K), then run the setup command shown there once, e.g. `claude mcp add postguy -- node apps/server/bin/postguy-mcp.mjs`. The bridge finds the running app through `server.json` in its data folder, so Claude reaches Postguy only while it is open.
+Claude Code can use Postguy through the Model Context Protocol: find and send requests, read variables, history and flow runs, run flows, and create or change requests. Turn it on in **Settings → Claude (MCP)** (the robot icon in the top bar, ⌘, or ⌘K), then run the setup command shown there once, e.g. `claude mcp add postguy -- node apps/server/bin/postguy-mcp.mjs`. The bridge finds the running app through `server.json` in its data folder, so Claude reaches Postguy only while it is open.
 
 - **Off by default.** Once on, Claude may only read until you also allow **Send requests** and **Edit**. Each tool call checks the current switches.
 - **Secrets stay hidden.** Secret values are masked in everything Claude reads, including response bodies that echo them; `decode_jwt` returns a token's claims but never the token. Claude writes `{{name}}` and Postguy fills it in when sending.

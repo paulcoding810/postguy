@@ -2,7 +2,8 @@ import { invoke } from '@tauri-apps/api/core';
 import type { Update } from '@tauri-apps/plugin-updater';
 import * as React from 'react';
 import { toast } from 'sonner';
-import { create } from 'zustand';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, errorMessage } from './api';
 import { openExternal } from './openExternal';
 import { isTauri } from './server';
 
@@ -26,14 +27,30 @@ function write(key: string, value: string) {
   }
 }
 
-/** Whether Postguy checks for updates by itself, at launch and daily; on unless turned off. */
-export const useAutoUpdateCheck = create<{ on: boolean; set: (on: boolean) => void }>((set) => ({
-  on: read(AUTO_KEY) !== 'off',
-  set: (on) => {
-    write(AUTO_KEY, on ? 'on' : 'off');
-    set({ on });
-  },
-}));
+const PREFS = ['settings', 'preferences'] as const;
+
+/** Whether Postguy checks for updates by itself, at launch and daily; kept with the data, on unless turned off. */
+export function useAutoUpdateCheck(): { on: boolean; set: (on: boolean) => void } {
+  const qc = useQueryClient();
+  const prefs = useQuery({ queryKey: PREFS, queryFn: () => api('GET /settings/preferences'), staleTime: Infinity });
+  React.useEffect(() => {
+    // Carry over the choice older versions kept in the webview.
+    if (!prefs.data || read(AUTO_KEY) !== 'off') return;
+    try {
+      localStorage.removeItem(AUTO_KEY);
+    } catch {
+      /* storage unavailable */
+    }
+    if (prefs.data.autoUpdateCheck) void api('PATCH /settings/preferences', { body: { autoUpdateCheck: false } }).then((p) => qc.setQueryData(PREFS, p));
+  }, [prefs.data, qc]);
+  return {
+    on: prefs.data?.autoUpdateCheck ?? false,
+    set: (on) =>
+      void api('PATCH /settings/preferences', { body: { autoUpdateCheck: on } })
+        .then((p) => qc.setQueryData(PREFS, p))
+        .catch((e) => toast.error(errorMessage(e))),
+  };
+}
 
 interface Support {
   enabled: boolean;
@@ -117,7 +134,7 @@ async function install(update: Update) {
 
 /** Checks at launch and then daily while automatic checks are on; answers the macOS menu item. */
 export function useUpdateChecks() {
-  const on = useAutoUpdateCheck((s) => s.on);
+  const { on } = useAutoUpdateCheck();
   React.useEffect(() => {
     if (!isTauri || !on) return;
     const due = () => Date.now() - Number(read(LAST_KEY) ?? 0) >= DAY_MS;

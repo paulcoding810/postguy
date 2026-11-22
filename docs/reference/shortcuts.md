@@ -15,6 +15,7 @@ On Windows and Linux, use <kbd>Ctrl</kbd> where these say <kbd>⌘</kbd>.
 | <kbd>⌘9</kbd> | Go to the last tab |
 | <kbd>⌘J</kbd> | Show or hide the Smart Data panel |
 | <kbd>⌘⇧E</kbd> | Manage environments |
+| <kbd>⌘,</kbd> | Settings |
 
 ## In a request
 

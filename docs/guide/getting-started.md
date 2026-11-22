@@ -37,14 +37,13 @@ See [Import and export](/guide/import-export).
 
 Postguy checks for a new version at most once a day. When there is one, a message offers **Restart to update** and links to what's new. Nothing installs until you click.
 
-- <kbd>⌘K</kbd> → *Check for updates…* checks right away; on macOS it's also in the Postguy menu.
-- <kbd>⌘K</kbd> → *Turn off automatic update checks* stops the daily check. You can still check by hand.
+- **Settings → General** (<kbd>⌘,</kbd>) shows your version, has **Check now**, and turns the daily check off. *Check for updates…* is also in <kbd>⌘K</kbd> and, on macOS, the Postguy menu.
 - Before an update changes the database, a copy is kept next to it as `postguy.db.bak-before-…`.
 - On Linux, only the AppImage updates itself; `.deb` and `.rpm` installs get a download link.
 
 ## Where your data lives
 
-The installed app keeps its database, logs (`server.log`) and settings in your operating system's app-data folder. Nothing is synced or sent anywhere, apart from the requests you send and the [update check](#updates).
+The installed app keeps its database, logs (`server.log`) and settings in your operating system's app-data folder. **Settings → Data** shows where, and the backups taken before updates. Nothing is synced or sent anywhere, apart from the requests you send and the [update check](#updates).
 
 ## Find your way around
 

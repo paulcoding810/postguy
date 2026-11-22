@@ -5,7 +5,7 @@ import { isTauri } from '@/lib/server';
 import { cn, isMac, modKey } from '@/lib/utils';
 import { useUi } from '@/stores/ui';
 import { EnvironmentSwitcher } from '@/features/environments/EnvironmentSwitcher';
-import { useMcpDialog } from '@/features/mcp/McpSettings';
+import { useSettings } from '@/features/settings/SettingsDialog';
 
 export function TopBar() {
   const { theme, setTheme, setSearchOpen, smartPanel, toggleSmartPanel } = useUi();
@@ -29,7 +29,7 @@ export function TopBar() {
       </button>
       <EnvironmentSwitcher />
       <Tooltip content="Claude (MCP)">
-        <Button variant="ghost" size="icon-sm" onClick={() => useMcpDialog.getState().setOpen(true)} aria-label="Claude (MCP) settings">
+        <Button variant="ghost" size="icon-sm" onClick={() => useSettings.getState().open('claude')} aria-label="Claude (MCP) settings">
           <BotIcon />
         </Button>
       </Tooltip>

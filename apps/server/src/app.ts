@@ -11,6 +11,7 @@ import { sendRoutes } from './routes/send.ts';
 import { changeRoutes } from './routes/changes.ts';
 import { eventRoutes } from './routes/events.ts';
 import { mcpRoutes } from './routes/mcp.ts';
+import { settingsRoutes } from './routes/settings.ts';
 import { workspaceRoutes } from './routes/workspace.ts';
 
 export { VERSION } from './lib/version.ts';
@@ -60,6 +61,7 @@ export async function buildServer(opts: ServerOptions): Promise<FastifyInstance>
   openapiRoutes(app, opts.db);
   flowRoutes(app, opts.db);
   mcpRoutes(app, opts.db, opts.dataDir ?? null);
+  settingsRoutes(app, opts.db, opts.dataDir ?? null);
   changeRoutes(app, opts.db);
   return app;
 }

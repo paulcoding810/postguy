@@ -25,7 +25,7 @@ Click the request name above the URL to rename it. The whole name is selected, s
 | **Body** | JSON, text, form-data, URL-encoded or a binary file |
 | **Pre-request** / **Post-response** | [Scripts](/guide/scripts) |
 | **Docs** | The OpenAPI operation the request came from, and its [examples](/guide/examples) |
-| **Settings** | Timeout, following redirects, TLS certificate checks, and whether to use the cookie jar |
+| **Settings** | Timeout, following redirects, TLS certificate checks, and whether to use the cookie jar. Unset values follow the defaults in **Settings → Requests** (<kbd>⌘,</kbd>); **Use default** puts a changed one back |
 
 ### Editing variables in place
 

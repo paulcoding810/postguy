@@ -1,22 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CopyIcon, ShieldCheckIcon } from 'lucide-react';
 import { toast } from 'sonner';
-import { create } from 'zustand';
 import type { McpSettings as Settings } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/misc';
 import { api, errorMessage } from '@/lib/api';
 import { useUi } from '@/stores/ui';
 
-export const useMcpDialog = create<{ open: boolean; setOpen: (open: boolean) => void }>((set) => ({
-  open: false,
-  setOpen: (open) => set({ open }),
-}));
-
 const KEY = ['settings', 'mcp'] as const;
 
-function Row({ title, detail, checked, disabled, onChange }: { title: string; detail: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
+export function Row({ title, detail, checked, disabled, onChange }: { title: string; detail: string; checked: boolean; disabled?: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex items-start justify-between gap-4 py-2">
       <span className="flex flex-col gap-0.5">
@@ -29,11 +22,10 @@ function Row({ title, detail, checked, disabled, onChange }: { title: string; de
 }
 
 /** Settings → Claude: whether Claude may read, send and edit through MCP, and how to connect it. */
-export function McpSettingsDialog() {
-  const { open, setOpen } = useMcpDialog();
+export function McpSettingsPanel() {
   const qc = useQueryClient();
-  const settings = useQuery({ queryKey: KEY, queryFn: () => api('GET /settings/mcp'), enabled: open });
-  const setup = useQuery({ queryKey: ['settings', 'mcp', 'setup'], queryFn: () => api('GET /settings/mcp/setup'), enabled: open });
+  const settings = useQuery({ queryKey: KEY, queryFn: () => api('GET /settings/mcp') });
+  const setup = useQuery({ queryKey: ['settings', 'mcp', 'setup'], queryFn: () => api('GET /settings/mcp/setup') });
   const save = useMutation({
     mutationFn: (patch: Partial<Settings>) => api('PATCH /settings/mcp', { body: patch }),
     onSuccess: (next) => qc.setQueryData(KEY, next),
@@ -43,12 +35,8 @@ export function McpSettingsDialog() {
   const set = (patch: Partial<Settings>) => save.mutate(patch);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Claude (MCP)</DialogTitle>
-          <DialogDescription>Let Claude Code use your requests, environments and flows through the Model Context Protocol.</DialogDescription>
-        </DialogHeader>
+    <div className="flex flex-col gap-4">
+      <p className="text-xs text-muted-foreground">Let Claude Code use your requests, environments and flows through the Model Context Protocol.</p>
         {s && (
           <div className="flex flex-col">
             <Row title="Allow Claude" detail="Off by default. While off, Claude sees the tools but every call is refused." checked={s.enabled} onChange={(v) => set({ enabled: v })} />
@@ -86,7 +74,6 @@ export function McpSettingsDialog() {
             <span className="text-[11px] text-muted-foreground">Claude reaches Postguy only while the app is open.</span>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+    </div>
   );
 }

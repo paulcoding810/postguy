@@ -16,6 +16,7 @@ import { TopBar } from './TopBar';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useLiveChanges } from '@/hooks/useLiveChanges';
 import { useUpdateChecks } from '@/lib/updates';
+import { useSettings } from '@/features/settings/SettingsDialog';
 
 function useShortcuts() {
   const send = useSendRequest();
@@ -56,6 +57,9 @@ function useShortcuts() {
       } else if (key === 'j') {
         e.preventDefault();
         ui.toggleSmartPanel();
+      } else if (key === ',') {
+        e.preventDefault();
+        useSettings.getState().open('general');
       } else if (key === 'e' && e.shiftKey) {
         e.preventDefault();
         ui.openEnvManager();

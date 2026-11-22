@@ -128,7 +128,7 @@ async fn pick_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
-/// Adds "Check for Updates…" under the app menu; the window does the checking.
+/// Adds "Check for Updates…" and "Settings…" under the app menu; the window handles both.
 #[cfg(target_os = "macos")]
 fn add_update_menu_item(app: &mut tauri::App) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem, MenuItemKind};
@@ -137,11 +137,14 @@ fn add_update_menu_item(app: &mut tauri::App) -> tauri::Result<()> {
     if let Some(MenuItemKind::Submenu(app_menu)) = menu.items()?.into_iter().next() {
         let item = MenuItem::with_id(app, "check-updates", "Check for Updates…", true, None::<&str>)?;
         app_menu.insert(&item, 1)?;
+        let settings = MenuItem::with_id(app, "open-settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+        app_menu.insert(&settings, 2)?;
     }
     app.set_menu(menu)?;
     app.on_menu_event(|app, event| {
-        if event.id() == "check-updates" {
-            let _ = app.emit("check-updates", ());
+        let id = event.id().as_ref();
+        if id == "check-updates" || id == "open-settings" {
+            let _ = app.emit(id, ());
         }
     });
     Ok(())

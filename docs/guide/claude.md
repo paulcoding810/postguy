@@ -4,7 +4,7 @@ Claude Code can use Postguy through the Model Context Protocol (MCP): find and s
 
 ## Setting it up
 
-1. Open **Claude (MCP)**: the robot icon in the top bar, or <kbd>⌘K</kbd> → *Claude (MCP) settings*.
+1. Open **Settings → Claude (MCP)**: the robot icon in the top bar, <kbd>⌘,</kbd>, or <kbd>⌘K</kbd> → *Claude (MCP) settings*.
 2. Turn it on and choose what Claude may do.
 3. Run the command shown there once in a terminal. It looks like this:
 

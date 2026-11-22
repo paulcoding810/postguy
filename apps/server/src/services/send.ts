@@ -42,7 +42,7 @@ import { getRequest } from './requests.ts';
 import { loadScripts } from './scripts.ts';
 import { listVariables, replaceVariables, setVariable } from './variables.ts';
 import { withSource } from './changelog.ts';
-import { trustHostOf } from './settings.ts';
+import { effectiveSettings, trustHostOf } from './settings.ts';
 
 export const HISTORY_BODY_LIMIT = 5 * 1024 * 1024;
 export const SCRIPT_TIMEOUT_MS = 2000;
@@ -288,7 +288,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
   const loaded = loadBodyFiles(resolution.request.body);
   if ('error' in loaded) return failure(def, loaded.error, [], scripts, redactedRequest);
   resolution.request.body = loaded.body;
-  const raw = await executeHttp(resolution.request, def.settings, opts.signal, jar.hooks);
+  const raw = await executeHttp(resolution.request, effectiveSettings(db, def.settings), opts.signal, jar.hooks);
 
   const contentType = headerValue(raw.headers, 'content-type');
   const textual = isTextual(contentType, raw.body);

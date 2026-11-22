@@ -13,7 +13,7 @@ import { allRequests } from '@/features/collections/treeUtils';
 import { useFlows } from '@/features/flows/queries';
 import { useCookieManager } from '@/features/cookies/CookieManager';
 import { useImportDialog } from '@/features/openapi/ImportDialog';
-import { useMcpDialog } from '@/features/mcp/McpSettings';
+import { useSettings } from '@/features/settings/SettingsDialog';
 import { useCurlDialog } from '@/features/request/curl';
 
 function switchTab(step: number) {
@@ -93,7 +93,9 @@ export function CommandPalette() {
       { id: 'a:next-tab', group: 'Actions', label: 'Next tab', shortcut: isMac ? '⌃Tab' : 'Ctrl+Tab', icon: <ArrowRightIcon className="size-3.5" />, run: () => switchTab(1) },
       { id: 'a:prev-tab', group: 'Actions', label: 'Previous tab', shortcut: isMac ? '⌃⇧Tab' : 'Ctrl+⇧Tab', icon: <ArrowLeftIcon className="size-3.5" />, run: () => switchTab(-1) },
       { id: 'a:cookies', group: 'Actions', label: 'Manage cookies', icon: <CookieIcon className="size-3.5" />, run: () => useCookieManager.getState().setOpen(true) },
-      { id: 'a:mcp', group: 'Actions', label: 'Claude (MCP) settings', icon: <BotIcon className="size-3.5" />, run: () => useMcpDialog.getState().setOpen(true) },
+      { id: 'a:settings', group: 'Actions', label: 'Settings', shortcut: `${modKey},`, icon: <SettingsIcon className="size-3.5" />, run: () => useSettings.getState().open('general') },
+      { id: 'a:mcp', group: 'Actions', label: 'Claude (MCP) settings', icon: <BotIcon className="size-3.5" />, run: () => useSettings.getState().open('claude') },
+      { id: 'a:defaults', group: 'Actions', label: 'Request defaults (timeout, redirects, TLS)', icon: <SettingsIcon className="size-3.5" />, run: () => useSettings.getState().open('requests') },
       { id: 'a:update', group: 'Actions', label: 'Check for updates…', icon: <DownloadIcon className="size-3.5" />, run: () => void checkForUpdates() },
       {
         id: 'a:auto-update',

@@ -33,3 +33,6 @@ The first release of Postguy, a local-first API workspace.
 - Change history for every collection: see what changed and who changed it, restore earlier versions and bring back deleted requests, folders and collections.
 - Secret variables and credentials are masked everywhere.
 - Signed in-app updates, with a backup of your data before an update changes it.
+
+### Settings
+- One **Settings** screen (⌘,) for theme, updates, default timeout, redirects and TLS checks for all requests, Claude (MCP), and where your data and backups are.

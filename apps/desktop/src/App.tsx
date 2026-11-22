@@ -10,7 +10,7 @@ import { CollectionSettings } from '@/features/collections/CollectionSettings';
 import { MoveDialog } from '@/features/collections/MoveDialog';
 import { CookieManager } from '@/features/cookies/CookieManager';
 import { EnvironmentManager } from '@/features/environments/EnvironmentManager';
-import { McpSettingsDialog } from '@/features/mcp/McpSettings';
+import { SettingsDialog } from '@/features/settings/SettingsDialog';
 import { SaveDialog } from '@/features/request/SaveDialog';
 import { OpenApiImportDialog } from '@/features/openapi/ImportDialog';
 import { CurlDialog } from '@/features/request/CurlDialog';
@@ -26,7 +26,7 @@ export function App() {
         <CollectionSettings />
         <MoveDialog />
         <CookieManager />
-        <McpSettingsDialog />
+        <SettingsDialog />
         <SaveDialog />
         <OpenApiImportDialog />
         <CurlDialog />

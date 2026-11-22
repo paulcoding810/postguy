@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm';
-import { McpSettings, type UpdateMcpSettings } from '@postguy/shared';
+import { McpSettings, Preferences, RequestDefaults, type RequestSettings, type UpdateMcpSettings, type UpdatePreferences, type UpdateRequestDefaults } from '@postguy/shared';
 import type { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { appSettings } from '../db/schema.ts';
@@ -51,4 +51,43 @@ export function trustHostOf(db: Db, url: string) {
   }
   const set = untrustedHosts(db);
   if (set.delete(host)) saveUntrusted(db, set);
+}
+
+export function getRequestDefaults(db: Db): RequestDefaults {
+  const row = db.select().from(appSettings).where(eq(appSettings.key, 'requests')).get();
+  return RequestDefaults.parse(row?.value ?? {});
+}
+
+export function updateRequestDefaults(db: Db, patch: z.output<typeof UpdateRequestDefaults>): RequestDefaults {
+  const next = RequestDefaults.parse({ ...getRequestDefaults(db), ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) });
+  db.insert(appSettings)
+    .values({ key: 'requests', value: next, updatedAt: Date.now() })
+    .onConflictDoUpdate({ target: appSettings.key, set: { value: next, updatedAt: Date.now() } })
+    .run();
+  return next;
+}
+
+/** A request's own settings over the defaults; unset values follow the defaults. */
+export function effectiveSettings(db: Db, own: RequestSettings): RequestSettings {
+  const d = getRequestDefaults(db);
+  return {
+    ...own,
+    timeoutMs: own.timeoutMs ?? d.timeoutMs,
+    followRedirects: own.followRedirects ?? d.followRedirects,
+    rejectUnauthorized: own.rejectUnauthorized ?? d.rejectUnauthorized,
+  };
+}
+
+export function getPreferences(db: Db): Preferences {
+  const row = db.select().from(appSettings).where(eq(appSettings.key, 'preferences')).get();
+  return Preferences.parse(row?.value ?? {});
+}
+
+export function updatePreferences(db: Db, patch: z.output<typeof UpdatePreferences>): Preferences {
+  const next = Preferences.parse({ ...getPreferences(db), ...Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) });
+  db.insert(appSettings)
+    .values({ key: 'preferences', value: next, updatedAt: Date.now() })
+    .onConflictDoUpdate({ target: appSettings.key, set: { value: next, updatedAt: Date.now() } })
+    .run();
+  return next;
 }

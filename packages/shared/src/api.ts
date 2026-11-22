@@ -110,6 +110,34 @@ export const UpdateMcpSettings = z.object({
   edit: z.boolean().optional(),
 });
 
+/** How requests behave unless a request sets its own value. */
+export const RequestDefaults = z.object({
+  timeoutMs: z.number().int().positive().max(600_000).default(30_000),
+  followRedirects: z.boolean().default(true),
+  rejectUnauthorized: z.boolean().default(true),
+});
+export type RequestDefaults = z.output<typeof RequestDefaults>;
+export const UpdateRequestDefaults = z.object({
+  timeoutMs: z.number().int().positive().max(600_000).optional(),
+  followRedirects: z.boolean().optional(),
+  rejectUnauthorized: z.boolean().optional(),
+});
+
+/** App-wide choices kept with the data, so they survive a webview reset. */
+export const Preferences = z.object({
+  autoUpdateCheck: z.boolean().default(true),
+});
+export type Preferences = z.output<typeof Preferences>;
+export const UpdatePreferences = z.object({ autoUpdateCheck: z.boolean().optional() });
+
+/** Where the app keeps its data, for Settings → Data. */
+export interface AppInfo {
+  dataDir: string | null;
+  database: string | null;
+  /** Copies taken before an update's migrations, newest first. */
+  backups: { name: string; path: string; size: number; createdAt: number }[];
+}
+
 /** One recorded change to a collection, folder, request or collection variables. Secrets are masked. */
 export interface ChangeEntry {
   id: string;
@@ -416,6 +444,11 @@ export interface ApiRoutes {
   'POST /changes/:id/restore': { body: Empty; response: { message: string } };
   'GET /settings/mcp': { response: McpSettings };
   'PATCH /settings/mcp': { body: z.input<typeof UpdateMcpSettings>; response: McpSettings };
+  'GET /settings/requests': { response: RequestDefaults };
+  'PATCH /settings/requests': { body: z.input<typeof UpdateRequestDefaults>; response: RequestDefaults };
+  'GET /settings/app': { response: AppInfo };
+  'GET /settings/preferences': { response: Preferences };
+  'PATCH /settings/preferences': { body: z.input<typeof UpdatePreferences>; response: Preferences };
   'GET /settings/mcp/setup': { response: McpSetup };
   'DELETE /environments/:id': { response: { ok: true } };
   'POST /environments/import': { body: { data: unknown }; response: { environment: Environment; warnings: string[] } };

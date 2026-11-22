@@ -14,7 +14,7 @@ Auth credentials (bearer tokens, passwords, API keys and OAuth tokens) are maske
 
 ## What leaves your machine
 
-Only the requests you send, and the daily update check: a single request to GitHub for the latest release, which you can turn off with <kbd>⌘K</kbd> → *Turn off automatic update checks*.
+Only the requests you send, and the daily update check: a single request to GitHub for the latest release, which you can turn off in **Settings → General**.
 
 ## The local server
 
