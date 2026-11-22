@@ -4,7 +4,7 @@ import { HTTP_METHODS, newId, RequestDefinition, type CollectionTreeNode, type K
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client.ts';
-import { changeLog, requests } from '../../db/schema.ts';
+import { changeLog, collections, requests } from '../../db/schema.ts';
 import { HttpError } from '../../lib/errors.ts';
 import { VERSION } from '../../lib/version.ts';
 import { ancestry, createCollection, deleteCollection, effectiveAuth, getCollection, getTree, subtreeIds, updateCollection } from '../collections.ts';
@@ -36,6 +36,7 @@ tell the user what you deleted.`;
 type Result = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
 const MAX_DELETE_REQUESTS = 50;
+const MAX_MOVE = 50;
 
 const json = (value: unknown): Result => ({ content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] });
 
@@ -311,28 +312,65 @@ export function createMcpServer(db: Db): McpServer {
   tool(
     'move',
     'edit',
-    'Moves a request into another collection or folder, or a folder into another one (or to the top level as its own collection). Reports when the move changes the auth or base URL a request uses.',
-    { id: z.string().describe('Request, folder or collection id'), to: z.string().nullable().optional().describe('Destination collection or folder id; null or omitted moves a folder to the top level') },
-    ({ id, to }) => {
+    `Moves requests and folders into a collection or folder, or folders to the top level as their own collections. Give one id or up to ${MAX_MOVE} ids; every one is checked first and nothing moves unless all can. Reports when a request will use different auth, a different host, or a variable that isn't defined in its new place.`,
+    {
+      id: z.string().optional().describe('One request, folder or collection id'),
+      ids: z.array(z.string()).max(MAX_MOVE).optional().describe('Several ids, moved together'),
+      to: z.string().nullable().optional().describe('Destination collection or folder id; null or omitted moves folders to the top level'),
+    },
+    ({ id, ids, to }) => {
+      const list = [...new Set([...(id ? [id] : []), ...(ids ?? [])])];
+      if (!list.length) throw new HttpError(400, 'Give an id or ids to move', 'bad_request');
       const target = to ?? null;
-      const isRequest = !!db.select({ id: requests.id }).from(requests).where(eq(requests.id, id)).get();
-      if (isRequest) {
-        if (!target) throw new HttpError(400, 'A request has to go into a collection or folder; give "to"', 'bad_request');
-        const before = requestView(id);
-        const r = updateRequest(db, id, { collectionId: target });
-        return { moved: r.name, kind: 'request', to: folderPath(target), notes: moveNotes(before, requestView(id)) };
+      if (target) getCollection(db, target);
+
+      const problems: string[] = [];
+      const items = list.map((itemId) => {
+        if (db.select({ id: requests.id }).from(requests).where(eq(requests.id, itemId)).get()) {
+          if (!target) problems.push(`${itemId}: a request has to go into a collection or folder`);
+          return { id: itemId, kind: 'request' as const };
+        }
+        if (!db.select({ id: collections.id }).from(collections).where(eq(collections.id, itemId)).get()) {
+          problems.push(`${itemId}: no such request or folder`);
+          return null;
+        }
+        if (target && subtreeIds(db, itemId).includes(target)) problems.push(`${itemId}: cannot move a folder into itself or one of its own folders`);
+        return { id: itemId, kind: 'folder' as const };
+      });
+      if (problems.length) throw new HttpError(400, `Nothing was moved. ${problems.join('; ')}.`, 'mcp_move_invalid');
+
+      const where = target ? folderPath(target) : '(top level)';
+      const before = new Map(items.filter((i) => i?.kind === 'request').map((i) => [i!.id, requestView(i!.id)]));
+      const moved = db.transaction(() =>
+        items.map((item) => {
+          if (item!.kind === 'request') {
+            const r = updateRequest(db, item!.id, { collectionId: target! });
+            return { id: r.id, name: r.name, kind: 'request', changeId: lastChange(r.id) };
+          }
+          const oldRoot = rootIdOf(db, item!.id);
+          const c = updateCollection(db, item!.id, { parentId: target });
+          const note = oldRoot !== rootIdOf(db, c.id) && c.parentId ? `inherits auth, variables and scripts from "${getCollection(db, rootIdOf(db, c.id)).name}" now` : null;
+          return { id: c.id, name: c.name, kind: c.kind, changeId: lastChange(c.id), ...(note && { note }) };
+        }),
+      );
+
+      // Group what changed for requests, so a batch gets one readable summary.
+      const groups = new Map<string, string[]>();
+      for (const [reqId, was] of before) for (const n of moveNotes(was, requestView(reqId))) groups.set(n, [...(groups.get(n) ?? []), getRequest(db, reqId).name]);
+      const notes = [
+        ...[...groups].map(([n, names]) => (list.length === 1 ? n : `${n} (${names.length === 1 ? names[0] : `${names.length} requests: ${names.slice(0, 10).join(', ')}${names.length > 10 ? '…' : ''}`})`)),
+        ...moved.filter((m) => 'note' in m && m.note).map((m) => `"${m.name}" ${(m as { note: string }).note}.`),
+      ];
+      if (list.length === 1) {
+        const m = moved[0]!;
+        return { moved: m.name, kind: m.kind, to: where, changeId: m.changeId, notes };
       }
-      const c = getCollection(db, id);
-      const oldRoot = rootIdOf(db, id);
-      const moved = updateCollection(db, id, { parentId: target });
-      const newRoot = rootIdOf(db, id);
-      const notes =
-        oldRoot !== newRoot && moved.parentId
-          ? [`Its requests now use the auth, variables and scripts of "${getCollection(db, newRoot).name}" where they inherit them.`]
-          : [];
-      return { moved: c.name, kind: moved.kind, to: target ? folderPath(target) : '(top level)', notes };
+      return { moved: moved.map(({ note: _n, ...m }: { note?: string } & typeof moved[number]) => m), to: where, notes, undo: 'restore_change with these changeIds puts them all back.' };
     },
   );
+
+  const lastChange = (entityId: string) =>
+    db.select({ id: changeLog.id }).from(changeLog).where(eq(changeLog.entityId, entityId)).orderBy(desc(changeLog.updatedAt)).get()?.id ?? null;
 
   /** What a request will actually use: its auth type and the URL with variables resolved. */
   const requestView = (id: string) => {
@@ -350,7 +388,7 @@ export function createMcpServer(db: Db): McpServer {
   };
   const moveNotes = (a: ReturnType<typeof requestView>, b: ReturnType<typeof requestView>) => [
     ...(a.auth !== b.auth ? [`Auth changes from ${a.auth} to ${b.auth}.`] : []),
-    ...(a.origin !== b.origin ? [`It now goes to ${b.origin ?? 'a URL that no longer resolves'} instead of ${a.origin ?? 'an unresolved URL'}.`] : []),
+    ...(a.origin !== b.origin && b.origin ? [`It now goes to ${b.origin} instead of ${a.origin ?? 'an unresolved URL'}.`] : []),
     ...b.unresolved.filter((u) => !a.unresolved.includes(u)).map((u) => `{{${u}}} is not defined here.`),
   ];
   const folderPath = (id: string) =>
@@ -397,10 +435,30 @@ export function createMcpServer(db: Db): McpServer {
     },
   );
 
-  tool('restore_change', 'edit', 'Undoes one change from the change history: brings back a deleted request, folder or collection, or restores the version before an edit.', { changeId: z.string() }, ({ changeId }) => {
-    if (!getChange(db, changeId)) throw new HttpError(404, 'No such change', 'not_found');
-    return restoreChange(db, changeId);
-  });
+  tool(
+    'restore_change',
+    'edit',
+    'Undoes changes from the change history: brings back deleted requests, folders or collections, or restores the version before an edit or move. Give one changeId or several; the newest are undone first.',
+    { changeId: z.string().optional(), changeIds: z.array(z.string()).max(200).optional() },
+    ({ changeId, changeIds }) => {
+      const list = [...new Set([...(changeId ? [changeId] : []), ...(changeIds ?? [])])];
+      if (!list.length) throw new HttpError(400, 'Give a changeId or changeIds', 'bad_request');
+      const found = list.map((cid) => ({ cid, change: getChange(db, cid) }));
+      if (list.length === 1) {
+        if (!found[0]!.change) throw new HttpError(404, 'No such change', 'not_found');
+        return restoreChange(db, list[0]!);
+      }
+      const order = found.filter((f) => f.change).sort((a, b) => b.change!.updatedAt - a.change!.updatedAt);
+      const results = order.map(({ cid }) => {
+        try {
+          return { changeId: cid, message: restoreChange(db, cid).message };
+        } catch (e) {
+          return { changeId: cid, error: (e as Error).message };
+        }
+      });
+      return [...results, ...found.filter((f) => !f.change).map((f) => ({ changeId: f.cid, error: 'No such change' }))];
+    },
+  );
 
   tool(
     'set_variable',

@@ -310,3 +310,26 @@ describe('Claude (MCP) folders', () => {
     expect((await tool('move', { id: ids.echo })).error).toMatch(/has to go into a collection or folder/);
   });
 });
+
+describe('Claude (MCP) moving several at once', () => {
+  it('moves them all or none, reports once, and undoes the batch in one call', async () => {
+    await allow({ enabled: true, read: true, edit: true });
+    const extra = [];
+    for (const name of ['A', 'B', 'C']) extra.push((await h.call('POST', '/requests', { collectionId: ids.collection, name, method: 'GET', url: '{{baseUrl}}/x' })).body.id);
+    const other = (await tool('create_folder', { name: 'Other' })).value;
+
+    const bad = await tool('move', { ids: [...extra, 'nope'], to: other.id });
+    expect(bad.error).toMatch(/Nothing was moved\. nope: no such request or folder/);
+    expect((await h.call('GET', `/requests/${extra[0]}`)).body.collectionId).toBe(ids.collection);
+
+    const done = (await tool('move', { ids: extra, to: other.id })).value;
+    expect(done.moved.map((m: any) => m.name)).toEqual(['A', 'B', 'C']);
+    expect(done.notes).toEqual(['{{baseUrl}} is not defined here. (3 requests: A, B, C)']);
+    for (const r of extra) expect((await h.call('GET', `/requests/${r}`)).body.collectionId).toBe(other.id);
+
+    const undone = (await tool('restore_change', { changeIds: done.moved.map((m: any) => m.changeId) })).value;
+    expect(undone).toHaveLength(3);
+    expect(undone.every((u: any) => !u.error)).toBe(true);
+    for (const r of extra) expect((await h.call('GET', `/requests/${r}`)).body.collectionId).toBe(ids.collection);
+  });
+});
