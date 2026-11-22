@@ -85,13 +85,16 @@ describe('collection change history', () => {
     await h.call('POST', `/changes/${folderDeletion.id}/restore`, {});
     expect((await h.call('GET', `/requests/${req.id}`)).body.collectionId).toBe(folder.id);
 
+    const flow = (await h.call('POST', '/flows', { name: 'Checkout', collectionId: col.id })).body;
     await app('DELETE', `/collections/${col.id}`);
+    expect((await h.call('GET', `/flows/${flow.id}`)).body.collectionId).toBeNull();
     const deleted = (await h.call('GET', '/changes/deleted')).body;
     expect(deleted.map((d: any) => d.label)).toEqual(['Shop']);
     expect((await h.call('POST', `/changes/${deleted[0].id}/restore`, {})).body.message).toBe('Brought back "Shop" and everything in it.');
     const tree = (await h.call('GET', '/collections/tree')).body;
     expect(tree[0]).toMatchObject({ id: col.id, children: [{ id: folder.id, requests: [{ id: req.id }] }] });
     expect((await h.call('GET', '/changes/deleted')).body).toEqual([]);
+    expect((await h.call('GET', `/flows/${flow.id}`)).body.collectionId).toBe(col.id);
   });
 
   it('records collection variables with secrets masked, and restores them', async () => {

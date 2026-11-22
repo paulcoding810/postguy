@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { and, desc, eq, lt, notInArray } from 'drizzle-orm';
 import { newId, type ResponseExample } from '@postguy/shared';
 import type { Db } from '../db/client.ts';
-import { changeLog, collections, flowSteps, requests, variables } from '../db/schema.ts';
+import { changeLog, collections, flows, flowSteps, requests, variables } from '../db/schema.ts';
 import { examplesOf } from './examples.ts';
 import { loadScripts } from './scripts.ts';
 
@@ -45,6 +45,8 @@ export interface CollectionSnapshot {
   variables: Vars;
   /** Present on deletions: the whole subtree, so it can be brought back. */
   folders?: CollectionSnapshot[];
+  /** Flows that belonged to this collection or folder, reattached when it comes back. */
+  flows?: string[];
   requests?: RequestSnapshot[];
 }
 
@@ -81,6 +83,7 @@ export function collectionSnapshot(db: Db, id: string, subtree = false): Collect
   const reqIds = db.select({ id: requests.id }).from(requests).where(eq(requests.collectionId, id)).orderBy(requests.sortOrder).all();
   return {
     ...snap,
+    flows: db.select({ id: flows.id }).from(flows).where(eq(flows.collectionId, id)).all().map((f) => f.id),
     folders: childIds.map((c) => collectionSnapshot(db, c.id, true)!).filter(Boolean),
     requests: reqIds.map((r) => requestSnapshot(db, r.id, true)!).filter(Boolean),
   };

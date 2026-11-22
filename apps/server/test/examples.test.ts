@@ -64,3 +64,19 @@ describe('response examples', () => {
     expect(back).toMatchObject({ requestId: req.id, body: '{"token":"{{token}}","user":"ann"}' });
   });
 });
+
+describe('examples and history', () => {
+  it('keeps examples when an earlier edit of a deleted request is restored first', async () => {
+    const { col, req } = await setup();
+    const a = (await h.call('POST', `/requests/${req.id}/examples`, example())).body;
+    await h.call('PATCH', `/requests/${req.id}`, { url: 'http://changed' });
+    await h.call('DELETE', `/requests/${req.id}`);
+    const list = (await h.call('GET', `/collections/${col.id}/changes`)).body;
+    const edit = list.find((c: any) => c.action === 'update' && c.entityId === req.id);
+    const deletion = list.find((c: any) => c.action === 'delete' && c.entityId === req.id);
+    await h.call('POST', `/changes/${edit.id}/restore`, {});
+    expect((await h.call('GET', `/requests/${req.id}/examples`)).body.map((e: any) => e.id)).toEqual([a.id]);
+    await h.call('POST', `/changes/${deletion.id}/restore`, {});
+    expect((await h.call('GET', `/requests/${req.id}/examples`)).body.map((e: any) => e.id)).toEqual([a.id]);
+  });
+});

@@ -1,8 +1,8 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { redactAuth } from '@postguy/core';
 import type { Auth, ChangeEntry, RequestDefinition } from '@postguy/shared';
 import type { Db } from '../db/client.ts';
-import { collections, flowSteps, requests } from '../db/schema.ts';
+import { changeLog, collections, flows, flowSteps, requests } from '../db/schema.ts';
 import { HttpError, notFound } from '../lib/errors.ts';
 import {
   collectionSnapshot,
@@ -16,7 +16,7 @@ import {
 } from './changelog.ts';
 import { createCollection, updateCollection } from './collections.ts';
 import { createRequest, updateRequest } from './requests.ts';
-import { copyExamples } from './examples.ts';
+import { copyExamples, examplesOf } from './examples.ts';
 import { replaceVariables } from './variables.ts';
 
 const MASK = '••••••';
@@ -64,17 +64,29 @@ function restoreRequest(db: Db, snap: RequestSnapshot) {
   if (!exists(db, collections, snap.request.collectionId))
     throw new HttpError(409, `The folder that "${snap.request.name}" was in no longer exists; restore that folder first.`, 'parent_missing');
   if (exists(db, requests, id)) updateRequest(db, id, { ...definition(snap), collectionId: snap.request.collectionId });
-  else {
+  else
     createRequest(
       db,
       { ...definition(snap), collectionId: snap.request.collectionId },
       { id, openapiOperationId: (snap.request.openapiOperationId as string | null) ?? null, openapiFingerprint: (snap.request.openapiFingerprint as string | null) ?? null },
     );
-    copyExamples(db, snap.examples ?? [], id, true);
-    const steps = snap.flowSteps ?? [];
-    if (steps.length) db.update(flowSteps).set({ requestId: id }).where(and(inArray(flowSteps.id, steps.map((s) => s.stepId)), isNull(flowSteps.requestId))).run();
-  }
+  // An edit's snapshot doesn't hold examples or flow links; a deletion's does.
+  const kept = snap.examples || snap.flowSteps ? snap : lastDeletion(db, id);
+  const have = new Set(examplesOf(db, id).map((e) => e.id));
+  copyExamples(db, (kept?.examples ?? []).filter((e) => !have.has(e.id)), id, true);
+  const steps = kept?.flowSteps ?? [];
+  if (steps.length) db.update(flowSteps).set({ requestId: id }).where(and(inArray(flowSteps.id, steps.map((s) => s.stepId)), isNull(flowSteps.requestId))).run();
   replaceVariables(db, 'request', id, snap.variables);
+}
+
+function lastDeletion(db: Db, requestId: string): RequestSnapshot | null {
+  const row = db
+    .select({ before: changeLog.before })
+    .from(changeLog)
+    .where(and(eq(changeLog.entityType, 'request'), eq(changeLog.entityId, requestId), eq(changeLog.action, 'delete')))
+    .orderBy(desc(changeLog.updatedAt))
+    .get();
+  return (row?.before as RequestSnapshot | undefined) ?? null;
 }
 
 /** Recreates a deleted collection or folder and everything that was in it. */
@@ -84,6 +96,7 @@ function restoreSubtree(db: Db, snap: CollectionSnapshot) {
   if (!exists(db, collections, c.id))
     createCollection(db, { id: c.id, name: c.name, parentId: c.parentId, description: (c.description as string | null) ?? null, auth: c.auth as Auth, scripts: snap.scripts });
   replaceVariables(db, 'collection', c.id, snap.variables);
+  if (snap.flows?.length) db.update(flows).set({ collectionId: c.id }).where(and(inArray(flows.id, snap.flows), isNull(flows.collectionId))).run();
   for (const r of snap.requests ?? []) restoreRequest(db, r);
   for (const f of snap.folders ?? []) restoreSubtree(db, f);
 }
