@@ -3,7 +3,7 @@ import { defineConfig } from 'vitepress';
 export default defineConfig({
   title: 'Postguy',
   description: 'A local-first desktop API workspace that remembers your responses.',
-  base: process.env.DOCS_BASE ?? '/postguy/',
+  base: process.env.DOCS_BASE ?? '/',
   cleanUrls: true,
   markdown: {
     // Inline code is full of {{variable}} examples; keep Vue from reading them as templates.
@@ -13,7 +13,7 @@ export default defineConfig({
     },
   },
   lastUpdated: true,
-  head: [['link', { rel: 'icon', type: 'image/svg+xml', href: `${process.env.DOCS_BASE ?? '/postguy/'}icon.svg` }]],
+  head: [['link', { rel: 'icon', type: 'image/svg+xml', href: `${process.env.DOCS_BASE ?? '/'}icon.svg` }]],
   themeConfig: {
     logo: '/icon.svg',
     nav: [

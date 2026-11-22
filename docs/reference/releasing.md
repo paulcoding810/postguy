@@ -95,4 +95,4 @@ Before an update's database migrations run, the app copies the database to `post
 
 ## Documentation site
 
-`.github/workflows/docs.yml` builds this site with VitePress and publishes it to GitHub Pages whenever `docs/` changes on `main`, or when run by hand. In the repository settings, set **Pages → Source** to **GitHub Actions** once. Preview locally with `pnpm docs:dev`.
+`.github/workflows/docs.yml` builds this site with VitePress and publishes it to GitHub Pages whenever `docs/` changes on `main`, or when run by hand. It is served at [postguy.paulcoding.com](https://postguy.paulcoding.com/) through `docs/public/CNAME`. In the repository settings, set **Pages → Source** to **GitHub Actions** once. To build it for a sub-path instead (e.g. `user.github.io/postguy/`), set `DOCS_BASE=/postguy/` when building. Preview locally with `pnpm docs:dev`.

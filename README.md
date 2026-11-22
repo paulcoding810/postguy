@@ -4,7 +4,7 @@ A local-first desktop API workspace: import OpenAPI specs, send requests, rememb
 
 Built with Tauri, React, Vite and TypeScript on the front end, and a Node/Fastify server with SQLite (Drizzle ORM) behind it.
 
-User documentation: [paulcoding810.github.io/postguy](https://paulcoding810.github.io/postguy/) (source in `docs/`, run locally with `pnpm docs:dev`).
+User documentation: [postguy.paulcoding.com](https://postguy.paulcoding.com/) (source in `docs/`, run locally with `pnpm docs:dev`).
 
 ## Getting started
 
