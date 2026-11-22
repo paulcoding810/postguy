@@ -18,7 +18,7 @@ describe('harToCollection', () => {
     ]);
     const api = root.folders[0]!.requests;
     expect(api.map((r) => r.name)).toEqual(['GET /users/7', 'POST /orders', 'POST /login']);
-    expect(api[0]).toMatchObject({ method: 'GET', url: '{{baseUrl}}/users/7', auth: { type: 'inherit' } });
+    expect(api[0]).toMatchObject({ method: 'GET', url: '{{baseUrl}}/users/7', auth: { type: 'bearer', token: '{{token}}' } });
     expect(api[0]!.params.map((p) => [p.key, p.value])).toEqual([['expand', 'orders'], ['page', '2']]);
     expect(api[0]!.headers.map((x) => x.key)).toEqual(['accept', 'x-tenant']);
     expect(api[1]!.body).toEqual({ mode: 'json', raw: '{\n  "sku": "A1",\n  "qty": 2\n}' });
@@ -40,12 +40,22 @@ describe('harToCollection', () => {
     );
   });
 
-  it('moves the bearer token into a secret collection variable', () => {
+  it('moves the bearer token into a secret collection variable, used only by calls that sent it', () => {
     const root = harToCollection(sampleHar()).collection.collection;
-    expect(root.auth).toEqual({ type: 'bearer', token: '{{token}}' });
+    expect(root.auth).toEqual({ type: 'none' });
+    expect(root.folders[0]!.requests[0]!.auth).toEqual({ type: 'bearer', token: '{{token}}' });
+    expect(root.folders[1]!.requests[0]!.auth).toEqual({ type: 'none' });
     expect(root.variables).toEqual([{ key: 'token', value: 'tok-123', isSecret: true }]);
     const all = root.folders.flatMap((f) => f.requests);
     expect(all.some((r) => r.headers.some((x) => x.key.toLowerCase() === 'authorization' && x.value.startsWith('Bearer')))).toBe(false);
+  });
+
+  it('keeps a path with a stray % as its name instead of failing the import', () => {
+    const har = sampleHar();
+    const users = har.log.entries.find((e) => e.request.url.includes('/users/7'))!;
+    users.request.url = 'https://api.shop.test/promo/50%off';
+    const api = harToCollection(har).collection.collection.folders[0]!.requests;
+    expect(api.map((r) => r.name)).toContain('GET /promo/50%off');
   });
 
   it('puts a single host in a baseUrl variable on the collection', () => {

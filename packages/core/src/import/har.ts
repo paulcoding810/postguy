@@ -115,7 +115,7 @@ export function harToCollection(data: unknown, opts: { name?: string } = {}): Ha
     }
     seen.add(key);
 
-    const name = `${method} ${decodeURIComponent(url.pathname)}`.slice(0, 120);
+    const name = `${method} ${safeDecode(url.pathname)}`.slice(0, 120);
     const rawHeaders: Obj[] = Array.isArray(req.headers) ? req.headers : [];
     if (rawHeaders.some((h) => String(h.name).toLowerCase() === 'cookie')) cookies++;
     const authorization = header(rawHeaders, 'authorization');
@@ -148,7 +148,8 @@ export function harToCollection(data: unknown, opts: { name?: string } = {}): Ha
       params: [...url.searchParams.entries()].map(([k, v]) => kv(k, v)),
       pathParams: [],
       headers,
-      auth: { type: 'inherit' },
+      // Only calls recorded with a bearer token send it; the rest go without, as recorded.
+      auth: bearer ? { type: 'bearer', token: '{{token}}' } : { type: 'none' },
       body: body(req.postData, notes, name),
       settings: {},
       scripts: { pre: '', post: '' },
@@ -169,7 +170,7 @@ export function harToCollection(data: unknown, opts: { name?: string } = {}): Ha
   const root: ExportedCollection = {
     name: title.slice(0, 120),
     description: `Imported from a HAR recording${log.creator?.name ? ` made with ${log.creator.name}` : ''}.`,
-    auth: token ? { type: 'bearer', token: '{{token}}' } : { type: 'none' },
+    auth: { type: 'none' },
     variables: [
       ...(origins.length === 1 ? [{ key: 'baseUrl', value: origins[0]!, isSecret: false }] : []),
       ...(token ? [{ key: 'token', value: token, isSecret: true }] : []),
@@ -194,11 +195,19 @@ export function harToCollection(data: unknown, opts: { name?: string } = {}): Ha
     ...(skipped ? [`Skipped ${plural(skipped, 'entry')} that ${skipped === 1 ? "isn't an API call" : "aren't API calls"} (pages, scripts, styles, images, fonts).`] : []),
     ...(duplicates ? [`Collapsed ${plural(duplicates, 'repeated call')}.`] : []),
     ...(token
-      ? [`The recorded bearer token is in the secret collection variable {{token}}${tokens.size > 1 ? ' (the first of several)' : ''}; it has probably expired, so replace it.`]
+      ? [`The recorded bearer token is in the secret collection variable {{token}}${tokens.size > 1 ? " (the first of several)" : ""}, used only by the calls that sent one; it has probably expired, so replace it.`]
       : []),
     ...(otherAuth ? [`${plural(otherAuth, 'request')} kept a non-bearer Authorization header as recorded.`] : []),
     ...(cookies ? [`Cookie headers were not imported (${plural(cookies, 'request')}); the cookie jar collects cookies as you send.`] : []),
     ...(notes.files.length ? [`File fields aren't in HAR recordings, so they were left out: ${notes.files.slice(0, 3).join(', ')}${notes.files.length > 3 ? '…' : ''}.`] : []),
   ];
   return { collection: { format: 'postguy-collection', version: 1, collection: root }, responses, warnings };
+}
+
+function safeDecode(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
 }
