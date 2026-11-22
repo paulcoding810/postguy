@@ -76,13 +76,13 @@ export function VariablesTable({
         </div>
       </div>
       <div className="min-h-0 overflow-auto rounded-md border">
-        <div className="grid grid-cols-[28px_minmax(0,1fr)_minmax(0,1.6fr)_36px_32px] border-b bg-muted/40 text-[11px] font-medium text-muted-foreground uppercase">
+        <div className="grid grid-cols-[28px_minmax(0,1fr)_minmax(0,1.6fr)_64px_32px] border-b bg-muted/40 text-[11px] font-medium text-muted-foreground uppercase">
           <div />
           <div className="px-2.5 py-1.5">Variable</div>
           <div className="px-2.5 py-1.5">Value</div>
           <Tooltip content="Secret: masked in the UI, logs and exports">
-            <div className="flex items-center justify-center">
-              <LockIcon className="size-3" />
+            <div className="flex items-center justify-center gap-1">
+              <LockIcon className="size-3" /> Secret
             </div>
           </Tooltip>
           <div />
@@ -91,7 +91,7 @@ export function VariablesTable({
           const isGhost = r === ghost;
           const masked = r.isSecret && r.value === MASK;
           return (
-            <div key={r.id} className={cn('group grid grid-cols-[28px_minmax(0,1fr)_minmax(0,1.6fr)_36px_32px] border-b last:border-b-0', !r.enabled && !isGhost && 'opacity-50')}>
+            <div key={r.id} className={cn('group grid grid-cols-[28px_minmax(0,1fr)_minmax(0,1.6fr)_64px_32px] border-b last:border-b-0', !r.enabled && !isGhost && 'opacity-50')}>
               <div className="flex items-center justify-center">
                 {!isGhost && <Checkbox checked={r.enabled} onCheckedChange={(v) => edit(r.id, { enabled: !!v })} />}
               </div>

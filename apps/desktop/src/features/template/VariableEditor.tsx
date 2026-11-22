@@ -3,6 +3,7 @@ import * as React from 'react';
 import { toast } from 'sonner';
 import type { ResolvedPreview, VariableScope } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/misc';
 import { useEnvironments, useInvalidateVariables, useTree, useVariables } from '@/hooks/queries';
 import { api, errorMessage } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -45,6 +46,18 @@ function useSaveVariable() {
   return { save, saving };
 }
 
+/** Names that usually hold credentials, so a new variable starts out secret. */
+const LOOKS_SECRET = /token|secret|password|passwd|api[_-]?key|apikey|auth|credential|private|session|cookie/i;
+
+function SecretCheck({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <label className="flex shrink-0 cursor-pointer items-center gap-1 text-[11px] text-muted-foreground select-none">
+      <Checkbox checked={checked} onCheckedChange={(v) => onChange(!!v)} aria-label="Secret" />
+      Secret
+    </label>
+  );
+}
+
 function SecretToggle({ shown, onToggle }: { shown: boolean; onToggle: () => void }) {
   return (
     <Button
@@ -82,17 +95,20 @@ function EditValue({ name, scope, ownerId, focus, onDone }: { name: string; scop
   const vars = useVariables(scope, ownerId, true);
   const current = vars.data?.find((v) => v.key === name);
   const [value, setValue] = React.useState<string | null>(null);
+  const [secret, setSecret] = React.useState<boolean | null>(null);
   const [shown, setShown] = React.useState(false);
   const { save, saving } = useSaveVariable();
   const inputRef = React.useRef<HTMLInputElement>(null);
   useFocusSelect(inputRef, !!focus, !!current);
   if (!current) return <LoaderIcon className="size-3.5 animate-spin text-muted-foreground" />;
   const text = value ?? current.value;
-  const dirty = value !== null && value !== current.value;
+  const isSecret = secret ?? current.isSecret;
+  const dirty = (value !== null && value !== current.value) || isSecret !== current.isSecret;
   const submit = async () => {
     if (!dirty) return onDone?.();
-    if (await save(scope, ownerId, name, text)) {
+    if (await save(scope, ownerId, name, text, isSecret)) {
       setValue(null);
+      setSecret(null);
       onDone?.();
     }
   };
@@ -108,13 +124,18 @@ function EditValue({ name, scope, ownerId, focus, onDone }: { name: string; scop
         ref={inputRef}
         aria-label={`Value of ${name}`}
         className={field}
-        type={current.isSecret && !shown ? 'password' : 'text'}
+        type={isSecret && !shown ? 'password' : 'text'}
         value={text}
         spellCheck={false}
         onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => e.key === 'Escape' && setValue(null)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Escape') return;
+          setValue(null);
+          setSecret(null);
+        }}
       />
-      {current.isSecret && <SecretToggle shown={shown} onToggle={() => setShown((s) => !s)} />}
+      {isSecret && <SecretToggle shown={shown} onToggle={() => setShown((s) => !s)} />}
+      <SecretCheck checked={isSecret} onChange={setSecret} />
       {dirty && (
         <Button type="submit" size="xs" disabled={saving}>
           Save
@@ -148,6 +169,7 @@ function AddValue({ name, focus, onDone }: { name: string } & EditProps) {
   ].filter((t): t is NonNullable<typeof t> => !!t);
   const [target, setTarget] = React.useState<string | null>(null);
   const [value, setValue] = React.useState('');
+  const [secret, setSecret] = React.useState(() => LOOKS_SECRET.test(name));
   const { save, saving } = useSaveVariable();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const chosen = targets.find((t) => t.key === target) ?? targets[0];
@@ -158,7 +180,7 @@ function AddValue({ name, focus, onDone }: { name: string } & EditProps) {
       className="flex flex-col gap-1.5"
       onSubmit={(e) => {
         e.preventDefault();
-        void save(chosen.scope, chosen.ownerId, name, value).then((ok) => ok && onDone?.());
+        void save(chosen.scope, chosen.ownerId, name, value, secret).then((ok) => ok && onDone?.());
       }}
     >
       <div className="flex items-center gap-1">
@@ -167,6 +189,7 @@ function AddValue({ name, focus, onDone }: { name: string } & EditProps) {
           aria-label={`Value of ${name}`}
           className={field}
           placeholder="Value"
+          type={secret ? 'password' : 'text'}
           value={value}
           spellCheck={false}
           onChange={(e) => setValue(e.target.value)}
@@ -175,9 +198,10 @@ function AddValue({ name, focus, onDone }: { name: string } & EditProps) {
           Add
         </Button>
       </div>
+      <div className="flex items-center gap-2">
       <select
         aria-label="Where to add it"
-        className="h-7 rounded-md border bg-background px-1.5 text-[11.5px]"
+        className="h-7 min-w-0 flex-1 rounded-md border bg-background px-1.5 text-[11.5px]"
         value={chosen.key}
         onChange={(e) => setTarget(e.target.value)}
       >
@@ -187,6 +211,8 @@ function AddValue({ name, focus, onDone }: { name: string } & EditProps) {
           </option>
         ))}
       </select>
+        <SecretCheck checked={secret} onChange={setSecret} />
+      </div>
     </form>
   );
 }
