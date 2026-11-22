@@ -12,6 +12,16 @@ Download the installer for your platform from the [releases page](https://github
 | Windows | `.msi` or `.exe` |
 | Linux | `.deb`, `.rpm` or `.AppImage` |
 
+::: tip macOS: “Postguy is damaged and can’t be opened”
+The build isn't notarized by Apple yet. Move Postguy to Applications, then run this once in Terminal:
+
+```sh
+xattr -cr /Applications/Postguy.app
+```
+
+It removes the quarantine flag macOS puts on downloaded apps; Postguy then opens normally.
+:::
+
 To run it from source instead, see [Building from source](/reference/development).
 
 ## Your first request

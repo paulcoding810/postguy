@@ -6,6 +6,18 @@ Built with Tauri, React, Vite and TypeScript on the front end, and a Node/Fastif
 
 User documentation: [postguy.paulcoding.com](https://postguy.paulcoding.com/) (source in `docs/`, run locally with `pnpm docs:dev`).
 
+## Install
+
+Download the installer for macOS, Windows or Linux from the [releases page](https://github.com/paulcoding810/postguy/releases).
+
+If macOS says **“Postguy is damaged and can’t be opened”**, the build isn't notarized by Apple yet. Move Postguy to Applications, then run this once in Terminal:
+
+```sh
+xattr -cr /Applications/Postguy.app
+```
+
+It removes the quarantine flag macOS puts on downloaded apps; Postguy then opens normally.
+
 ## Getting started
 
 Requirements: Node 22+, pnpm 10, Rust (for the desktop shell).
