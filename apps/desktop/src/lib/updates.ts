@@ -45,6 +45,17 @@ const updateSupport = () => (support ??= isTauri ? invoke<Support>('update_suppo
 
 let checking = false;
 
+/** The first few points of the release notes, as plain lines. */
+export function notesSummary(body: string | undefined, max = 3): string {
+  const lines = (body ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'))
+    .map((l) => l.replace(/^[-*]\s+/, '• ').replace(/\*\*(.+?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1'));
+  const shown = lines.slice(0, max);
+  return lines.length > max ? [...shown, `and ${lines.length - max} more…`].join('\n') : shown.join('\n');
+}
+
 /**
  * Looks for a newer signed release. Quiet checks only speak up when there is one;
  * a manual check also says when you're up to date or why it couldn't check.
@@ -69,7 +80,13 @@ export async function checkForUpdates({ quiet = false } = {}) {
     toast.message(`Postguy ${update.version} is available`, {
       id: 'update',
       duration: Infinity,
-      description: canInstall ? 'Your data is backed up before the update changes it.' : 'Download it from the releases page; this install can’t update itself.',
+      description: React.createElement(
+        'span',
+        { style: { whiteSpace: 'pre-line' } },
+        [notesSummary(update.body), canInstall ? 'Your data is backed up before the update changes it.' : 'Download it from the releases page; this install can’t update itself.']
+          .filter(Boolean)
+          .join('\n\n'),
+      ),
       action: canInstall
         ? { label: 'Restart to update', onClick: () => void install(update) }
         : { label: 'Download', onClick: () => void openExternal(notes) },

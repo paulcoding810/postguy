@@ -21,8 +21,11 @@ A newer push to the same branch cancels the run in progress.
 ## Cutting a release
 
 1. Bump `version` in `apps/desktop/src-tauri/tauri.conf.json` (and `Cargo.toml` and `apps/desktop/package.json` if you track it there).
-2. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
-3. The workflow checks that the tag matches the version in `tauri.conf.json` and runs the tests, then builds every platform and attaches the installers to a **draft** GitHub release. Review it and publish.
+2. In `CHANGELOG.md`, rename **Unreleased** to the new version (`## 0.2.0 – 2026-12-01`) and add an empty **Unreleased** above it. Write the notes for people using the app, not as a list of commits. Check what will be published with `node scripts/release-notes.mjs v0.2.0`.
+3. Commit, then tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
+4. The workflow checks that the tag matches the version in `tauri.conf.json`, that `CHANGELOG.md` has a section for it, and runs the tests. It then builds every platform and attaches the installers to a **draft** GitHub release whose notes are that section. Review it and publish.
+
+The same notes go into `latest.json`, so the in-app update message shows their first few points. The tests also fail when `CHANGELOG.md` has no section for the version in `tauri.conf.json`, so a version bump without notes is caught before tagging.
 
 A tag with a suffix, such as `v0.2.0-beta.1`, creates a pre-release.
 

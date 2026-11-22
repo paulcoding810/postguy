@@ -25,6 +25,9 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match version $app in apps/desktop/src-tauri/tauri.conf.json"
             exit 1
           fi
+      - name: Check that CHANGELOG.md has notes for this version
+        if: github.ref_type == 'tag'
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > /dev/null || { echo "::error::Add a \"## ${GITHUB_REF_NAME#v}\" section to CHANGELOG.md"; exit 1; }
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -124,6 +127,17 @@ jobs:
             echo "::warning::Updates are off for this build: set the TAURI_SIGNING_PRIVATE_KEY secret and the TAURI_UPDATER_PUBKEY variable."
           fi
 
+      # The CHANGELOG.md section becomes the release body, which tauri-action also puts in latest.json as the update notes.
+      - name: Release notes
+        id: notes
+        shell: bash
+        run: |
+          {
+            echo 'body<<POSTGUY_NOTES_EOF'
+            node scripts/release-notes.mjs "$GITHUB_REF_NAME" 2>/dev/null || echo "Built from ${GITHUB_SHA::7}; see the commits for changes."
+            echo 'POSTGUY_NOTES_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -136,7 +150,7 @@ jobs:
           includeUpdaterJson: true
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: Postguy ${{ github.ref_name }}
-          releaseBody: See the commits since the previous release for changes.
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
 
