@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { parseCurl, resolveTemplate } from '@postguy/core';
 import { HTTP_METHODS, newId, RequestDefinition, type CollectionTreeNode, type KeyValue } from '@postguy/shared';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client.ts';
 import { changeLog, collections, requests } from '../../db/schema.ts';
@@ -15,7 +15,7 @@ import { getHistoryEntry, listHistory } from '../history.ts';
 import { importOpenApi } from '../openapi.ts';
 import { buildReport } from '../report.ts';
 import { createRequest, deleteRequest, getRequest, updateRequest } from '../requests.ts';
-import { getChange, rootIdOf, withSource } from '../changelog.ts';
+import { getChange, separately, withSource } from '../changelog.ts';
 import { restoreChange } from '../changeRestore.ts';
 import { notifyChange } from '../changes.ts';
 import { send } from '../send.ts';
@@ -37,6 +37,8 @@ type Result = { content: { type: 'text'; text: string }[]; isError?: boolean };
 
 const MAX_DELETE_REQUESTS = 50;
 const MAX_MOVE = 50;
+/** Requests checked for changed auth, host and variables in one move. */
+const MAX_NOTED = 500;
 
 const json = (value: unknown): Result => ({ content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] });
 
@@ -312,65 +314,86 @@ export function createMcpServer(db: Db): McpServer {
   tool(
     'move',
     'edit',
-    `Moves requests and folders into a collection or folder, or folders to the top level as their own collections. Give one id or up to ${MAX_MOVE} ids; every one is checked first and nothing moves unless all can. Reports when a request will use different auth, a different host, or a variable that isn't defined in its new place.`,
+    `Moves requests and folders into a collection or folder, or folders to the top level as their own collections. Give one id or up to ${MAX_MOVE} ids in all; every one is checked first and nothing moves unless all can. Reports when a request, including one inside a moved folder, will use different auth, a different host, or a variable that isn't defined in its new place.`,
     {
-      id: z.string().optional().describe('One request, folder or collection id'),
-      ids: z.array(z.string()).max(MAX_MOVE).optional().describe('Several ids, moved together'),
-      to: z.string().nullable().optional().describe('Destination collection or folder id; null or omitted moves folders to the top level'),
+      id: z.string().min(1).optional().describe('One request, folder or collection id'),
+      ids: z.array(z.string().min(1)).max(MAX_MOVE).optional().describe('Several ids, moved together'),
+      to: z.string().min(1).nullable().optional().describe('Destination collection or folder id; null or omitted moves folders to the top level'),
     },
     ({ id, ids, to }) => {
       const list = [...new Set([...(id ? [id] : []), ...(ids ?? [])])];
       if (!list.length) throw new HttpError(400, 'Give an id or ids to move', 'bad_request');
+      if (list.length > MAX_MOVE) throw new HttpError(400, `Move at most ${MAX_MOVE} items at once; this call has ${list.length}.`, 'mcp_move_too_many');
       const target = to ?? null;
       if (target) getCollection(db, target);
 
       const problems: string[] = [];
-      const items = list.map((itemId) => {
-        if (db.select({ id: requests.id }).from(requests).where(eq(requests.id, itemId)).get()) {
+      type Item = { id: string; kind: 'request' | 'folder'; stays: boolean };
+      const items = list.flatMap((itemId): Item[] => {
+        const req = db.select({ id: requests.id, collectionId: requests.collectionId }).from(requests).where(eq(requests.id, itemId)).get();
+        if (req) {
           if (!target) problems.push(`${itemId}: a request has to go into a collection or folder`);
-          return { id: itemId, kind: 'request' as const };
+          return [{ id: itemId, kind: 'request', stays: req.collectionId === target }];
         }
-        if (!db.select({ id: collections.id }).from(collections).where(eq(collections.id, itemId)).get()) {
+        const col = db.select({ id: collections.id, parentId: collections.parentId }).from(collections).where(eq(collections.id, itemId)).get();
+        if (!col) {
           problems.push(`${itemId}: no such request or folder`);
-          return null;
+          return [];
         }
         if (target && subtreeIds(db, itemId).includes(target)) problems.push(`${itemId}: cannot move a folder into itself or one of its own folders`);
-        return { id: itemId, kind: 'folder' as const };
+        return [{ id: itemId, kind: 'folder', stays: col.parentId === target }];
       });
       if (problems.length) throw new HttpError(400, `Nothing was moved. ${problems.join('; ')}.`, 'mcp_move_invalid');
 
       const where = target ? folderPath(target) : '(top level)';
-      const before = new Map(items.filter((i) => i?.kind === 'request').map((i) => [i!.id, requestView(i!.id)]));
+      const moving = items.filter((i) => !i.stays);
+      // Every request whose context can change: those moved directly and those inside moved folders.
+      const affected = new Set<string>();
+      for (const i of moving) {
+        if (i.kind === 'request') affected.add(i.id);
+        else for (const r of db.select({ id: requests.id }).from(requests).where(inArray(requests.collectionId, subtreeIds(db, i.id))).all()) affected.add(r.id);
+      }
+      const before = new Map([...affected].slice(0, MAX_NOTED).map((r) => [r, requestView(r)]));
+      const started = Date.now();
       const moved = db.transaction(() =>
-        items.map((item) => {
-          if (item!.kind === 'request') {
-            const r = updateRequest(db, item!.id, { collectionId: target! });
-            return { id: r.id, name: r.name, kind: 'request', changeId: lastChange(r.id) };
-          }
-          const oldRoot = rootIdOf(db, item!.id);
-          const c = updateCollection(db, item!.id, { parentId: target });
-          const note = oldRoot !== rootIdOf(db, c.id) && c.parentId ? `inherits auth, variables and scripts from "${getCollection(db, rootIdOf(db, c.id)).name}" now` : null;
-          return { id: c.id, name: c.name, kind: c.kind, changeId: lastChange(c.id), ...(note && { note }) };
-        }),
+        separately(() =>
+          moving.map((item) => {
+            if (item.kind === 'request') {
+              const r = updateRequest(db, item.id, { collectionId: target! });
+              return { id: r.id, name: r.name, kind: 'request', changeId: moveChange(r.id, started) };
+            }
+            const c = updateCollection(db, item.id, { parentId: target });
+            return { id: c.id, name: c.name, kind: c.kind, changeId: moveChange(c.id, started), ...(c.parentId && c.auth.type !== 'inherit' && { keepsAuth: c.auth.type }) };
+          }),
+        ),
       );
 
-      // Group what changed for requests, so a batch gets one readable summary.
+      // Group what changed, so a batch gets one readable summary.
       const groups = new Map<string, string[]>();
       for (const [reqId, was] of before) for (const n of moveNotes(was, requestView(reqId))) groups.set(n, [...(groups.get(n) ?? []), getRequest(db, reqId).name]);
       const notes = [
-        ...[...groups].map(([n, names]) => (list.length === 1 ? n : `${n} (${names.length === 1 ? names[0] : `${names.length} requests: ${names.slice(0, 10).join(', ')}${names.length > 10 ? '…' : ''}`})`)),
-        ...moved.filter((m) => 'note' in m && m.note).map((m) => `"${m.name}" ${(m as { note: string }).note}.`),
+        ...[...groups].map(([n, names]) => (affected.size === 1 ? n : `${n} (${names.length === 1 ? names[0] : `${names.length} requests: ${names.slice(0, 10).join(', ')}${names.length > 10 ? '…' : ''}`})`)),
+        ...moved.filter((m) => 'keepsAuth' in m).map((m) => `"${m.name}" keeps its own auth (${(m as { keepsAuth: string }).keepsAuth}), so its requests don't use the auth of the folders above it; set it to inherit to use theirs.`),
+        ...(affected.size > MAX_NOTED ? [`Only the first ${MAX_NOTED} of ${affected.size} affected requests were checked for changes.`] : []),
       ];
+      const stayed = items.filter((i) => i.stays).map((i) => i.id);
+      const already = stayed.length ? { alreadyThere: stayed, note: 'Items already in that place were left alone and have no changeId.' } : {};
       if (list.length === 1) {
-        const m = moved[0]!;
-        return { moved: m.name, kind: m.kind, to: where, changeId: m.changeId, notes };
+        const m = moved[0];
+        return m ? { moved: m.name, kind: m.kind, to: where, changeId: m.changeId, notes } : { moved: null, to: where, ...already, notes };
       }
-      return { moved: moved.map(({ note: _n, ...m }: { note?: string } & typeof moved[number]) => m), to: where, notes, undo: 'restore_change with these changeIds puts them all back.' };
+      return { moved: moved.map(({ keepsAuth: _k, ...m }: { keepsAuth?: string } & (typeof moved)[number]) => m), to: where, ...already, notes, undo: 'restore_change with these changeIds puts them all back.' };
     },
   );
 
-  const lastChange = (entityId: string) =>
-    db.select({ id: changeLog.id }).from(changeLog).where(eq(changeLog.entityId, entityId)).orderBy(desc(changeLog.updatedAt)).get()?.id ?? null;
+  /** The entry this move just recorded, never an older change to the same item. */
+  const moveChange = (entityId: string, since: number) =>
+    db
+      .select({ id: changeLog.id })
+      .from(changeLog)
+      .where(and(eq(changeLog.entityId, entityId), eq(changeLog.source, 'mcp'), gte(changeLog.createdAt, since)))
+      .orderBy(desc(changeLog.createdAt))
+      .get()?.id ?? null;
 
   /** What a request will actually use: its auth type and the URL with variables resolved. */
   const requestView = (id: string) => {

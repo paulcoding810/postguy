@@ -4,14 +4,19 @@ import { streamEvents } from '@/lib/sse';
 import { isDirty, isRequestTab, useTabs } from '@/stores/tabs';
 import { queryClient } from './queries';
 
-/** Brings open, unedited request tabs up to date with the saved request; closes tabs whose request is gone. */
+/**
+ * Brings open, unedited request tabs up to date with the saved request; closes tabs whose request is gone.
+ * Tabs with unsaved edits keep their draft but follow a move, so they send with the new folder's auth and variables.
+ */
 export async function refreshCleanTabs() {
   for (const tab of useTabs.getState().tabs) {
-    if (!isRequestTab(tab) || !tab.requestId || isDirty(tab)) continue;
+    if (!isRequestTab(tab) || !tab.requestId) continue;
     try {
       const saved = await api('GET /requests/:id', { params: { id: tab.requestId } });
       const now = useTabs.getState().tabs.find((t) => t.id === tab.id);
-      if (isRequestTab(now) && !isDirty(now)) useTabs.getState().markSaved(tab.id, saved);
+      if (!isRequestTab(now)) continue;
+      if (!isDirty(now)) useTabs.getState().markSaved(tab.id, saved);
+      else if (now.collectionId !== saved.collectionId) useTabs.getState().onRequestMoved(saved.id, saved.collectionId);
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) useTabs.getState().onRequestDeleted(tab.requestId);
     }

@@ -122,13 +122,14 @@ export function restoreChange(db: Db, id: string): { message: string } {
       return { message: `Brought back "${snap.collection.name}" and everything in it.` };
     }
     if (!exists(db, collections, snap.collection.id)) throw new HttpError(409, `"${snap.collection.name}" was deleted; restore it from its deletion first.`, 'gone');
-    const parentOk = !snap.collection.parentId || exists(db, collections, snap.collection.parentId);
+    if (snap.collection.parentId && !exists(db, collections, snap.collection.parentId))
+      throw new HttpError(409, `The folder that "${snap.collection.name}" was in no longer exists; restore that folder first.`, 'parent_missing');
     updateCollection(db, snap.collection.id, {
       name: snap.collection.name,
       description: (snap.collection.description as string | null) ?? null,
       auth: snap.collection.auth as Auth,
       scripts: snap.scripts,
-      ...(parentOk && { parentId: snap.collection.parentId }),
+      parentId: snap.collection.parentId,
     });
     return { message: `Restored the earlier settings of "${snap.collection.name}".` };
   }

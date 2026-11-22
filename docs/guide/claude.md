@@ -27,7 +27,7 @@ MCP is off by default. Once it's on, Claude may only read until you also allow *
 
 Everything Claude sends is labelled **MCP** in History. Changes it makes show as **Claude** in [change history](/guide/history), so you can undo them.
 
-`move` takes up to 50 requests and folders at once and moves all of them or none; `restore_change` takes a list of change ids to put a whole batch back. Moving a request into another collection can change the auth and variables it uses; `move` tells Claude when the auth type or the resolved host changes, or a `{{variable}}` is no longer defined, so it can tell you.
+`move` takes up to 50 requests and folders at once and moves all of them or none; items already in that place are left alone; `restore_change` takes a list of change ids to put a whole batch back. Moving a request into another collection can change the auth and variables it uses; `move` tells Claude when the auth type or the resolved host changes, or a `{{variable}}` is no longer defined, so it can tell you.
 
 Claude can only delete what can be brought back: requests, folders and collections. Each deletion returns a change id that `restore_change` undoes, and you can bring it back yourself from Change history or **Recently deleted**. Environments, flows and history can't be deleted by Claude.
 

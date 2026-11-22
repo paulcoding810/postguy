@@ -333,3 +333,60 @@ describe('Claude (MCP) moving several at once', () => {
     for (const r of extra) expect((await h.call('GET', `/requests/${r}`)).body.collectionId).toBe(ids.collection);
   });
 });
+
+describe('Claude (MCP) move edge cases', () => {
+  const curlAuth = async (id: string) => {
+    const r = (await h.call('GET', `/requests/${id}`)).body;
+    return /Authorization: (\w+)/.exec((await h.call('POST', '/export/curl', { request: r, collectionId: r.collectionId, requestId: id })).body.command)?.[1] ?? 'none';
+  };
+
+  it('never hands back a changeId that would undo someone else’s edit', async () => {
+    await allow({ enabled: true, read: true, edit: true });
+    const other = (await tool('create_folder', { name: 'Other' })).value;
+    await h.call('PATCH', `/requests/${ids.echo}`, { url: 'http://changed' });
+
+    const stay = (await tool('move', { id: ids.echo, to: ids.collection })).value;
+    expect(stay).toMatchObject({ moved: null, alreadyThere: [ids.echo] });
+
+    const away = (await tool('move', { id: ids.echo, to: other.id })).value;
+    const back = (await tool('move', { id: ids.echo, to: ids.collection })).value;
+    expect(back.changeId).not.toBe(away.changeId);
+    await tool('restore_change', { changeId: back.changeId });
+    const r = (await h.call('GET', `/requests/${ids.echo}`)).body;
+    expect(r).toMatchObject({ collectionId: other.id, url: 'http://changed' });
+  });
+
+  it('reports auth changes for requests inside a moved folder, and an accurate note for a collection moved into a folder', async () => {
+    await allow({ enabled: true, read: true, edit: true });
+    const p = (await h.call('POST', '/collections', { name: 'P', parentId: null, auth: { type: 'bearer', token: 'tok-1234' } })).body;
+    const f = (await h.call('POST', '/collections', { name: 'F', parentId: p.id })).body;
+    const r = (await h.call('POST', '/requests', { collectionId: f.id, name: 'R', method: 'GET', url: 'https://example.com/r' })).body;
+    expect(await curlAuth(r.id)).toBe('Bearer');
+    const top = (await tool('move', { id: f.id })).value;
+    expect(top.notes).toEqual(['Auth changes from bearer to none.']);
+    expect(await curlAuth(r.id)).toBe('none');
+
+    const c = (await h.call('POST', '/collections', { name: 'C', parentId: null })).body;
+    await h.call('POST', '/requests', { collectionId: c.id, name: 'RC', method: 'GET', url: 'https://example.com/rc' });
+    const into = (await tool('move', { id: c.id, to: p.id })).value;
+    expect(into.notes).toEqual([`"C" keeps its own auth (none), so its requests don't use the auth of the folders above it; set it to inherit to use theirs.`]);
+  });
+
+  it('rejects an empty destination and more than 50 items in all', async () => {
+    await allow({ enabled: true, read: true, edit: true });
+    expect((await tool('move', { id: ids.echo, to: '' })).error).toMatch(/too small|at least 1|>=1/i);
+    const many = Array.from({ length: 50 }, (_, i) => `x${i}`);
+    expect((await tool('move', { id: ids.echo, ids: many, to: ids.collection })).error).toMatch(/at most 50 items at once; this call has 51/);
+  });
+
+  it('refuses to undo a folder move when the folder it came from is gone', async () => {
+    await allow({ enabled: true, read: true, edit: true, delete: true });
+    const x = (await tool('create_folder', { name: 'X' })).value;
+    const t = (await tool('create_folder', { name: 'T' })).value;
+    const f = (await tool('create_folder', { name: 'F', parentId: x.id })).value;
+    const moved = (await tool('move', { id: f.id, to: t.id })).value;
+    await tool('delete_folder', { id: x.id });
+    expect((await tool('restore_change', { changeId: moved.changeId })).error).toMatch(/restore that folder first/);
+    expect((await h.call('GET', `/collections/${f.id}`)).body.parentId).toBe(t.id);
+  });
+});

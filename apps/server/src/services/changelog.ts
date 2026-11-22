@@ -9,11 +9,16 @@ import { loadScripts } from './scripts.ts';
 /** 'restore' is internal: a restore records one entry itself, not one per object it brings back. */
 export type ChangeSource = 'app' | 'api' | 'mcp' | 'sync' | 'import' | 'script' | 'restore';
 
-const context = new AsyncLocalStorage<{ source: ChangeSource }>();
+const context = new AsyncLocalStorage<{ source: ChangeSource; separate?: boolean }>();
 
 /** Runs `fn` with changes attributed to `source` (the desktop app, Claude, a sync…). */
 export function withSource<T>(source: ChangeSource, fn: () => T): T {
   return context.run({ source }, fn);
+}
+
+/** Runs `fn` so each change it makes gets its own entry, never merged into a recent one, e.g. a move Claude may undo on its own. */
+export function separately<T>(fn: () => T): T {
+  return context.run({ source: currentSource(), separate: true }, fn);
 }
 
 export function currentSource(): ChangeSource {
@@ -128,7 +133,7 @@ export function recordChange(db: Db, input: ChangeInput) {
   if (source === 'import' && !(input.entityType === 'collection' && input.action === 'create' && input.rootId === input.entityId)) return;
   if (input.action === 'update' && comparable(input.before) === comparable(input.after)) return;
   const now = Date.now();
-  if (input.action === 'update') {
+  if (input.action === 'update' && !context.getStore()?.separate) {
     const last = db
       .select()
       .from(changeLog)
