@@ -224,6 +224,7 @@ export function CollectionTree({ tree, filter }: { tree: CollectionTreeNode[]; f
       return next;
     });
 
+  const [topDrop, setTopDrop] = React.useState(false);
   const shown = tree.filter((n) => matches(n, q));
   if (q && !shown.length)
     return (
@@ -237,6 +238,26 @@ export function CollectionTree({ tree, filter }: { tree: CollectionTreeNode[]; f
       {shown.map((n) => (
         <FolderNode key={n.id} node={n} siblings={tree} parentId={null} depth={0} expanded={expanded} toggle={toggle} actions={actions} q={q} />
       ))}
+      <div
+        aria-label="Drop here to make it a top-level collection"
+        onDragOver={(e) => {
+          if (!e.dataTransfer.types.includes('application/x-postguy-folder')) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          setTopDrop(true);
+        }}
+        onDragLeave={() => setTopDrop(false)}
+        onDrop={(e) => {
+          setTopDrop(false);
+          const id = e.dataTransfer.getData('application/x-postguy-folder');
+          if (!id || !tree.length) return;
+          e.preventDefault();
+          void actions.placeFolder(id, tree, null, tree[tree.length - 1]!.id, 'after');
+        }}
+        className={cn('mx-2 mt-1 flex h-10 items-center justify-center rounded-md text-[11px] text-muted-foreground', topDrop && 'border border-dashed border-primary bg-primary/10 text-primary')}
+      >
+        {topDrop && 'Drop to make it a top-level collection'}
+      </div>
     </div>
   );
 }
@@ -342,7 +363,9 @@ function FolderNode({
               const box = e.currentTarget.getBoundingClientRect();
               const y = (e.clientY - box.top) / box.height;
               const folder = e.dataTransfer.types.includes('application/x-postguy-folder');
-              setDrop(folder && y < 0.3 ? 'before' : folder && y > 0.7 ? 'after' : 'into');
+              // An open folder's bottom edge borders its own contents, so a drop there goes inside.
+              const below = folder && y > 0.7 && !(isOpen && (node.children.length || node.requests.length));
+              setDrop(folder && y < 0.3 ? 'before' : below ? 'after' : 'into');
             }}
             onDragLeave={() => setDrop(null)}
             onDrop={(e) => {
