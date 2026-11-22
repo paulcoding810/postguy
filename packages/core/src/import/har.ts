@@ -195,7 +195,7 @@ export function harToCollection(data: unknown, opts: { name?: string } = {}): Ha
     ...(skipped ? [`Skipped ${plural(skipped, 'entry')} that ${skipped === 1 ? "isn't an API call" : "aren't API calls"} (pages, scripts, styles, images, fonts).`] : []),
     ...(duplicates ? [`Collapsed ${plural(duplicates, 'repeated call')}.`] : []),
     ...(token
-      ? [`The recorded bearer token is in the secret collection variable {{token}}${tokens.size > 1 ? " (the first of several)" : ""}, used only by the calls that sent one; it has probably expired, so replace it.`]
+      ? [`The recorded bearer token is in the secret collection variable {{token}}${tokens.size > 1 ? ' (the first of several)' : ''}, used only by the calls that sent one; it has probably expired, so replace it.`]
       : []),
     ...(otherAuth ? [`${plural(otherAuth, 'request')} kept a non-bearer Authorization header as recorded.`] : []),
     ...(cookies ? [`Cookie headers were not imported (${plural(cookies, 'request')}); the cookie jar collects cookies as you send.`] : []),
