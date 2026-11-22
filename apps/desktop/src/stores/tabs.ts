@@ -116,10 +116,17 @@ export function numberedTab(tabs: Tab[], n: number): Tab | null {
   return (n === 9 ? tabs[tabs.length - 1] : tabs[n - 1]) ?? null;
 }
 
+/** JSON with object keys sorted, so the order fields were set in doesn't count as a change. */
+function stable(value: unknown): string {
+  return JSON.stringify(value, (_k, v: unknown) =>
+    v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v,
+  );
+}
+
 export function isDirty(tab: Tab): boolean {
   if (!isRequestTab(tab)) return false;
   if (!tab.saved) return true;
-  return JSON.stringify(tab.draft) !== JSON.stringify(tab.saved);
+  return stable(tab.draft) !== stable(tab.saved);
 }
 
 interface TabsState {

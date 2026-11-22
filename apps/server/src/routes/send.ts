@@ -10,6 +10,7 @@ import { z } from 'zod';
 import type { Db } from '../db/client.ts';
 import { parse } from '../lib/errors.ts';
 import { buildContext } from '../services/context.ts';
+import { effectiveSettings } from '../services/settings.ts';
 import { previewLookup, stepCollectionId } from '../services/flows.ts';
 import { getRequest } from '../services/requests.ts';
 import { send } from '../services/send.ts';
@@ -66,7 +67,7 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
       }
     }
     const r = resolveRequest(input.request, ctx, auth);
-    return { command: toCurl(r.request, { insecure: input.request.settings.rejectUnauthorized === false }), containsSecrets: r.secrets.length > 0, unresolved: r.unresolved };
+    return { command: toCurl(r.request, { insecure: effectiveSettings(db, input.request.settings).rejectUnauthorized === false }), containsSecrets: r.secrets.length > 0, unresolved: r.unresolved };
   });
 
   app.post('/oauth/authorize', async (req) => {

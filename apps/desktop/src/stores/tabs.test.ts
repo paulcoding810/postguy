@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { neighbourTab, normalizeDefinition, numberedTab, type Tab } from './tabs';
+import { isDirty, neighbourTab, normalizeDefinition, numberedTab, type RequestTab, type Tab } from './tabs';
 
 describe('normalizeDefinition', () => {
   it('fills fields missing from tabs saved by older versions', () => {
@@ -45,5 +45,16 @@ describe('tab switching', () => {
     expect(numberedTab(tabs, 2)?.id).toBe('b');
     expect(numberedTab(tabs, 9)?.id).toBe('c');
     expect(numberedTab(tabs, 5)).toBeNull();
+  });
+});
+
+describe('isDirty', () => {
+  const def = (settings: Record<string, unknown>) => ({ name: 'R', method: 'GET', url: 'http://x', params: [], pathParams: [], headers: [], auth: { type: 'inherit' }, body: { mode: 'none' }, settings, scripts: { pre: '', post: '' } });
+  const tab = (draft: object, saved: object) => ({ kind: 'request', id: 't', requestId: 'r', collectionId: 'c', draft, saved, response: null, sending: false, preview: false }) as unknown as RequestTab;
+
+  it('ignores the order fields were set in', () => {
+    expect(isDirty(tab(def({ followRedirects: false, timeoutMs: 5000 }), def({ timeoutMs: 5000, followRedirects: false })))).toBe(false);
+    expect(isDirty(tab(def({ timeoutMs: 6000 }), def({ timeoutMs: 5000 })))).toBe(true);
+    expect(isDirty(tab(def({}), def({ timeoutMs: 5000 })))).toBe(true);
   });
 });

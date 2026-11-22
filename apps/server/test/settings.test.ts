@@ -42,3 +42,14 @@ describe('request defaults', () => {
     expect((await send(`${slowUrl}/hop`, { followRedirects: true })).body).toBe('done');
   });
 });
+
+describe('Copy as cURL', () => {
+  it('follows the default for checking TLS certificates', async () => {
+    const curl = async (settings: Record<string, unknown> = {}) =>
+      (await h.call('POST', '/export/curl', { request: { name: 'R', method: 'GET', url: 'https://self-signed.test/', settings } })).body.command;
+    expect(await curl()).not.toContain('-k');
+    await h.call('PATCH', '/settings/requests', { rejectUnauthorized: false });
+    expect(await curl()).toContain('-k');
+    expect(await curl({ rejectUnauthorized: true })).not.toContain('-k');
+  });
+});
