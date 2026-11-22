@@ -170,6 +170,15 @@ export function useTreeActions() {
           await api('PATCH /collections/:id', { params: { id: item.id }, body: { parentId: targetCollectionId } });
         }
       }),
+    /** Puts a folder or collection before or after a sibling, moving it under that sibling's parent if needed. */
+    placeFolder: (id: string, siblings: CollectionTreeNode[], parentId: string | null, targetId: string, place: Place) =>
+      run(async () => {
+        if (id === targetId) return;
+        const moved = !siblings.some((c) => c.id === id);
+        const ordered = reorderIds(siblings.map((c) => c.id), id, targetId, place);
+        for (const p of orderPatches(ordered, siblings, moved ? id : undefined))
+          await api('PATCH /collections/:id', { params: { id: p.id }, body: { sortOrder: p.sortOrder, ...(p.id === id && moved && { parentId }) } });
+      }),
     placeRequest: (requestId: string, folder: CollectionTreeNode, targetId: string, place: Place) =>
       run(async () => {
         const moved = !folder.requests.some((r) => r.id === requestId);
@@ -226,14 +235,19 @@ export function CollectionTree({ tree, filter }: { tree: CollectionTreeNode[]; f
   return (
     <div className="py-1" role="tree">
       {shown.map((n) => (
-        <FolderNode key={n.id} node={n} depth={0} expanded={expanded} toggle={toggle} actions={actions} q={q} />
+        <FolderNode key={n.id} node={n} siblings={tree} parentId={null} depth={0} expanded={expanded} toggle={toggle} actions={actions} q={q} />
       ))}
     </div>
   );
 }
 
+/** Where a drop on a folder row lands: next to it (top or bottom edge, folders only) or inside it. */
+type FolderDrop = Place | 'into';
+
 function FolderNode({
   node,
+  siblings,
+  parentId,
   depth,
   expanded,
   toggle,
@@ -241,6 +255,8 @@ function FolderNode({
   q,
 }: {
   node: CollectionTreeNode;
+  siblings: CollectionTreeNode[];
+  parentId: string | null;
   depth: number;
   expanded: Set<string>;
   toggle: (id: string, open?: boolean) => void;
@@ -248,7 +264,7 @@ function FolderNode({
   q: string;
 }) {
   const isOpen = q ? true : expanded.has(node.id);
-  const [dragOver, setDragOver] = React.useState(false);
+  const [drop, setDrop] = React.useState<FolderDrop | null>(null);
   const openSettings = useCollectionSettings((s) => s.open);
   const Icon = node.kind === 'collection' ? LibraryIcon : isOpen ? FolderOpenIcon : FolderIcon;
 
@@ -312,28 +328,46 @@ function FolderNode({
         <ContextMenuTrigger asChild>
           <div
             draggable
-            onDragStart={(e) => e.dataTransfer.setData('application/x-postguy', JSON.stringify({ kind: 'collection', id: node.id }))}
-            onDragOver={(e) => {
-              if (e.dataTransfer.types.includes('application/x-postguy')) {
-                e.preventDefault();
-                setDragOver(true);
-              }
+            onDragStart={(e) => {
+              e.stopPropagation();
+              e.dataTransfer.effectAllowed = 'move';
+              e.dataTransfer.setData('application/x-postguy', JSON.stringify({ kind: 'collection', id: node.id }));
+              e.dataTransfer.setData('application/x-postguy-folder', node.id);
             }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes('application/x-postguy')) return;
               e.preventDefault();
-              setDragOver(false);
-              const item = JSON.parse(e.dataTransfer.getData('application/x-postguy')) as DragItem;
+              e.stopPropagation();
+              e.dataTransfer.dropEffect = 'move';
+              const box = e.currentTarget.getBoundingClientRect();
+              const y = (e.clientY - box.top) / box.height;
+              const folder = e.dataTransfer.types.includes('application/x-postguy-folder');
+              setDrop(folder && y < 0.3 ? 'before' : folder && y > 0.7 ? 'after' : 'into');
+            }}
+            onDragLeave={() => setDrop(null)}
+            onDrop={(e) => {
+              const where = drop;
+              setDrop(null);
+              const raw = e.dataTransfer.getData('application/x-postguy');
+              if (!raw || !where) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const item = JSON.parse(raw) as DragItem;
+              if (item.kind === 'collection' && where !== 'into') return void actions.placeFolder(item.id, siblings, parentId, node.id, where);
+              if (item.id === node.id) return;
               void actions.move(item, node.id);
               toggle(node.id, true);
             }}
             onClick={() => toggle(node.id)}
             style={{ paddingLeft: 6 + depth * 12 }}
             className={cn(
-              'group flex h-7 cursor-pointer items-center gap-1 pr-1 text-[13px] select-none hover:bg-accent',
-              dragOver && 'bg-primary/15 ring-1 ring-primary ring-inset',
+              'group relative flex h-7 cursor-pointer items-center gap-1 pr-1 text-[13px] select-none hover:bg-accent',
+              drop === 'into' && 'bg-primary/15 ring-1 ring-primary ring-inset',
             )}
           >
+            {(drop === 'before' || drop === 'after') && (
+              <span className={cn('pointer-events-none absolute inset-x-0 h-0.5 bg-primary', drop === 'before' ? 'top-0' : 'bottom-0')} />
+            )}
             <ChevronRightIcon className={cn('size-3.5 shrink-0 text-muted-foreground transition-transform', isOpen && 'rotate-90')} />
             <Icon className={cn('size-3.5 shrink-0', node.kind === 'collection' ? 'text-primary' : 'text-muted-foreground')} />
             <span className={cn('truncate', node.kind === 'collection' && 'font-medium')}>{node.name}</span>
@@ -357,7 +391,7 @@ function FolderNode({
           {node.children
             .filter((c) => matches(c, q))
             .map((c) => (
-              <FolderNode key={c.id} node={c} depth={depth + 1} expanded={expanded} toggle={toggle} actions={actions} q={q} />
+              <FolderNode key={c.id} node={c} siblings={node.children} parentId={node.id} depth={depth + 1} expanded={expanded} toggle={toggle} actions={actions} q={q} />
             ))}
           {node.requests
             .filter((r) => !q || r.name.toLowerCase().includes(q) || r.url.toLowerCase().includes(q) || node.name.toLowerCase().includes(q))
@@ -411,6 +445,7 @@ function RequestRow({
           role="treeitem"
           draggable
           onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('application/x-postguy', JSON.stringify({ kind: 'request', id: request.id }));
             e.dataTransfer.setData('application/x-postguy-request', request.id);
           }}
@@ -418,6 +453,7 @@ function RequestRow({
             if (!e.dataTransfer.types.includes('application/x-postguy-request')) return;
             e.preventDefault();
             e.stopPropagation();
+            e.dataTransfer.dropEffect = 'move';
             const box = e.currentTarget.getBoundingClientRect();
             setDropAt(e.clientY < box.top + box.height / 2 ? 'before' : 'after');
           }}
