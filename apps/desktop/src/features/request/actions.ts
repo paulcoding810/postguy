@@ -18,12 +18,13 @@ export function useSendRequest() {
       const controller = new AbortController();
       controllers.set(tab.id, controller);
       setSending(tab.id, true);
+      const sent = tab.draft;
       try {
         const res = await api('POST /send', {
-          body: { requestId: tab.requestId, collectionId: tab.collectionId, request: tab.draft },
+          body: { requestId: tab.requestId, collectionId: tab.collectionId, request: sent },
           signal: controller.signal,
         });
-        setResponse(tab.id, res);
+        setResponse(tab.id, res, sent);
         qc.invalidateQueries({ queryKey: ['history'] });
         qc.invalidateQueries({ queryKey: ['snapshots'] });
         qc.invalidateQueries({ queryKey: ['reference-sources'] });

@@ -167,7 +167,7 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
               onAddScript={addPostScript}
               exampleRequest={() => {
                 const d = useTabs.getState().tabs.find((t) => t.id === tab.id);
-                const cur = d && isRequestTab(d) ? d.draft : draft;
+                const cur = (d && isRequestTab(d) ? (d.sentDraft ?? d.draft) : null) ?? draft;
                 return { method: cur.method, url: cur.url, params: cur.params, headers: cur.headers, body: cur.body };
               }}
               onUseRequest={(r, name) => {

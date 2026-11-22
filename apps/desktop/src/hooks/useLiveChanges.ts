@@ -5,7 +5,7 @@ import { isDirty, isRequestTab, useTabs } from '@/stores/tabs';
 import { queryClient } from './queries';
 
 /** Brings open, unedited request tabs up to date with the saved request; closes tabs whose request is gone. */
-async function refreshCleanTabs() {
+export async function refreshCleanTabs() {
   for (const tab of useTabs.getState().tabs) {
     if (!isRequestTab(tab) || !tab.requestId || isDirty(tab)) continue;
     try {

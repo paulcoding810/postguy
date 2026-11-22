@@ -10,6 +10,8 @@ export interface RequestTab {
   draft: RequestDefinition;
   saved: RequestDefinition | null;
   response: SendResult | null;
+  /** The draft as it was sent, so the response can be kept with the request that produced it. */
+  sentDraft?: RequestDefinition | null;
   sending: boolean;
   preview: boolean;
 }
@@ -135,7 +137,7 @@ interface TabsState {
   updateDraft: (id: string, fn: (d: RequestDefinition) => RequestDefinition) => void;
   markSaved: (id: string, saved: SavedRequest) => void;
   setSending: (id: string, sending: boolean) => void;
-  setResponse: (id: string, res: SendResult | null) => void;
+  setResponse: (id: string, res: SendResult | null, sent?: RequestDefinition | null) => void;
   onRequestDeleted: (requestId: string) => void;
   onRequestRenamed: (requestId: string, name: string) => void;
   onRequestMoved: (requestId: string, collectionId: string) => void;
@@ -228,7 +230,7 @@ export const useTabs = create<TabsState>()(
         })),
 
       setSending: (id, sending) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && isRequestTab(t) ? { ...t, sending } : t)) })),
-      setResponse: (id, response) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && isRequestTab(t) ? { ...t, response } : t)) })),
+      setResponse: (id, response, sentDraft = null) => set((s) => ({ tabs: s.tabs.map((t) => (t.id === id && isRequestTab(t) ? { ...t, response, sentDraft } : t)) })),
 
       onRequestDeleted: (requestId) =>
         set((s) => ({
@@ -258,7 +260,7 @@ export const useTabs = create<TabsState>()(
       },
       partialize: (s) => ({
         activeId: s.activeId,
-        tabs: s.tabs.map((t) => (isRequestTab(t) ? { ...t, response: null, sending: false } : t)),
+        tabs: s.tabs.map((t) => (isRequestTab(t) ? { ...t, response: null, sentDraft: null, sending: false } : t)),
       }),
     },
   ),

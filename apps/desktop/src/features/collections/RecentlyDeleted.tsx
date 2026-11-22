@@ -21,7 +21,7 @@ export function RecentlyDeleted() {
     try {
       const { message } = await api('POST /changes/:id/restore', { params: { id } });
       toast.success(message);
-      await Promise.all([qc.invalidateQueries({ queryKey: ['changes'] }), qc.invalidateQueries({ queryKey: keys.tree })]);
+      await Promise.all([qc.invalidateQueries({ queryKey: ['changes'] }), qc.invalidateQueries({ queryKey: keys.tree }), qc.invalidateQueries({ queryKey: ['flows'] }), qc.invalidateQueries({ queryKey: ['flow'] })]);
       if (list.length === 1) setOpen(false);
     } catch (e) {
       toast.error(errorMessage(e));

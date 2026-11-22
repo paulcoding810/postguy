@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/misc';
 import { TextDiff } from '@/components/TextDiff';
 import { keys } from '@/hooks/queries';
+import { refreshCleanTabs } from '@/hooks/useLiveChanges';
 import { api, errorMessage } from '@/lib/api';
 import { cn, timeAgo } from '@/lib/utils';
 import { changeText } from './changeText';
@@ -58,7 +59,13 @@ export function ChangeHistory({ collectionId, entityId, onClearFilter }: { colle
     try {
       const { message } = await api('POST /changes/:id/restore', { params: { id: c.id } });
       toast.success(message);
-      await Promise.all([qc.invalidateQueries({ queryKey: ['changes'] }), qc.invalidateQueries({ queryKey: keys.tree }), qc.invalidateQueries({ queryKey: ['variables'] })]);
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ['changes'] }),
+        qc.invalidateQueries({ queryKey: keys.tree }),
+        qc.invalidateQueries({ queryKey: ['variables'] }),
+        qc.invalidateQueries({ queryKey: ['examples'] }),
+        refreshCleanTabs(),
+      ]);
       setSelected(null);
     } catch (e) {
       toast.error(errorMessage(e));
