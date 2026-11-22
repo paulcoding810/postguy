@@ -69,7 +69,7 @@ describe('Claude (MCP) access', () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(['list_requests', 'send_request', 'get_variables', 'decode_jwt', 'create_request', 'run_flow']));
     expect((await tool('list_requests')).error).toMatch(/turned off in Postguy/);
-    expect((await h.call('GET', '/settings/mcp')).body).toEqual({ enabled: false, read: true, send: false, edit: false });
+    expect((await h.call('GET', '/settings/mcp')).body).toEqual({ enabled: false, read: true, send: false, edit: false, delete: false });
   });
 
   it('gives a Claude Code setup command that runs the bridge', async () => {
@@ -244,5 +244,37 @@ describe('Claude (MCP) secret handling', () => {
     expect(sent.error).toBeNull();
     expect(sent.value.status).toBe(200);
     expect((await tool('get_request', { id: ids.echo })).error).toBeNull();
+  });
+});
+
+describe('Claude (MCP) deleting', () => {
+  it('needs its own permission, and every deletion can be undone', async () => {
+    await allow({ enabled: true, read: true, edit: true });
+    expect((await tool('delete_request', { id: ids.echo })).error).toMatch(/does not allow Claude to delete/);
+    await allow({ delete: true, edit: false });
+    expect((await tool('delete_request', { id: ids.echo })).error).toMatch(/does not allow Claude to delete/);
+    await allow({ edit: true });
+
+    const done = (await tool('delete_request', { id: ids.echo })).value;
+    expect(done).toMatchObject({ deleted: 'Echo', changeId: expect.any(String) });
+    expect((await h.call('GET', `/requests/${ids.echo}`)).status).toBe(404);
+    const [change] = (await h.call('GET', `/collections/${ids.collection}/changes`)).body;
+    expect(change).toMatchObject({ action: 'delete', source: 'mcp', id: done.changeId });
+
+    expect((await tool('restore_change', { changeId: done.changeId })).value.message).toMatch(/Brought back/);
+    expect((await h.call('GET', `/requests/${ids.echo}`)).body.name).toBe('Echo');
+  });
+
+  it('deletes a folder or collection, but not one holding more than 50 requests', async () => {
+    await allow({ enabled: true, read: true, edit: true, delete: true });
+    const big = (await h.call('POST', '/collections', { name: 'Big', parentId: ids.collection })).body;
+    for (let i = 0; i < 51; i++) await h.call('POST', '/requests', { collectionId: big.id, name: `R${i}`, method: 'GET', url: 'http://x' });
+    expect((await tool('delete_folder', { id: big.id })).error).toMatch(/holds 51 requests/);
+    expect((await tool('delete_folder', { id: ids.collection })).error).toMatch(/holds 52 requests/);
+    await h.call('DELETE', `/requests/${(await h.call('GET', '/collections/tree')).body[0].children[0].requests[0].id}`);
+    const done = (await tool('delete_folder', { id: big.id })).value;
+    expect(done).toMatchObject({ deleted: 'Big', kind: 'folder', requests: 50 });
+    await tool('restore_change', { changeId: done.changeId });
+    expect((await h.call('GET', '/collections/tree')).body[0].children[0].requests).toHaveLength(50);
   });
 });

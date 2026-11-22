@@ -16,15 +16,18 @@ The command starts a small bridge that finds the running app through the `server
 
 ## What Claude can do
 
-MCP is off by default. Once it's on, Claude may only read until you also allow **Send requests** and **Edit**. Every tool call checks the switches as they are at that moment.
+MCP is off by default. Once it's on, Claude may only read until you also allow **Send requests**, **Edit** and **Delete**. Delete needs Edit too. Every tool call checks the switches as they are at that moment.
 
 | Permission | Tools |
 | --- | --- |
 | Read | `list_requests`, `get_request`, `list_environments`, `get_variables`, `list_history`, `get_history_entry`, `list_flows`, `get_flow`, `get_flow_run`, `decode_jwt` |
 | Send requests | `send_request`, `run_flow` |
-| Edit | `create_request`, `update_request`, `import_curl`, `import_collection`, `set_variable`, `set_active_environment` |
+| Edit | `create_request`, `update_request`, `import_curl`, `import_collection`, `set_variable`, `set_active_environment`, `restore_change` |
+| Delete | `delete_request`, `delete_folder` (a folder or collection with up to 50 requests) |
 
 Everything Claude sends is labelled **MCP** in History. Changes it makes show as **Claude** in [change history](/guide/history), so you can undo them.
+
+Claude can only delete what can be brought back: requests, folders and collections. Each deletion returns a change id that `restore_change` undoes, and you can bring it back yourself from Change history or **Recently deleted**. Environments, flows and history can't be deleted by Claude.
 
 ## Secrets stay hidden
 

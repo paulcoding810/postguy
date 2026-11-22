@@ -101,6 +101,8 @@ export const McpSettings = z.object({
   read: z.boolean().default(true),
   send: z.boolean().default(false),
   edit: z.boolean().default(false),
+  /** Delete requests and folders; needs edit too. Deletions can be undone from Change history. */
+  delete: z.boolean().default(false),
 });
 export type McpSettings = z.output<typeof McpSettings>;
 export const UpdateMcpSettings = z.object({
@@ -108,6 +110,7 @@ export const UpdateMcpSettings = z.object({
   read: z.boolean().optional(),
   send: z.boolean().optional(),
   edit: z.boolean().optional(),
+  delete: z.boolean().optional(),
 });
 
 /** How requests behave unless a request sets its own value. */

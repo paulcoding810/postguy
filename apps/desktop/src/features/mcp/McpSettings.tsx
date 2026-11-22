@@ -44,6 +44,15 @@ export function McpSettingsPanel() {
               <Row title="Read" detail="Requests, variables (secrets masked), history and flow runs." checked={s.read} disabled={!s.enabled} onChange={(v) => set({ read: v })} />
               <Row title="Send requests" detail="Send requests and run flows; labelled “MCP” in your history." checked={s.send} disabled={!s.enabled} onChange={(v) => set({ send: v })} />
               <Row title="Edit" detail="Create and change requests, set variables, switch environment, import." checked={s.edit} disabled={!s.enabled} onChange={(v) => set({ edit: v })} />
+              <div className="ml-3 border-l pl-3">
+                <Row
+                  title="Delete"
+                  detail="Delete requests and folders, up to 50 requests at a time. Each deletion can be brought back from Change history or Recently deleted."
+                  checked={s.delete && s.edit}
+                  disabled={!s.enabled || !s.edit}
+                  onChange={(v) => set({ delete: v })}
+                />
+              </div>
             </div>
           </div>
         )}

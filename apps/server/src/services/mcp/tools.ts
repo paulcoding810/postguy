@@ -1,19 +1,22 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { parseCurl, resolveTemplate } from '@postguy/core';
 import { HTTP_METHODS, newId, RequestDefinition, type CollectionTreeNode, type KeyValue } from '@postguy/shared';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client.ts';
+import { changeLog, requests } from '../../db/schema.ts';
 import { HttpError } from '../../lib/errors.ts';
 import { VERSION } from '../../lib/version.ts';
-import { getTree } from '../collections.ts';
+import { deleteCollection, getCollection, getTree, subtreeIds } from '../collections.ts';
 import { buildContext } from '../context.ts';
 import { activateEnvironment, listEnvironments } from '../environments.ts';
 import { getExecution, getFlow, listFlows, runFlow, waitForExecution } from '../flows.ts';
 import { getHistoryEntry, listHistory } from '../history.ts';
 import { importOpenApi } from '../openapi.ts';
 import { buildReport } from '../report.ts';
-import { createRequest, getRequest, updateRequest } from '../requests.ts';
-import { withSource } from '../changelog.ts';
+import { createRequest, deleteRequest, getRequest, updateRequest } from '../requests.ts';
+import { getChange, withSource } from '../changelog.ts';
+import { restoreChange } from '../changeRestore.ts';
 import { notifyChange } from '../changes.ts';
 import { send } from '../send.ts';
 import { setVariable } from '../variables.ts';
@@ -26,9 +29,13 @@ const INSTRUCTIONS = `Postguy is the user's API client. Requests live in collect
 (environment, collection, request and global variables) and {{RequestName.path}} references to remembered responses.
 Secret values are always shown as •••••• unless the user allowed it for that environment; write {{name}} in a request and
 Postguy fills it in when sending. Requests carrying a secret are only sent to hosts the user's saved requests already use.
-Use list_requests to find requests, then send_request by id. Everything you send is labelled "MCP" in the user's history.`;
+Use list_requests to find requests, then send_request by id. Everything you send is labelled "MCP" in the user's history.
+Deleting is a separate permission. Every deletion can be undone with restore_change and the changeId it returns;
+tell the user what you deleted.`;
 
 type Result = { content: { type: 'text'; text: string }[]; isError?: boolean };
+
+const MAX_DELETE_REQUESTS = 50;
 
 const json = (value: unknown): Result => ({ content: [{ type: 'text', text: JSON.stringify(value, null, 2) }] });
 
@@ -80,12 +87,13 @@ export function createMcpServer(db: Db): McpServer {
   ) =>
     server.registerTool(
       name,
-      { description, inputSchema, annotations: { readOnlyHint: need === 'read', destructiveHint: false, openWorldHint: need === 'send' } },
+      { description, inputSchema, annotations: { readOnlyHint: need === 'read', destructiveHint: need === 'delete', openWorldHint: need === 'send' } },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (async (args: any) => {
         try {
           requirePermission(db, need);
-          const hostsBefore = need === 'edit' ? allKnownHosts(db) : null;
+          // A restore only brings back what the user had, so its hosts stay trusted.
+          const hostsBefore = need === 'edit' && name !== 'restore_change' ? allKnownHosts(db) : null;
           const result = json(await withSource('mcp', () => handler(args)));
           if (hostsBefore) markUntrusted(db, [...allKnownHosts(db)].filter((h) => !hostsBefore.has(h)));
           if (need !== 'read') notifyChange({ origin: null, what: `mcp:${name}` });
@@ -276,6 +284,49 @@ export function createMcpServer(db: Db): McpServer {
       return { kind: res.kind, name: res.name, collectionId: res.collectionId, requestCount: res.requestCount, warnings: res.warnings };
     },
   );
+
+  // ---------- delete ----------
+  /** The change that recorded a deletion, so Claude can hand back a way to undo it. */
+  const deletionOf = (entityId: string) =>
+    db
+      .select({ id: changeLog.id })
+      .from(changeLog)
+      .where(and(eq(changeLog.entityId, entityId), eq(changeLog.action, 'delete')))
+      .orderBy(desc(changeLog.updatedAt))
+      .get()?.id ?? null;
+
+  tool('delete_request', 'delete', 'Deletes one saved request. It can be brought back with restore_change and the returned changeId.', { id: z.string() }, ({ id }) => {
+    const r = getRequest(db, id);
+    deleteRequest(db, id);
+    return { deleted: r.name, changeId: deletionOf(id), undo: `The user can bring it back from Change history (“Bring back”), or call restore_change.` };
+  });
+
+  tool(
+    'delete_folder',
+    'delete',
+    `Deletes one folder or collection with everything in it, up to ${MAX_DELETE_REQUESTS} requests. It can be brought back with restore_change and the returned changeId.`,
+    { id: z.string() },
+    ({ id }) => {
+      const c = getCollection(db, id);
+      const ids = subtreeIds(db, id);
+      const count = db.select({ id: requests.id }).from(requests).where(inArray(requests.collectionId, ids)).all().length;
+      if (count > MAX_DELETE_REQUESTS)
+        throw new HttpError(409, `"${c.name}" holds ${count} requests; Claude may delete at most ${MAX_DELETE_REQUESTS} at once. Delete its subfolders one by one, or ask the user to delete it.`, 'mcp_delete_too_large');
+      deleteCollection(db, id);
+      return {
+        deleted: c.name,
+        kind: c.parentId ? 'folder' : 'collection',
+        requests: count,
+        changeId: deletionOf(id),
+        undo: c.parentId ? 'The user can bring it back from the collection’s Change history, or call restore_change.' : 'The user can bring it back from Recently deleted, or call restore_change.',
+      };
+    },
+  );
+
+  tool('restore_change', 'edit', 'Undoes one change from the change history: brings back a deleted request, folder or collection, or restores the version before an edit.', { changeId: z.string() }, ({ changeId }) => {
+    if (!getChange(db, changeId)) throw new HttpError(404, 'No such change', 'not_found');
+    return restoreChange(db, changeId);
+  });
 
   tool(
     'set_variable',

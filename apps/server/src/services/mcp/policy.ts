@@ -11,13 +11,13 @@ import { getRequest } from '../requests.ts';
 import { getMcpSettings, untrustedHosts } from '../settings.ts';
 import { listVariables } from '../variables.ts';
 
-export type Permission = 'read' | 'send' | 'edit';
+export type Permission = 'read' | 'send' | 'edit' | 'delete';
 
 export function requirePermission(db: Db, need: Permission) {
   const s = getMcpSettings(db);
   if (!s.enabled) throw new HttpError(403, 'Claude access is turned off in Postguy (Settings → Claude).', 'mcp_disabled');
-  if (!s[need])
-    throw new HttpError(403, `Postguy does not allow Claude to ${need === 'read' ? 'read the workspace' : need === 'send' ? 'send requests' : 'change the workspace'}; allow it in Settings → Claude.`, 'mcp_forbidden');
+  const what = { read: 'read the workspace', send: 'send requests', edit: 'change the workspace', delete: 'delete requests or folders' }[need];
+  if (!s[need] || (need === 'delete' && !s.edit)) throw new HttpError(403, `Postguy does not allow Claude to ${what}; allow it in Settings → Claude.`, 'mcp_forbidden');
 }
 
 /** The environment Claude asked for (by id or name), or the active one; never one the user blocked. */
