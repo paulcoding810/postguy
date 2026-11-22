@@ -7,7 +7,7 @@ import type { Db } from '../../db/client.ts';
 import { changeLog, requests } from '../../db/schema.ts';
 import { HttpError } from '../../lib/errors.ts';
 import { VERSION } from '../../lib/version.ts';
-import { deleteCollection, getCollection, getTree, subtreeIds } from '../collections.ts';
+import { ancestry, createCollection, deleteCollection, effectiveAuth, getCollection, getTree, subtreeIds, updateCollection } from '../collections.ts';
 import { buildContext } from '../context.ts';
 import { activateEnvironment, listEnvironments } from '../environments.ts';
 import { getExecution, getFlow, listFlows, runFlow, waitForExecution } from '../flows.ts';
@@ -15,7 +15,7 @@ import { getHistoryEntry, listHistory } from '../history.ts';
 import { importOpenApi } from '../openapi.ts';
 import { buildReport } from '../report.ts';
 import { createRequest, deleteRequest, getRequest, updateRequest } from '../requests.ts';
-import { getChange, withSource } from '../changelog.ts';
+import { getChange, rootIdOf, withSource } from '../changelog.ts';
 import { restoreChange } from '../changeRestore.ts';
 import { notifyChange } from '../changes.ts';
 import { send } from '../send.ts';
@@ -284,6 +284,80 @@ export function createMcpServer(db: Db): McpServer {
       return { kind: res.kind, name: res.name, collectionId: res.collectionId, requestCount: res.requestCount, warnings: res.warnings };
     },
   );
+
+  // ---------- folders ----------
+  tool('list_folders', 'read', 'Lists collections and folders as a tree, with ids and request counts, including empty folders.', {}, () => {
+    const walk = (nodes: CollectionTreeNode[]): unknown[] =>
+      nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind, requests: n.requests.length, ...(n.children.length && { folders: walk(n.children) }) }));
+    return walk(getTree(db));
+  });
+
+  tool(
+    'create_folder',
+    'edit',
+    'Creates a folder inside a collection or folder, or a new top-level collection when parentId is left out.',
+    { name: z.string().min(1), parentId: z.string().optional().describe('Collection or folder id; omit for a new collection') },
+    ({ name, parentId }) => {
+      const c = createCollection(db, { name, parentId: parentId ?? null });
+      return { id: c.id, name: c.name, kind: c.kind, parentId: c.parentId };
+    },
+  );
+
+  tool('rename_folder', 'edit', 'Renames a collection or folder.', { id: z.string(), name: z.string().min(1) }, ({ id, name }) => {
+    const c = updateCollection(db, id, { name });
+    return { id: c.id, name: c.name };
+  });
+
+  tool(
+    'move',
+    'edit',
+    'Moves a request into another collection or folder, or a folder into another one (or to the top level as its own collection). Reports when the move changes the auth or base URL a request uses.',
+    { id: z.string().describe('Request, folder or collection id'), to: z.string().nullable().optional().describe('Destination collection or folder id; null or omitted moves a folder to the top level') },
+    ({ id, to }) => {
+      const target = to ?? null;
+      const isRequest = !!db.select({ id: requests.id }).from(requests).where(eq(requests.id, id)).get();
+      if (isRequest) {
+        if (!target) throw new HttpError(400, 'A request has to go into a collection or folder; give "to"', 'bad_request');
+        const before = requestView(id);
+        const r = updateRequest(db, id, { collectionId: target });
+        return { moved: r.name, kind: 'request', to: folderPath(target), notes: moveNotes(before, requestView(id)) };
+      }
+      const c = getCollection(db, id);
+      const oldRoot = rootIdOf(db, id);
+      const moved = updateCollection(db, id, { parentId: target });
+      const newRoot = rootIdOf(db, id);
+      const notes =
+        oldRoot !== newRoot && moved.parentId
+          ? [`Its requests now use the auth, variables and scripts of "${getCollection(db, newRoot).name}" where they inherit them.`]
+          : [];
+      return { moved: c.name, kind: moved.kind, to: target ? folderPath(target) : '(top level)', notes };
+    },
+  );
+
+  /** What a request will actually use: its auth type and the URL with variables resolved. */
+  const requestView = (id: string) => {
+    const r = getRequest(db, id);
+    const { ctx } = buildContext(db, { collectionId: r.collectionId, requestId: id });
+    const url = resolveTemplate(r.url, ctx);
+    return { auth: effectiveAuth(db, r.collectionId, r.auth).type, origin: originOf(url.unresolved.length ? '' : url.value), unresolved: url.unresolved };
+  };
+  const originOf = (url: string) => {
+    try {
+      return new URL(url).origin;
+    } catch {
+      return null;
+    }
+  };
+  const moveNotes = (a: ReturnType<typeof requestView>, b: ReturnType<typeof requestView>) => [
+    ...(a.auth !== b.auth ? [`Auth changes from ${a.auth} to ${b.auth}.`] : []),
+    ...(a.origin !== b.origin ? [`It now goes to ${b.origin ?? 'a URL that no longer resolves'} instead of ${a.origin ?? 'an unresolved URL'}.`] : []),
+    ...b.unresolved.filter((u) => !a.unresolved.includes(u)).map((u) => `{{${u}}} is not defined here.`),
+  ];
+  const folderPath = (id: string) =>
+    ancestry(db, id)
+      .reverse()
+      .map((c) => c.name)
+      .join(' / ');
 
   // ---------- delete ----------
   /** The change that recorded a deletion, so Claude can hand back a way to undo it. */

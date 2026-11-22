@@ -278,3 +278,35 @@ describe('Claude (MCP) deleting', () => {
     expect((await h.call('GET', '/collections/tree')).body[0].children[0].requests).toHaveLength(50);
   });
 });
+
+describe('Claude (MCP) folders', () => {
+  it('creates, renames and lists folders, including empty ones', async () => {
+    await allow({ enabled: true, read: true, edit: true });
+    const folder = (await tool('create_folder', { name: 'Users', parentId: ids.collection })).value;
+    expect(folder).toMatchObject({ name: 'Users', kind: 'folder', parentId: ids.collection });
+    const top = (await tool('create_folder', { name: 'Admin API' })).value;
+    expect(top).toMatchObject({ kind: 'collection', parentId: null });
+    await tool('rename_folder', { id: folder.id, name: 'People' });
+    const tree = (await tool('list_folders')).value;
+    expect(tree.find((c: any) => c.id === ids.collection).folders).toEqual([{ id: folder.id, name: 'People', kind: 'folder', requests: 0 }]);
+    expect(tree.find((c: any) => c.id === top.id)).toMatchObject({ name: 'Admin API', requests: 0 });
+    const [change] = (await h.call('GET', `/collections/${ids.collection}/changes`)).body;
+    expect(change).toMatchObject({ source: 'mcp', label: 'People' });
+  });
+
+  it('moves requests and folders, and says when a request will behave differently', async () => {
+    await allow({ enabled: true, read: true, edit: true });
+    const folder = (await tool('create_folder', { name: 'Users', parentId: ids.collection })).value;
+    const moved = (await tool('move', { id: ids.echo, to: folder.id })).value;
+    expect(moved).toMatchObject({ moved: 'Echo', kind: 'request', to: 'Shop / Users', notes: [] });
+
+    const other = (await tool('create_folder', { name: 'Other' })).value;
+    const away = (await tool('move', { id: ids.echo, to: other.id })).value;
+    expect(away.notes).toEqual(expect.arrayContaining(['{{baseUrl}} is not defined here.']));
+
+    expect((await tool('move', { id: folder.id, to: other.id })).value).toMatchObject({ moved: 'Users', kind: 'folder', to: 'Other' });
+    expect((await tool('move', { id: other.id, to: folder.id })).error).toMatch(/into itself/);
+    expect((await tool('move', { id: folder.id })).value).toMatchObject({ kind: 'collection', to: '(top level)' });
+    expect((await tool('move', { id: ids.echo })).error).toMatch(/has to go into a collection or folder/);
+  });
+});
