@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BookOpenIcon, LoaderIcon, RefreshCwIcon, SearchIcon, XIcon } from 'lucide-react';
+import { BookOpenIcon, LoaderIcon, RefreshCwIcon, SearchIcon, WandSparklesIcon, XIcon } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
 import type { Body, RequestDefinition } from '@postguy/shared';
@@ -9,6 +9,8 @@ import { CodeEditor } from '@/components/CodeEditor';
 import { api, errorMessage } from '@/lib/api';
 import { monaco, setGraphqlSchema } from '@/lib/monaco';
 import { cn, timeAgo } from '@/lib/utils';
+import { beautifyJson } from './BodyEditor';
+import { formatGraphql } from './formatGraphql';
 
 /** What the editor needs to fetch the endpoint's schema the way the request is sent. */
 export interface GraphqlOwner {
@@ -57,6 +59,23 @@ export function GraphqlBody({ body, onChange, editorPath, owner }: { body: Body;
     return () => setGraphqlSchema(uri, null);
   }, [queryPath, current?.schema]);
 
+  const format = async () => {
+    try {
+      const raw = await formatGraphql(body.raw ?? '');
+      let variables = body.variables;
+      if (variables?.trim()) {
+        try {
+          variables = beautifyJson(variables);
+        } catch {
+          toast.error('Variables are not valid JSON, so only the query was formatted');
+        }
+      }
+      onChange({ ...body, raw, variables });
+    } catch (e) {
+      toast.error('The query is not valid GraphQL', { description: (e as Error).message.split('\n')[0] });
+    }
+  };
+
   const fetchSchema = async () => {
     if (!owner) return;
     setFetching(true);
@@ -84,6 +103,11 @@ export function GraphqlBody({ body, onChange, editorPath, owner }: { body: Body;
             onChange={(e) => onChange({ ...body, operationName: e.target.value || undefined })}
             className="h-6 w-48 rounded border bg-transparent px-2 font-mono text-[11.5px] outline-none focus:border-ring"
           />
+          <Tooltip content="Format the query and variables">
+            <Button size="xs" variant="ghost" onClick={format} disabled={!body.raw?.trim()}>
+              <WandSparklesIcon /> Format
+            </Button>
+          </Tooltip>
           <span className="ml-auto truncate text-muted-foreground">{current ? `Schema from ${timeAgo(current.fetchedAt)}` : 'No schema yet'}</span>
           {owner && (
             <Tooltip content="Ask the endpoint for its schema, sent like this request (auth, headers, variables)">

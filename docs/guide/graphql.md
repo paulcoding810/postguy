@@ -4,6 +4,7 @@ Choose **GraphQL** in a request's **Body** tab to write a query instead of JSON.
 
 - The query has its own editor with GraphQL highlighting. **Variables** go in a JSON editor below it, and an **Operation name** picks which operation runs when the query defines several.
 - `{{variables}}` and response references work in the query, the variables and the headers, as everywhere else.
+- **Format** tidies the query and the variables; `{{variables}}` in the query are kept as written.
 - Postguy sends `POST` with `{ "query", "variables", "operationName" }` as JSON, the way GraphQL servers expect.
 
 Switching a JSON body of that shape to GraphQL splits it into the query and variables, and switching back joins them again.
