@@ -44,6 +44,16 @@ function bodyContent(def: RequestDefinition): Obj | undefined {
       return { 'application/json': { schema: {} } };
     }
   }
+  if (b.mode === 'graphql') {
+    let variables: unknown;
+    try {
+      variables = b.variables?.trim() ? JSON.parse(b.variables) : undefined;
+    } catch {
+      variables = undefined;
+    }
+    const example = { query: b.raw ?? '', ...(variables !== undefined && { variables }), ...(b.operationName && { operationName: b.operationName }) };
+    return { 'application/json': { schema: inferSchema(example), example } };
+  }
   if (b.mode === 'text') return { [b.contentType ?? 'text/plain']: { schema: { type: 'string' } } };
   if (b.mode === 'binary') return { [b.contentType ?? 'application/octet-stream']: { schema: { type: 'string', format: 'binary' } } };
   if (b.mode === 'urlencoded' || b.mode === 'form') {

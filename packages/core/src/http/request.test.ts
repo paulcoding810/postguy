@@ -148,3 +148,25 @@ describe('file bodies', () => {
     expect([contentTypeFor('a.JPG'), contentTypeFor('C:\\x\\r.csv'), contentTypeFor('noext')]).toEqual(['image/jpeg', 'text/csv', 'application/octet-stream']);
   });
 });
+
+describe('GraphQL bodies', () => {
+  it('sends the query, variables with references resolved, and the operation name as JSON', () => {
+    const r = resolveRequest(
+      def({
+        method: 'POST',
+        url: '{{baseUrl}}/graphql',
+        body: { mode: 'graphql', raw: 'query GetUser($id: ID!) { user(id: $id) { name } }', variables: '{ "id": "{{Login.data.user.id}}", "n": 2 }', operationName: 'GetUser' },
+      }),
+      ctx,
+    );
+    expect(r.request.body.contentType).toBe('application/json');
+    expect(JSON.parse(r.request.body.content!)).toEqual({ query: 'query GetUser($id: ID!) { user(id: $id) { name } }', variables: { id: 1001, n: 2 }, operationName: 'GetUser' });
+  });
+
+  it('leaves out empty variables and sends invalid ones as written', () => {
+    const plain = resolveRequest(def({ method: 'POST', url: 'http://x', body: { mode: 'graphql', raw: '{ me { id } }', variables: '  ' } }), ctx);
+    expect(JSON.parse(plain.request.body.content!)).toEqual({ query: '{ me { id } }' });
+    const bad = resolveRequest(def({ method: 'POST', url: 'http://x', body: { mode: 'graphql', raw: '{ me { id } }', variables: '{ id: 1 }' } }), ctx);
+    expect(JSON.parse(bad.request.body.content!).variables).toBe('{ id: 1 }');
+  });
+});

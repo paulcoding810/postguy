@@ -177,6 +177,16 @@ export const responseSchemas = sqliteTable('response_schemas', {
   seenCount: integer('seen_count').notNull().default(1),
 });
 
+export const graphqlSchemas = sqliteTable('graphql_schemas', {
+  requestId: text('request_id')
+    .primaryKey()
+    .references(() => requests.id, { onDelete: 'cascade' }),
+  /** The introspection result's `data` (`{ __schema }`). */
+  schema: json<unknown>('schema_json').notNull(),
+  url: text('url').notNull(),
+  fetchedAt: integer('fetched_at').notNull(),
+});
+
 export const responseExamples = sqliteTable(
   'response_examples',
   {

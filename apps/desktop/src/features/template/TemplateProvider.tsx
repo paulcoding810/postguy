@@ -28,6 +28,7 @@ export function collectRefs(def: RequestDefinition): string[] {
     ...def.headers.flatMap((p) => [p.key, p.value]),
     ...authStrings(def.auth),
     def.body.raw ?? '',
+    def.body.variables ?? '',
     ...(def.body.form ?? []).flatMap((p) => [p.key, p.value, p.src ?? '']),
     def.body.src ?? '',
   ];

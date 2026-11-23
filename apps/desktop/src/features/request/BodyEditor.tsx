@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { CodeEditor } from '@/components/CodeEditor';
 import { FilePathField } from './FilePathField';
 import { KeyValueEditor } from './KeyValueEditor';
+import { GraphqlBody, switchBodyMode, type GraphqlOwner } from './GraphqlBody';
 
 const MODE_LABELS: Record<Body['mode'], string> = {
   none: 'none',
@@ -14,6 +15,7 @@ const MODE_LABELS: Record<Body['mode'], string> = {
   form: 'form-data',
   urlencoded: 'x-www-form-urlencoded',
   binary: 'binary',
+  graphql: 'GraphQL',
 };
 
 /** Pretty-prints JSON while leaving unquoted {{refs}} intact. */
@@ -27,7 +29,7 @@ export function beautifyJson(raw: string): string {
   return pretty.replace(/"__PG_REF_(\d+)__"/g, (_, i: string) => placeholders[Number(i)]!);
 }
 
-export function BodyEditor({ body, onChange, editorPath }: { body: Body; onChange: (b: Body) => void; editorPath: string }) {
+export function BodyEditor({ body, onChange, editorPath, graphql }: { body: Body; onChange: (b: Body) => void; editorPath: string; graphql?: GraphqlOwner }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-1 border-b px-3 py-1.5">
@@ -35,7 +37,7 @@ export function BodyEditor({ body, onChange, editorPath }: { body: Body; onChang
           <button
             key={m}
             type="button"
-            onClick={() => onChange({ ...body, mode: m, form: body.form ?? [] })}
+            onClick={() => m !== body.mode && onChange(switchBodyMode(body, m))}
             className={cn(
               'rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground',
               body.mode === m && 'bg-secondary font-medium text-foreground',
@@ -62,6 +64,7 @@ export function BodyEditor({ body, onChange, editorPath }: { body: Body; onChang
         )}
       </div>
       <div className="min-h-0 flex-1">
+        {body.mode === 'graphql' && <GraphqlBody body={body} onChange={onChange} editorPath={editorPath} owner={graphql} />}
         {body.mode === 'none' && <p className="p-4 text-xs text-muted-foreground">This request does not have a body.</p>}
         {(body.mode === 'json' || body.mode === 'text') && (
           <CodeEditor

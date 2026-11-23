@@ -41,7 +41,13 @@ export function changeText(entry: ChangeEntry, side: 'before' | 'after'): string
       ...pairs('Headers', r.headers),
       ...auth(r.auth),
       ...(body && body.mode !== 'none'
-        ? [`Body (${body.mode}):`, ...(body.raw ? body.raw.split('\n').map((l: string) => `  ${l}`) : []), ...pairs('  Fields', body.form)]
+        ? [
+            `Body (${body.mode}):`,
+            ...(body.raw ? body.raw.split('\n').map((l: string) => `  ${l}`) : []),
+            ...(body.operationName ? [`  Operation: ${body.operationName}`] : []),
+            ...(body.variables?.trim() ? ['  Variables:', ...body.variables.split('\n').map((l: string) => `    ${l}`)] : []),
+            ...pairs('  Fields', body.form),
+          ]
         : []),
       ...scripts(snap.scripts),
       ...variables(snap.variables),

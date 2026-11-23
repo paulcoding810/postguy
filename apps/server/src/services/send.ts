@@ -63,6 +63,8 @@ export interface SendOptions {
   selfName?: string;
   /** Recorded in history; 'mcp' when Claude sent it. */
   source?: 'mcp';
+  /** false: don't keep the response as the request's remembered response (e.g. a schema fetch). */
+  remember?: boolean;
   /** Last check before sending; returning an error stops the request (e.g. a secret going to an unknown host). */
   guard?: (request: ResolvedRequest, usedSecrets: string[]) => { code: string; message: string } | null;
 }
@@ -85,7 +87,9 @@ function toScriptRequest(def: RequestDefinition): ScriptRequest {
     body:
       def.body.mode === 'json' || def.body.mode === 'text'
         ? (def.body.raw ?? '')
-        : def.body.mode === 'urlencoded'
+        : def.body.mode === 'graphql'
+          ? graphqlScriptBody(def.body)
+          : def.body.mode === 'urlencoded'
           ? (def.body.form ?? []).filter((f) => f.enabled && f.key).map((f) => `${encodeURIComponent(f.key)}=${encodeURIComponent(f.value)}`).join('&')
           : null,
     ...(def.body.mode === 'urlencoded' && { bodyMode: 'urlencoded' as const }),
@@ -100,6 +104,17 @@ function toScriptRequest(def: RequestDefinition): ScriptRequest {
 }
 
 /** Folds a pre-request script's edits back into the request definition. */
+/** A GraphQL body as scripts see it: the JSON that will be sent, variables still unresolved. */
+function graphqlScriptBody(b: RequestDefinition['body']): string {
+  let variables: unknown;
+  try {
+    variables = b.variables?.trim() ? JSON.parse(b.variables) : undefined;
+  } catch {
+    variables = b.variables;
+  }
+  return JSON.stringify({ query: b.raw ?? '', ...(variables !== undefined && { variables }), ...(b.operationName && { operationName: b.operationName }) });
+}
+
 function applyScriptRequest(def: RequestDefinition, before: ScriptRequest, after: ScriptRequest): RequestDefinition {
   const next = { ...def };
   const method = String(after.method ?? def.method).toUpperCase();
@@ -379,7 +394,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
   if (opts.source !== 'mcp' && raw.status !== null) trustHostOf(db, resolution.request.url);
   let snapshotId: string | null = null;
   let validation: SendResult['validation'] = null;
-  if (saved && raw.status !== null && textual) {
+  if (saved && raw.status !== null && textual && opts.remember !== false) {
     snapshotId = recordSnapshot(db, { requestId: saved.id, historyId, status: raw.status, contentType, body: bodyText });
     validation = validateResponse(db, saved.id, raw.status, contentType, bodyText);
   }

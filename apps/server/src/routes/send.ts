@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { CurlParseError, parseCurl, swapInVariables, toFetch, type ResolvedRequest, resolveRequest, resolveTemplate, redactText, toCurl, MASK, type RefResolution } from '@postguy/core';
-import { CurlExportInput, CurlImportInput, OAuthTokenInput, ResolvePreviewInput, SendInput, type ContextVariable, type ResolvedPreview } from '@postguy/shared';
+import { CurlExportInput, CurlImportInput, GraphqlSchemaInput, OAuthTokenInput, ResolvePreviewInput, SendInput, type ContextVariable, type ResolvedPreview } from '@postguy/shared';
 import { HttpError } from '../lib/errors.ts';
 import { needsTokenExchange } from '../services/oauth.ts';
 import { badRequest } from '../lib/errors.ts';
@@ -14,6 +14,7 @@ import { effectiveSettings } from '../services/settings.ts';
 import { previewLookup, stepCollectionId } from '../services/flows.ts';
 import { getRequest } from '../services/requests.ts';
 import { send } from '../services/send.ts';
+import { fetchGraphqlSchema, getGraphqlSchema } from '../services/graphql.ts';
 
 const PREVIEW_MAX = 200;
 
@@ -70,6 +71,8 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
     return { command: format(r.request, { insecure: effectiveSettings(db, input.request.settings).rejectUnauthorized === false }), containsSecrets: r.secrets.length > 0, unresolved: r.unresolved };
   };
   app.post('/export/curl', async (req) => exportAs(req.body, toCurl));
+  app.post('/graphql/schema', async (req) => fetchGraphqlSchema(db, parse(GraphqlSchemaInput, req.body)));
+  app.get('/requests/:id/graphql-schema', async (req) => getGraphqlSchema(db, parse(z.object({ id: z.string() }), req.params).id));
   app.post('/export/fetch', async (req) => exportAs(req.body, toFetch));
 
   app.post('/oauth/authorize', async (req) => {

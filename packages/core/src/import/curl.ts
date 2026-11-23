@@ -247,12 +247,15 @@ export function parseCurl(command: string): CurlParseResult {
     const looksJson = /^\s*[[{]/.test(data);
     if (/json/i.test(contentType) || (!contentType && looksJson)) {
       let pretty = data;
+      let parsed: unknown;
       try {
-        pretty = JSON.stringify(JSON.parse(data), null, 2);
+        parsed = JSON.parse(data);
+        pretty = JSON.stringify(parsed, null, 2);
       } catch {
         /* keep as sent */
       }
-      body = { mode: 'json', raw: pretty, ...(contentType && !/^application\/json\b/i.test(contentType) ? { contentType } : {}) };
+      const gql = graphqlPayload(parsed);
+      body = gql ?? { mode: 'json', raw: pretty, ...(contentType && !/^application\/json\b/i.test(contentType) ? { contentType } : {}) };
       if (/^application\/json\b/i.test(contentType)) headers.splice(headers.findIndex((h) => h.key.toLowerCase() === 'content-type'), 1);
     } else if ((!contentType || /x-www-form-urlencoded/i.test(contentType)) && /^[^=&\s]+=[^&]*(&[^=&\s]+=[^&]*)*$/.test(data)) {
       body = { mode: 'urlencoded', form: splitPairs(data) };
@@ -299,6 +302,20 @@ export function parseCurl(command: string): CurlParseResult {
   return {
     request: { name, method: method as HttpMethod, url: base, params, pathParams: [], headers, auth, body, settings, scripts: { pre: '', post: '' } },
     warnings,
+  };
+}
+
+/** A JSON body of the form { query, variables?, operationName? } is a GraphQL request. */
+function graphqlPayload(v: unknown): Body | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  if (typeof o.query !== 'string' || !Object.keys(o).every((k) => ['query', 'variables', 'operationName', 'extensions'].includes(k))) return null;
+  if (!/^\s*(?:query|mutation|subscription|fragment|\{)/.test(o.query)) return null;
+  return {
+    mode: 'graphql',
+    raw: o.query,
+    ...(o.variables && typeof o.variables === 'object' && Object.keys(o.variables as object).length > 0 ? { variables: JSON.stringify(o.variables, null, 2) } : {}),
+    ...(typeof o.operationName === 'string' && o.operationName && { operationName: o.operationName }),
   };
 }
 

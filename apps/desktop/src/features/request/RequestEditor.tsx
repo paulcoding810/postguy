@@ -126,7 +126,19 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
                 />
               </TabsContent>
               <TabsContent value="body">
-                <BodyEditor body={draft.body} onChange={(v) => set('body', v)} editorPath={`body-${tab.id}.json`} />
+                <BodyEditor
+                  body={draft.body}
+                  onChange={(v) => set('body', v)}
+                  editorPath={`body-${tab.id}.json`}
+                  graphql={{
+                    draft: () => {
+                      const t = useTabs.getState().tabs.find((x) => x.id === tab.id);
+                      return t && isRequestTab(t) ? t.draft : draft;
+                    },
+                    collectionId: tab.collectionId,
+                    requestId: tab.requestId,
+                  }}
+                />
               </TabsContent>
               <TabsContent value="pre">
                 <ScriptEditor
@@ -165,6 +177,7 @@ export function RequestEditor({ tab }: { tab: RequestTab }) {
               requestName={tab.requestId ? (tab.saved?.name ?? tab.draft.name) : null}
               hasCollection={!!tab.collectionId}
               onAddScript={addPostScript}
+              graphql={(tab.sentDraft ?? draft).body.mode === 'graphql'}
               exampleRequest={() => {
                 const d = useTabs.getState().tabs.find((t) => t.id === tab.id);
                 const cur = (d && isRequestTab(d) ? (d.sentDraft ?? d.draft) : null) ?? draft;

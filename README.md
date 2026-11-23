@@ -31,7 +31,7 @@ pnpm typecheck
 pnpm build:app  # packaged desktop app with its own server (see Packaging)
 ```
 
-Data is stored in `.data/postguy.db`. The bundled mock shop API runs on `http://127.0.0.1:4780` and serves its own spec at `/openapi.yaml` (user `john` / password `secret`).
+Data is stored in `.data/postguy.db`. The bundled mock shop API runs on `http://127.0.0.1:4780` and serves its own spec at `/openapi.yaml` and a GraphQL endpoint at `/graphql` (user `john` / password `secret`).
 
 ## Repository layout
 

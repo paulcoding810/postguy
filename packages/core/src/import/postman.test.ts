@@ -54,3 +54,13 @@ describe('Postman import', () => {
     expect(out.requests[1]!.body).toEqual({ mode: 'binary', src: '/tmp/a.zip' });
   });
 });
+
+describe('Postman GraphQL bodies', () => {
+  it('imports them as GraphQL with their variables', () => {
+    const c = postmanToCollection({
+      info: { name: 'G', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
+      item: [{ name: 'Me', request: { method: 'POST', url: 'https://api.x/graphql', body: { mode: 'graphql', graphql: { query: 'query { me { id } }', variables: '{"a":1}' } } } }],
+    }).collection;
+    expect(c.requests[0]!.body).toEqual({ mode: 'graphql', raw: 'query { me { id } }', variables: '{"a":1}' });
+  });
+});

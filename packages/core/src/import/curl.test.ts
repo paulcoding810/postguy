@@ -159,3 +159,13 @@ const response = await fetch("https://api.x/users?a=1", {
     expect(calls).toEqual([['https://api.x/u', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"a":[1,2]}' }]]);
   });
 });
+
+describe('GraphQL in pasted cURL', () => {
+  it('recognises a { query, variables } body as GraphQL', () => {
+    const { request } = parseCurl(`curl https://api.x/graphql -H 'content-type: application/json' --data-raw '{"operationName":"Me","query":"query Me { me { id } }","variables":{"a":1}}'`);
+    expect(request.body).toEqual({ mode: 'graphql', raw: 'query Me { me { id } }', variables: '{\n  "a": 1\n}', operationName: 'Me' });
+  });
+  it('keeps other JSON with a "query" field as JSON', () => {
+    expect(parseCurl(`curl https://api.x/search --data-raw '{"query":"shoes","page":2}'`).request.body.mode).toBe('json');
+  });
+});

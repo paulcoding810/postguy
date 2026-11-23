@@ -16,7 +16,7 @@ export const KeyValue = z.object({
 });
 export type KeyValue = z.infer<typeof KeyValue>;
 
-export const BODY_MODES = ['none', 'json', 'text', 'form', 'urlencoded', 'binary'] as const;
+export const BODY_MODES = ['none', 'json', 'text', 'form', 'urlencoded', 'binary', 'graphql'] as const;
 export const Body = z.object({
   mode: z.enum(BODY_MODES),
   raw: z.string().optional(),
@@ -24,6 +24,9 @@ export const Body = z.object({
   contentType: z.string().optional(),
   /** Binary mode: path of the file sent as the body. */
   src: z.string().optional(),
+  /** GraphQL mode: the variables as JSON text, and which operation to run; `raw` holds the query. */
+  variables: z.string().optional(),
+  operationName: z.string().optional(),
 });
 export type Body = z.infer<typeof Body>;
 

@@ -256,6 +256,22 @@ function resolveBody(
     }
     case 'text':
       return { content: str(b.raw ?? ''), contentType: b.contentType ?? 'text/plain' };
+    case 'graphql': {
+      const payload: Record<string, unknown> = { query: str(b.raw ?? '') };
+      const vars = (b.variables ?? '').trim();
+      if (vars) {
+        try {
+          const r = resolveJsonTree(JSON.parse(vars), ctx);
+          track(r);
+          payload.variables = r.value;
+        } catch {
+          // Not valid JSON: sent as written, so the server explains what's wrong.
+          payload.variables = str(vars);
+        }
+      }
+      if (b.operationName?.trim()) payload.operationName = b.operationName.trim();
+      return { content: JSON.stringify(payload), contentType: 'application/json' };
+    }
     case 'urlencoded': {
       const pairs = enabledPairs(b.form).map(
         (kv) => `${encodeURIComponent(str(kv.key))}=${encodeURIComponent(str(kv.value))}`,

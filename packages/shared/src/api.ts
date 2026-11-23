@@ -322,6 +322,18 @@ export interface OAuthSignInStatus {
   token: OAuthTokenResult | null;
 }
 
+export const GraphqlSchemaInput = z.object({
+  request: RequestDefinition,
+  collectionId: z.string().nullable().optional(),
+  requestId: z.string().nullable().optional(),
+});
+export interface GraphqlSchemaResult {
+  /** The introspection result's data: `{ __schema }`. */
+  schema: unknown;
+  url: string;
+  fetchedAt: number;
+}
+
 export const CurlImportInput = z.object({
   command: z.string().min(1).max(1_000_000),
   /** Where the request goes; its variables replace the values they hold. Omit both to use the active environment only. */
@@ -470,6 +482,8 @@ export interface ApiRoutes {
   'POST /import/curl': { body: z.input<typeof CurlImportInput>; response: CurlImportResult };
   'POST /export/curl': { body: CurlExportInput; response: CurlExportResult };
   'POST /export/fetch': { body: CurlExportInput; response: CurlExportResult };
+  'POST /graphql/schema': { body: z.input<typeof GraphqlSchemaInput>; response: GraphqlSchemaResult };
+  'GET /requests/:id/graphql-schema': { response: GraphqlSchemaResult | null };
   'POST /resolve-preview': { body: ResolvePreviewInput; response: ResolvedPreview[] };
   'GET /context-variables': { query: { collectionId?: string; requestId?: string; flowId?: string }; response: ContextVariable[] };
 

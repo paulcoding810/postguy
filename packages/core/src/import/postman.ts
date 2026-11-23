@@ -95,8 +95,11 @@ function body(b: Obj | undefined): Body {
     }
     case 'file':
       return { mode: 'binary', src: fileSrc(b.file?.src) };
-    case 'graphql':
-      return { mode: 'json', raw: JSON.stringify({ query: b.graphql?.query ?? '', variables: tryJson(b.graphql?.variables) }, null, 2) };
+    case 'graphql': {
+      const v = b.graphql?.variables;
+      const vars = typeof v === 'string' ? v.trim() : v && typeof v === 'object' ? JSON.stringify(v, null, 2) : '';
+      return { mode: 'graphql', raw: b.graphql?.query ?? '', ...(vars && vars !== '{}' && { variables: vars }) };
+    }
     default:
       return { mode: 'none' };
   }

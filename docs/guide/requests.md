@@ -22,7 +22,7 @@ Click the request name above the URL to rename it. The whole name is selected, s
 | **Params** | Query parameters and path variables |
 | **Headers** | Request headers; untick a row to keep it without sending it |
 | **Auth** | Bearer, Basic, API key, OAuth 2.0, or inherit from the folder. See [Auth](/guide/auth) |
-| **Body** | JSON, text, form-data, URL-encoded or a binary file |
+| **Body** | JSON, text, form-data, URL-encoded, a binary file, or a [GraphQL](/guide/graphql) query |
 | **Pre-request** / **Post-response** | [Scripts](/guide/scripts) |
 | **Docs** | The OpenAPI operation the request came from, and its [examples](/guide/examples) |
 | **Settings** | Timeout, following redirects, TLS certificate checks, and whether to use the cookie jar. Unset values follow the defaults in **Settings → Requests** (<kbd>⌘,</kbd>); **Use default** puts a changed one back |

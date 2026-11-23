@@ -12,6 +12,7 @@ The first release of Postguy, a local-first API workspace.
 - Send requests with params, headers, auth (bearer, basic, API key, OAuth 2.0 with PKCE sign-in) and JSON, text, form, URL-encoded or file bodies.
 - Responses as Pretty, Raw or a fast, filterable Tree; cookies kept in a jar; history of everything you send.
 - Save responses as named **examples** on a request, and fill the editor from them.
+- **GraphQL** requests with a query editor, variables, completion and checks from the endpoint's schema, and GraphQL errors shown above the response.
 - Edit `{{variables}}` in place: hover to change a value, ⌘-click to edit straight away.
 
 ### Remembering and reusing data

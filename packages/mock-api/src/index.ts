@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { orders, publicUser, users, type Order } from './data.ts';
+import { runGraphql } from './graphql.ts';
 
 export const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'fixtures');
 
@@ -187,6 +188,8 @@ export function buildMockApi(opts: MockApiOptions = {}) {
       return reply.code(201).send({ data: order });
     },
   );
+
+  app.post<{ Body: { query?: unknown; variables?: unknown; operationName?: unknown } }>('/graphql', async (req) => runGraphql(req.body ?? {}));
 
   app.get('/echo', async (req) => ({ method: req.method, query: req.query, headers: req.headers }));
   app.post('/echo', async (req) => ({ method: req.method, query: req.query, headers: req.headers, body: req.body }));

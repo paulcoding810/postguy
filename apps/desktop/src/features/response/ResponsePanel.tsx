@@ -42,7 +42,10 @@ export function ResponsePanel({
   onAddScript,
   exampleRequest,
   onUseRequest,
+  graphql = false,
 }: {
+  /** The request was a GraphQL query: errors in the body are shown, as such responses are usually 200. */
+  graphql?: boolean;
   /** The request as written, saved with an example. */
   exampleRequest?: () => ExampleRequest;
   /** Fills the editor from an example's request. */
@@ -140,6 +143,8 @@ export function ResponsePanel({
           <span className="text-muted-foreground">{formatBytes(response.size)}</span>
         </div>
       </div>
+
+      {graphql && <GraphqlErrors response={response} />}
 
       {response.unresolved.length > 0 && (
         <div className="flex items-center gap-2 border-b bg-warning/10 px-3 py-1.5 text-xs text-warning">
@@ -243,5 +248,34 @@ export function ResponsePanel({
         />
       </TabsContent>
     </Tabs>
+  );
+}
+
+/** GraphQL reports failures in an `errors` array, usually with status 200; this makes them visible. */
+function GraphqlErrors({ response }: { response: SendResult }) {
+  const errors = React.useMemo(() => {
+    if (response.bodyEncoding !== 'utf8') return [];
+    try {
+      const body = JSON.parse(response.body) as { errors?: { message?: string; path?: unknown[] }[] };
+      return Array.isArray(body.errors) ? body.errors : [];
+    } catch {
+      return [];
+    }
+  }, [response]);
+  if (!errors.length) return null;
+  return (
+    <div className="flex items-start gap-2 border-b bg-destructive/10 px-3 py-1.5 text-xs text-destructive" role="alert">
+      <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
+      <div className="min-w-0">
+        <span className="font-medium">GraphQL {errors.length === 1 ? 'error' : `errors (${errors.length})`}</span>
+        {errors.slice(0, 3).map((e, i) => (
+          <div key={i} className="truncate select-text">
+            {e.message ?? 'Unknown error'}
+            {Array.isArray(e.path) && <span className="text-destructive/70"> at {e.path.join('.')}</span>}
+          </div>
+        ))}
+        {errors.length > 3 && <div className="text-destructive/70">and {errors.length - 3} more in the body</div>}
+      </div>
+    </div>
   );
 }

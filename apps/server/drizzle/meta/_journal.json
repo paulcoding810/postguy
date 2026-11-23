@@ -57,6 +57,13 @@
       "when": 1795275323455,
       "tag": "0007_examples",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1795404449160,
+      "tag": "0008_graphql_schemas",
+      "breakpoints": true
     }
   ]
 }
