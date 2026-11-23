@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runScript, type ScriptHost } from './sandbox.ts';
+import type { ScriptRequest } from '@postguy/shared';
 
 function host(store: Record<string, unknown> = {}, env: Record<string, unknown> = {}): ScriptHost {
   return {
@@ -179,9 +180,69 @@ describe('Postman compatibility', () => {
     ]);
   });
 
-  it('explains unsupported pm.sendRequest', async () => {
-    const r = await runScript({ phase: 'post', host: host(), response: login, source: 'pm.sendRequest("http://x", () => {})' });
-    expect(r.error).toMatch(/pm.sendRequest is not available/);
+  it('explains pm.sendRequest where the host can’t send', async () => {
+    const r = await runScript({ phase: 'post', host: host(), response: login, source: 'await pm.sendRequest("http://x")' });
+    expect(r.error).toMatch(/pm.sendRequest is not available here/);
+  });
+});
+
+describe('pm.sendRequest', () => {
+  const sent: ScriptRequest[] = [];
+  const sender = (over: Partial<ScriptHost> = {}): ScriptHost => ({
+    ...host(),
+    async sendRequest(req) {
+      sent.push(req);
+      await new Promise((r) => setTimeout(r, 5));
+      if (req.url.includes('down')) throw new Error('connect ECONNREFUSED');
+      return { status: 200, statusText: 'OK', headers: { 'content-type': 'application/json' }, body: { token: 'tok-9', echo: req.body } };
+    },
+    ...over,
+  });
+  const pre = (source: string, h: ScriptHost = sender()) =>
+    runScript({ phase: 'pre', host: h, request: { method: 'GET', url: 'http://api/x', headers: {}, body: null }, source, timeoutMs: 1000 });
+
+  it('runs the callback form and lets it change the outgoing request', async () => {
+    sent.length = 0;
+    const r = await pre(`pm.sendRequest({ url: 'http://auth/login', method: 'POST', header: [{ key: 'X-A', value: '1' }], body: { mode: 'raw', raw: '{"u":"ann"}' } }, (err, res) => {
+      pm.request.headers.upsert({ key: 'Authorization', value: 'Bearer ' + res.json().token });
+      pm.test('login ok', () => pm.expect(res.code).to.equal(200));
+    });`);
+    expect(r.error).toBeNull();
+    expect(sent[0]).toEqual({ method: 'POST', url: 'http://auth/login', headers: { 'X-A': '1' }, body: '{"u":"ann"}' });
+    expect(r.request?.headers.Authorization).toBe('Bearer tok-9');
+    expect(r.assertions).toEqual([{ ok: true, message: 'login ok' }]);
+  });
+
+  it('supports await, urlencoded bodies and several calls in a row', async () => {
+    sent.length = 0;
+    const r = await pre(`const a = await pm.sendRequest({ url: 'http://auth/token', method: 'POST', body: { mode: 'urlencoded', urlencoded: [{ key: 'grant_type', value: 'client credentials' }] } });
+      const b = await pm.sendRequest('http://api/me');
+      pm.environment.set('tok', a.json().token + '/' + b.code);`);
+    expect(r.error).toBeNull();
+    expect(sent.map((x) => [x.url, x.body, x.headers['Content-Type']])).toEqual([
+      ['http://auth/token', 'grant_type=client%20credentials', 'application/x-www-form-urlencoded'],
+      ['http://api/me', null, undefined],
+    ]);
+  });
+
+  it('passes network errors to the callback, and fails the script when an awaited send fails', async () => {
+    const cb = await pre(`pm.sendRequest('http://down/x', (err, res) => { console.log(err.message, res === null); });`);
+    expect(cb.error).toBeNull();
+    expect(cb.logs.map((l) => l.message)).toEqual(['pm.sendRequest GET http://down/x → failed: connect ECONNREFUSED', 'connect ECONNREFUSED true']);
+    const awaited = await pre(`await pm.sendRequest('http://down/x');`);
+    expect(awaited.error).toMatch(/ECONNREFUSED/);
+  });
+
+  it('limits the number of calls, and waiting doesn’t count against the CPU time limit', async () => {
+    const many = await pre(`for (let i = 0; i < 11; i++) await pm.sendRequest('http://api/' + i);`);
+    expect(many.error).toMatch(/at most 10 times/);
+    const slow = await pre(`await pm.sendRequest('http://api/slow');`, sender({ sendRequest: () => new Promise((r) => setTimeout(() => r({ status: 204, headers: {}, body: '' }), 1300)) }));
+    expect(slow.error).toBeNull();
+  });
+
+  it('reports errors thrown in a callback', async () => {
+    const thrown = await pre(`pm.sendRequest('http://api/x', () => { throw new Error('boom'); });`);
+    expect(thrown.error).toMatch(/boom/);
   });
 });
 

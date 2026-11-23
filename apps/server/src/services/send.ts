@@ -15,6 +15,7 @@ import {
   type ScriptHost,
 } from '@postguy/core';
 import {
+  HTTP_METHODS,
   newId,
   SendInput,
   type KeyValue,
@@ -228,7 +229,61 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
         withSource('script', () => replaceVariables(db, t.scope, t.ownerId, rest.map(({ key: k, value: val, isSecret, enabled }) => ({ key: k, value: val, isSecret, enabled }))));
       } else withSource('script', () => setVariable(db, t.scope, t.ownerId, key, typeof value === 'string' ? value : JSON.stringify(value)));
     },
+    sendRequest: (req) => scriptSend(req),
   });
+
+  /** pm.sendRequest: sent like any request (variables, cookie jar, default settings, Claude's host lock), labelled "script" in history. */
+  const scriptSend = async (req: ScriptRequest): Promise<ScriptResponse> => {
+    const method = req.method.toUpperCase();
+    if (!(HTTP_METHODS as readonly string[]).includes(method)) throw new Error(`Unsupported method ${req.method}`);
+    if (!/^https?:\/\//i.test(req.url) && !/\{\{/.test(req.url)) throw new Error(`pm.sendRequest needs a full http(s) URL, not "${req.url}"`);
+    const contentType = Object.entries(req.headers).find(([k]) => k.toLowerCase() === 'content-type')?.[1];
+    const sdef: RequestDefinition = {
+      name: 'pm.sendRequest',
+      method: method as RequestDefinition['method'],
+      url: req.url,
+      params: [],
+      pathParams: [],
+      headers: Object.entries(req.headers).map(([key, value]) => ({ id: newId(8), key, value, enabled: true })),
+      auth: { type: 'none' },
+      body: req.body === null ? { mode: 'none' } : { mode: 'text', raw: req.body, contentType: contentType ?? 'text/plain' },
+      settings: {},
+      scripts: { pre: '', post: '' },
+    };
+    const { ctx, environmentId } = context();
+    const resolution = resolveRequest(sdef, ctx, sdef.auth);
+    const refused = opts.guard?.(resolution.request, resolution.secrets);
+    if (refused) throw new Error(refused.message);
+    const jar = cookieJarFor(db, environmentId, sdef, resolution.request);
+    const secrets = [...resolution.secrets, ...secretValues(ctx), ...jar.sent];
+    const raw = await executeHttp(resolution.request, effectiveSettings(db, {}), opts.signal, jar.hooks);
+    const type = headerValue(raw.headers, 'content-type');
+    const textual = isTextual(type, raw.body);
+    const text = textual ? raw.body.toString('utf8') : raw.body.toString('base64');
+    db.insert(requestHistory)
+      .values({
+        id: newId(),
+        requestId: null,
+        environmentId,
+        method,
+        url: redactText(resolution.request.url, secrets),
+        request: { headers: redactHeaders(resolution.request.headers, secrets), body: resolution.request.body.content === null ? null : redactText(truncate(resolution.request.body.content), secrets) },
+        status: raw.status,
+        statusText: raw.statusText,
+        responseHeaders: redactHeaders(raw.headers, secrets, ['set-cookie']),
+        responseBody: textual ? truncate(text) : null,
+        truncated: textual && text.length > HISTORY_BODY_LIMIT,
+        bodySize: raw.body.length,
+        contentType: type,
+        timing: raw.timing,
+        error: raw.error ? `${raw.error.code}: ${raw.error.message}` : null,
+        source: 'script',
+        createdAt: Date.now(),
+      })
+      .run();
+    if (raw.error) throw new Error(`${raw.error.code}: ${raw.error.message}`);
+    return { status: raw.status ?? 0, statusText: raw.statusText ?? '', headers: raw.headers as Record<string, string>, body: textual ? parseBody(text, type) : text, timeMs: Math.round(raw.timing.totalMs) };
+  };
 
   let def: RequestDefinition = structuredClone(input.request);
   const scripts: ScriptRun[] = [];

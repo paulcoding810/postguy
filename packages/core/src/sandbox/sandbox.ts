@@ -15,7 +15,12 @@ export interface ScriptHost {
   envSet(key: string, value: unknown, scope?: 'environment' | 'globals' | 'collection'): void;
   /** Cookie-jar cookies for the request's URL (the final URL once a response arrived). */
   cookies?(): { name: string; value: string }[];
+  /** Sends a request for pm.sendRequest; rejects with a message the script sees as the error. */
+  sendRequest?(request: ScriptRequest): Promise<ScriptResponse>;
 }
+
+/** What pm.sendRequest may do in one script run. */
+export const SEND_LIMITS = { count: 10, totalMs: 30_000 };
 
 export interface ScriptInput {
   source: string;
@@ -23,11 +28,13 @@ export interface ScriptInput {
   host: ScriptHost;
   request?: ScriptRequest;
   response?: ScriptResponse;
+  /** CPU time the script itself may use; time spent waiting on pm.sendRequest doesn't count. */
   timeoutMs?: number;
   memoryMb?: number;
 }
 
 const PRELUDE = `"use strict";
+const __failures = [];
 const __call = (n, ...a) => { const r = __host(n, JSON.stringify(a)); return r === undefined ? undefined : JSON.parse(r); };
 const __fmt = (v) => { if (typeof v === 'string') return v; if (v === undefined) return 'undefined'; try { return JSON.stringify(v); } catch (e) { return String(v); } };
 const __log = (level) => (...a) => { __call('log', level, a.map(__fmt).join(' ')); };
@@ -93,14 +100,27 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
   const runtime = QuickJS.newRuntime();
   runtime.setMemoryLimit((input.memoryMb ?? 32) * 1024 * 1024);
   runtime.setMaxStackSize(512 * 1024);
-  const deadline = started + timeoutMs;
+  // The CPU budget only runs while the script is executing, not while it waits on pm.sendRequest.
+  let cpuLeft = timeoutMs;
+  let deadline = started + timeoutMs;
   let timedOut = false;
   runtime.setInterruptHandler(() => {
     timedOut = Date.now() > deadline;
     return timedOut;
   });
+  const inVm = <T>(fn: () => T): T => {
+    const t = Date.now();
+    deadline = t + cpuLeft;
+    try {
+      return fn();
+    } finally {
+      cpuLeft -= Date.now() - t;
+    }
+  };
   const vm: QuickJSContext = runtime.newContext();
   let error: string | null = null;
+  const pending: { id: number; request: ScriptRequest }[] = [];
+  let sent = 0;
 
   try {
     const host = vm.newFunction('__host', (nameH: QuickJSHandle, argsH: QuickJSHandle) => {
@@ -150,18 +170,81 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
         case 'result':
           if (request && args[0] && typeof args[0] === 'object') request = args[0] as ScriptRequest;
           break;
+        case 'send':
+          pending.push({ id: Number(args[0]), request: normalizeScriptRequest(args[1] as ScriptRequest) });
+          break;
       }
       return out === undefined ? vm.undefined : vm.newString(JSON.stringify(out));
     });
     vm.setProp(vm.global, '__host', host);
     host.dispose();
 
-    const code = `${PRELUDE}(function () {\n${input.source}\n})();\nfor (let i = 0; i < __timers.length; i++) { const t = __timers[i]; __timers[i] = null; if (t) t(); }\nif (request) __call('result', request);\n`;
-    const result = vm.evalCode(code, 'script.js');
+    // The script runs as an async function so it may await pm.sendRequest; a rejection is its error.
+    const code = `${PRELUDE}(async function () {\n${input.source}\n})().then(() => { globalThis.__mainDone = true; }, (e) => { globalThis.__mainDone = true; globalThis.__mainError = e; });\n`;
+    const result = inVm(() => vm.evalCode(code, 'script.js'));
     if (result.error) {
       error = errorText(vm.dump(result.error), timedOut, timeoutMs);
       result.error.dispose();
     } else result.value.dispose();
+
+    const sendDeadline = Date.now() + SEND_LIMITS.totalMs;
+    const settle = (id: number, failure: string | null, res: ScriptResponse | null) => {
+      const call = inVm(() => vm.evalCode(`__settleSend(${id}, ${JSON.stringify(failure)}, ${JSON.stringify(res)})`, 'settle.js'));
+      if (call.error) {
+        error ??= errorText(vm.dump(call.error), timedOut, timeoutMs);
+        call.error.dispose();
+      } else call.value.dispose();
+    };
+    for (let rounds = 0; !error && rounds < 1000; rounds++) {
+      const jobs = inVm(() => runtime.executePendingJobs());
+      if (jobs.error) {
+        error = errorText(vm.dump(jobs.error), timedOut, timeoutMs);
+        jobs.error.dispose();
+        break;
+      }
+      if (!pending.length) break;
+      const batch = pending.splice(0);
+      const results = await Promise.all(
+        batch.map(async ({ id, request: req }) => {
+          if (!input.host.sendRequest) return { id, failure: 'pm.sendRequest is not available here', res: null };
+          if (++sent > SEND_LIMITS.count) return { id, failure: `pm.sendRequest can be called at most ${SEND_LIMITS.count} times per script`, res: null };
+          const left = sendDeadline - Date.now();
+          if (left <= 0) return { id, failure: `pm.sendRequest calls took longer than ${SEND_LIMITS.totalMs / 1000} s in total`, res: null };
+          try {
+            const res = await Promise.race([
+              input.host.sendRequest(req),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`pm.sendRequest timed out: the script's ${SEND_LIMITS.totalMs / 1000} s for requests ran out`)), left)),
+            ]);
+            return { id, failure: null, res };
+          } catch (e) {
+            return { id, failure: (e as Error).message, res: null };
+          }
+        }),
+      );
+      for (const r of results) {
+        const req = batch.find((b) => b.id === r.id)!.request;
+        const line = r.res ? `${r.res.status}${r.res.timeMs !== undefined ? ` in ${r.res.timeMs} ms` : ''}` : `failed: ${r.failure}`;
+        if (logs.length < 500) logs.push({ at: Date.now(), level: r.res ? 'info' : 'warn', message: `pm.sendRequest ${req.method} ${req.url} → ${line}` });
+        settle(r.id, r.failure, r.res);
+      }
+    }
+
+    if (!error) {
+      const finish = inVm(() =>
+        vm.evalCode(
+          `if (!globalThis.__mainDone) throw new Error('The script was still waiting when it ended; await pm.sendRequest or give it a callback');
+if (globalThis.__mainError) throw globalThis.__mainError;
+if (__failures.length) throw __failures[0];
+for (let i = 0; i < __timers.length; i++) { const t = __timers[i]; __timers[i] = null; if (t) t(); }
+if (request) __call('result', request);`,
+          'script.js',
+        ),
+      );
+      if (finish.error) {
+        error = errorText(vm.dump(finish.error), timedOut, timeoutMs);
+        finish.error.dispose();
+      } else finish.value.dispose();
+    }
   } catch (e) {
     error = errorText({ name: 'Error', message: (e as Error).message }, timedOut, timeoutMs);
   } finally {

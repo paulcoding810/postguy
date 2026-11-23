@@ -19,9 +19,9 @@ describe('compatibilityWarnings', () => {
   it('names unsupported script features and unknown built-in variables with the requests using them', () => {
     const w = compatibilityWarnings(postmanToCollection(collection).collection);
     expect(w).toEqual([
-      `Scripts use pm.sendRequest (chain the requests in a flow instead), which Postguy doesn't run: "Login".`,
       `Scripts use CryptoJS ciphers (hashes, HMAC and encoders work), which Postguy doesn't run: "Login".`,
       `Scripts use setNextRequest (use flow conditions instead), which Postguy doesn't run: "Orders / List".`,
+      `Scripts send their own requests with pm.sendRequest to x: "Login". Check you expect these before sending, as they can carry your variables.`,
       `{{$randomBankAccount}} isn't a built-in variable Postguy knows, so it is sent as text: "Login".`,
     ]);
   });
@@ -44,7 +44,7 @@ describe('compatibilityWarnings', () => {
 });
 
 describe('compatibility of collection and folder scripts', () => {
-  it('names a collection or folder whose own script uses an unsupported feature', () => {
+  it('names a collection or folder whose own script uses an unsupported feature or sends requests', () => {
     const c = postmanToCollection({
       info: { name: 'Team', schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json' },
       event: [{ listen: 'prerequest', script: { exec: ['pm.sendRequest("https://x", () => {})'] } }],
@@ -52,8 +52,8 @@ describe('compatibility of collection and folder scripts', () => {
     }).collection;
     expect(c.folders[0]!.scripts?.post).toContain('pm.vault');
     expect(compatibilityWarnings(c)).toEqual([
-      `Scripts use pm.sendRequest (chain the requests in a flow instead), which Postguy doesn't run: "Team (collection scripts)".`,
       `Scripts use pm.vault, which Postguy doesn't run: "Users (folder scripts)".`,
+      `Scripts send their own requests with pm.sendRequest to x: "Team (collection scripts)". Check you expect these before sending, as they can carry your variables.`,
     ]);
   });
 });

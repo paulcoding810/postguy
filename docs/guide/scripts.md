@@ -2,7 +2,7 @@
 
 Requests, folders, collections and flow steps can run JavaScript before a request is sent (**Pre-request**) and after its response arrives (**Post-response**).
 
-Scripts run in a QuickJS WebAssembly sandbox with no file, network or process access, a 2-second time limit and a memory cap.
+Scripts run in a QuickJS WebAssembly sandbox with no file or process access, a 2-second time limit and a memory cap. The only way out to the network is [`pm.sendRequest`](#sending-requests-from-a-script).
 
 ## Order
 
@@ -57,7 +57,32 @@ Scripts imported from Postman run as they are:
 - `pm.environment`, `pm.globals`, `pm.collectionVariables` and `pm.variables`;
 - the older `postman.*` functions and the `tests["…"]` form.
 
-`pm.sendRequest` is not available; chain the requests in a [flow](/guide/flows) instead. A `postman.setNextRequest` call is noted when importing.
+`postman.setNextRequest` doesn't run; use a [flow](/guide/flows) and its conditions instead. It is noted when importing.
+
+## Sending requests from a script
+
+`pm.sendRequest` sends a request of its own, most often to fetch a token before the main request:
+
+```js
+// pre-request
+const res = await pm.sendRequest({
+  url: '{{baseUrl}}/auth/login',
+  method: 'POST',
+  header: { 'Content-Type': 'application/json' },
+  body: { mode: 'raw', raw: JSON.stringify({ user: 'ann', password: pm.environment.get('password') }) },
+});
+pm.environment.set('token', res.json().access_token);
+```
+
+The callback form works too: `pm.sendRequest(req, (err, res) => { … })`. `req` is a URL or `{ url, method, header, body }`, with raw, URL-encoded or GraphQL bodies. `res` has `code`, `status`, `headers`, `json()` and `text()`, like `pm.response`.
+
+- `{{variables}}` are filled in, the cookie jar is used, and the default timeout and TLS settings from **Settings → Requests** apply.
+- Each call appears in the script's log and in **History**, labelled *script*.
+- A script may send up to 10 requests, in at most 30 seconds in all. Waiting for them doesn't count towards the 2-second limit.
+- When a collection is imported, its notes list the hosts its scripts send to. Check them: a script can send your variables anywhere.
+- When Claude sends the request, script requests follow the same [host lock](/guide/claude#secrets-only-go-where-they-already-go): secrets only go to hosts your saved requests use.
+
+Prefer a [flow](/guide/flows) when the steps are requests you'd also send on their own; `pm.sendRequest` is for small helpers like logging in.
 
 ## Writing scripts without typing them
 

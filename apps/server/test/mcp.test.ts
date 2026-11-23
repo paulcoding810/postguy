@@ -390,3 +390,15 @@ describe('Claude (MCP) move edge cases', () => {
     expect((await h.call('GET', `/collections/${f.id}`)).body.parentId).toBe(t.id);
   });
 });
+
+describe('Claude (MCP) and pm.sendRequest', () => {
+  it('applies the secret host lock to requests a script sends', async () => {
+    await allow({ enabled: true, read: true, send: true });
+    const other = h.mockUrl.replace('127.0.0.1', 'localhost');
+    await h.call('PATCH', `/requests/${ids.echo}`, { scripts: { pre: `await pm.sendRequest({ url: '${other}/echo', header: { 'X-Key': '{{apiKey}}' } });`, post: '' } });
+    const res = (await tool('send_request', { requestId: ids.echo })).value;
+    expect(res.error.message).toMatch(/would carry a secret/);
+    await h.call('PATCH', `/requests/${ids.echo}`, { scripts: { pre: `await pm.sendRequest('${other}/echo');`, post: '' } });
+    expect((await tool('send_request', { requestId: ids.echo })).value.status).toBe(200);
+  });
+});

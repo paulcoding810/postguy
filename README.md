@@ -112,7 +112,7 @@ Open a spec under OpenAPI and choose **Sync & versions**. Postguy compares the n
 
 Paste a cURL command into the URL bar and the request is filled in, with Undo. Bash, zsh, Windows cmd and PowerShell forms from browsers' "Copy as cURL" work. **Import cURL…** opens one in a new tab, and **Copy as cURL** (next to Save) exports a request with variables and auth resolved, warning when it contains secrets.
 
-Collections import from a Postguy export or a Postman v2.0/v2.1 file. Postman scripts run as they are through a `pm.*` compatibility layer: `pm.test`, `pm.expect` (chai-style), `pm.response`, `pm.request`, `pm.environment`, `pm.globals`, `pm.collectionVariables`, `pm.variables`, and the legacy `postman.*` and `tests[...]` forms. `pm.sendRequest` is not available; chain requests in a flow instead.
+Collections import from a Postguy export or a Postman v2.0/v2.1 file. Postman scripts run as they are through a `pm.*` compatibility layer: `pm.test`, `pm.expect` (chai-style), `pm.response`, `pm.request`, `pm.environment`, `pm.globals`, `pm.collectionVariables`, `pm.variables`, and the legacy `postman.*` and `tests[...]` forms. `pm.sendRequest` works in both the callback and `await` forms, so scripts that fetch a token before the request keep working.
 
 ## Secrets
 

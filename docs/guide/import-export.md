@@ -9,7 +9,7 @@ Use **New / Import** at the top of the Collections sidebar, or <kbd>⌘K</kbd>.
 **Import collection, environment or HAR file** reads Postman collections (v2.0 and v2.1) and Postman environments, and tells them apart by themselves.
 
 - Folders, requests, auth, variables and scripts come across. Scripts keep working through the [`pm.*` compatibility layer](/guide/scripts#postman-scripts).
-- Anything that can't be carried over is listed in one message after the import, for example `postman.setNextRequest`, which flows replace.
+- Anything that can't be carried over is listed in one message after the import, for example `postman.setNextRequest`, which flows replace. The same message lists the hosts that scripts send to with `pm.sendRequest`.
 - Saved Postman examples are not imported yet.
 
 ### HAR recordings

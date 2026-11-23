@@ -14,7 +14,7 @@ Auth credentials (bearer tokens, passwords, API keys and OAuth tokens) are maske
 
 ## What leaves your machine
 
-Only the requests you send, and the daily update check: a single request to GitHub for the latest release, which you can turn off in **Settings → General**.
+Only the requests you send (including any a script sends with `pm.sendRequest`), and the daily update check: a single request to GitHub for the latest release, which you can turn off in **Settings → General**.
 
 ## The local server
 

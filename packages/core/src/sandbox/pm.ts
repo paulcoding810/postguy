@@ -68,8 +68,7 @@ const __scope = (scope) => ({
   has: (k) => (scope === 'variables' ? flow.get(k) : __call('envGet', String(k))) !== undefined,
   replaceIn: (s) => String(s).replace(/\{\{\s*([^{}]+?)\s*\}\}/g, (m, k) => { const d = k[0] === '$' ? __call('dynamic', k) : undefined; const v = d !== undefined ? d : scope === 'variables' ? flow.get(k) : __call('envGet', k); return v === undefined ? m : String(v); }),
 });
-const __pmResponse = response ? (() => {
-  const r = response;
+const __makeResponse = (r) => {
   const text = typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
   const self = {
     code: r.status,
@@ -101,7 +100,48 @@ const __pmResponse = response ? (() => {
     },
   };
   return self;
-})() : undefined;
+};
+const __pmResponse = response ? __makeResponse(response) : undefined;
+const __sends = new Map();
+let __sendSeq = 0;
+const __bodyText = (b) => {
+  if (b == null) return null;
+  if (typeof b === 'string') return b;
+  if (b.mode === 'raw') return b.raw == null ? null : typeof b.raw === 'string' ? b.raw : JSON.stringify(b.raw);
+  if (b.mode === 'urlencoded') return __formEncode((Array.isArray(b.urlencoded) ? b.urlencoded : Object.entries(b.urlencoded || {}).map(([key, value]) => ({ key, value }))).map(__formItem));
+  if (b.mode === 'graphql') return JSON.stringify({ query: b.graphql && b.graphql.query, variables: b.graphql && b.graphql.variables });
+  throw new Error('pm.sendRequest supports raw, urlencoded and graphql bodies');
+};
+const __sendHeaders = (h) => {
+  const out = {};
+  if (Array.isArray(h)) for (const x of h) { if (x && !x.disabled) out[String(x.key)] = x.value == null ? '' : String(x.value); }
+  else if (typeof h === 'string') for (const line of h.split('\n')) { const i = line.indexOf(':'); if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + 1).trim(); }
+  else for (const [k, v] of Object.entries(h || {})) out[k] = v == null ? '' : String(v);
+  return out;
+};
+const __sendRequest = (req, callback) => {
+  const r = typeof req === 'string' ? { url: req } : req || {};
+  const url = typeof r.url === 'string' ? r.url : r.url && typeof r.url.toString === 'function' ? r.url.toString() : '';
+  const headers = __sendHeaders(r.header || r.headers);
+  if (r.body && r.body.mode === 'urlencoded' && !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/x-www-form-urlencoded';
+  if (r.body && r.body.mode === 'graphql' && !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json';
+  const id = ++__sendSeq;
+  const done = new Promise((resolve, reject) => __sends.set(id, { resolve, reject, callback: typeof callback === 'function' ? callback : null }));
+  __call('send', id, { method: String(r.method || 'GET').toUpperCase(), url, headers, body: __bodyText(r.body) });
+  return done;
+};
+/** Called by the host when a request sent with pm.sendRequest finishes. */
+globalThis.__settleSend = (id, error, res) => {
+  const s = __sends.get(id);
+  if (!s) return;
+  __sends.delete(id);
+  const response = res ? __makeResponse(res) : null;
+  if (s.callback) {
+    try { s.callback(error ? new Error(error) : null, response); } catch (e) { __failures.push(e); }
+    s.resolve(response);
+  } else if (error) s.reject(new Error(error));
+  else s.resolve(response);
+};
 const __formDecodePart = (s) => { try { return decodeURIComponent(s.replace(/\+/g, ' ')); } catch (e) { return s; } };
 const __formDecode = (text) => text.split('&').filter(Boolean).map((p) => { const i = p.indexOf('='); return { key: __formDecodePart(i < 0 ? p : p.slice(0, i)), value: i < 0 ? '' : __formDecodePart(p.slice(i + 1)) }; });
 const __formItem = (p) => ({ key: String(p.key), value: p.value == null ? '' : typeof p.value === 'string' ? p.value : String(p.value), ...(p.disabled ? { disabled: true } : {}) });
@@ -212,7 +252,7 @@ const pm = Object.freeze({
     toObject: () => Object.fromEntries(__call('cookies').map((x) => [x.name, x.value])),
     all: () => __call('cookies'),
   }),
-  sendRequest: () => { throw new Error('pm.sendRequest is not available in Postguy; chain requests in a flow instead'); },
+  sendRequest: __sendRequest,
   info: { requestName: '', eventName: response ? 'test' : 'prerequest', iteration: 0 },
 });
 const postman = Object.freeze({

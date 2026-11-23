@@ -2,7 +2,6 @@ import type { ExportedCollection } from '@postguy/shared';
 import { DYNAMIC_VARIABLES } from '../template/dynamic.ts';
 
 const SCRIPT_FEATURES: { pattern: RegExp; what: string }[] = [
-  { pattern: /\bpm\.sendRequest\s*\(/, what: 'pm.sendRequest (chain the requests in a flow instead)' },
   { pattern: /\b(?:postman\.setNextRequest|pm\.execution\.setNextRequest)\s*\(/, what: 'setNextRequest (use flow conditions instead)' },
   { pattern: /\bpm\.execution\b/, what: 'pm.execution' },
   { pattern: /\bpm\.vault\b/, what: 'pm.vault' },
@@ -13,6 +12,9 @@ const SCRIPT_FEATURES: { pattern: RegExp; what: string }[] = [
   { pattern: /(?:^|[^\w$.])_\.\w+\s*\(/m, what: 'lodash (_)' },
   { pattern: /\b(?:xml2Json|cheerio|tv4)\b/, what: 'xml2Json, cheerio or tv4' },
 ];
+
+const SEND_REQUEST = /\bpm\.sendRequest\s*\(/;
+const LITERAL_HOST = /https?:\/\/([\w.-]+(?::\d+)?)/g;
 
 const KNOWN = new Set(DYNAMIC_VARIABLES);
 const DYNAMIC_REF = /\{\{\s*(\$[A-Za-z][\w]*)\s*\}\}/g;
@@ -31,14 +33,23 @@ export function compatibilityWarnings(root: ExportedCollection): string[] {
     if (!names.includes(request)) names.push(request);
     map.set(key, names);
   };
+  const senders: string[] = [];
+  const hosts = new Set<string>();
+  const sends = (script: string, name: string) => {
+    if (!SEND_REQUEST.test(script)) return;
+    senders.push(name);
+    for (const m of script.matchAll(LITERAL_HOST)) hosts.add(m[1]!.toLowerCase());
+  };
   const walk = (node: ExportedCollection, path: string) => {
     const own = `${node.scripts?.pre ?? ''}\n${node.scripts?.post ?? ''}`;
     const label = path ? `${path} (folder scripts)` : `${node.name} (collection scripts)`;
     for (const f of SCRIPT_FEATURES) if (f.pattern.test(own)) note(byFeature, f.what, label);
+    sends(own, label);
     for (const r of node.requests) {
       const name = path ? `${path} / ${r.name}` : r.name;
       const script = `${r.scripts?.pre ?? ''}\n${r.scripts?.post ?? ''}`;
       for (const f of SCRIPT_FEATURES) if (f.pattern.test(script)) note(byFeature, f.what, name);
+      sends(script, name);
       const { scripts: _scripts, ...rest } = r;
       for (const m of JSON.stringify(rest).matchAll(DYNAMIC_REF)) if (!KNOWN.has(m[1]!)) note(unknownVars, m[1]!, name);
       const files = r.body.mode === 'binary' ? [r.body.src ?? ''] : r.body.mode === 'form' ? (r.body.form ?? []).filter((f) => f.type === 'file').map((f) => f.src ?? '') : [];
@@ -54,6 +65,11 @@ export function compatibilityWarnings(root: ExportedCollection): string[] {
     ...(missingFiles.length ? [`File fields have no file chosen; pick the files before sending: ${list(missingFiles)}.`] : []),
     ...(withFiles.length ? [`Requests send files from the paths saved in the export; check they exist on this machine: ${list(withFiles)}.`] : []),
     ...[...byFeature].map(([what, names]) => `Scripts use ${what}, which Postguy doesn't run: ${list(names)}.`),
+    ...(senders.length
+      ? [
+          `Scripts send their own requests with pm.sendRequest${hosts.size ? ` to ${[...hosts].slice(0, 5).join(', ')}${hosts.size > 5 ? ` and ${hosts.size - 5} more` : ''}` : ''}: ${list(senders)}. Check you expect these before sending, as they can carry your variables.`,
+        ]
+      : []),
     ...[...unknownVars].map(([v, names]) => `{{${v}}} isn't a built-in variable Postguy knows, so it is sent as text: ${list(names)}.`),
   ];
 }

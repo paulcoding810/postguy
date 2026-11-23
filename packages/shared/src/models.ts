@@ -287,8 +287,8 @@ export interface HistoryEntry {
   contentType: string | null;
   timing: Timing;
   error: string | null;
-  /** 'mcp' when Claude sent it. */
-  source: 'mcp' | null;
+  /** 'mcp' when Claude sent it, 'script' when a script sent it with pm.sendRequest. */
+  source: 'mcp' | 'script' | null;
   createdAt: number;
 }
 

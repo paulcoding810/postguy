@@ -154,6 +154,11 @@ export function HistoryList({ filter }: { filter: string }) {
                     MCP
                   </span>
                 )}
+                {h.source === 'script' && (
+                  <span className="shrink-0 rounded bg-muted px-1 text-[9.5px] font-medium text-muted-foreground" title="Sent by a script with pm.sendRequest">
+                    script
+                  </span>
+                )}
                 <span className={cn('shrink-0 font-mono text-[10px]', statusTone(h.status))}>
                   {h.status ?? 'ERR'}
                 </span>

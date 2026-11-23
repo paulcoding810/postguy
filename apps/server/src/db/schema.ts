@@ -129,7 +129,7 @@ export const requestHistory = sqliteTable(
     timing: json<Timing>('timing_json').notNull(),
     error: text('error'),
     /** Who sent it: null for the app, 'mcp' for Claude. */
-    source: text('source').$type<'mcp'>(),
+    source: text('source').$type<'mcp' | 'script'>(),
     createdAt: createdAt(),
   },
   (t) => [
