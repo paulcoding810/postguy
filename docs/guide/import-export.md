@@ -34,7 +34,7 @@ Right-click a collection:
 - **Export collection** saves a Postguy file with its folders, requests, scripts and variables, and the flows that use it. Import it on another machine the same way.
 - **Export as OpenAPI (YAML / JSON)** writes a spec from the collection's requests.
 
-For one request, **Copy as cURL** (next to Save) copies it with variables and auth resolved.
+For one request, **Copy as cURL** or **Copy as fetch** (in the menu next to Save) copies it with variables and auth resolved.
 
 From the environment manager, an environment exports as a Postman environment file.
 

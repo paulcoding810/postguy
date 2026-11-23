@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { ChevronDownIcon, LoaderIcon, SaveIcon, SendIcon, TerminalIcon, XIcon } from 'lucide-react';
+import { BracesIcon, ChevronDownIcon, LoaderIcon, SaveIcon, SendIcon, TerminalIcon, XIcon } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/menu';
 import { applyCurlToTab, copyAsCurl, looksLikeCurl, useCurlDialog } from './curl';
 import { HTTP_METHODS, type HttpMethod } from '@postguy/shared';
@@ -97,6 +97,9 @@ export function UrlBar({ tab }: { tab: RequestTab }) {
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => copyAsCurl(tab)}>
               <TerminalIcon /> Copy as cURL
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => copyAsCurl(tab, 'fetch')}>
+              <BracesIcon /> Copy as fetch
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => useCurlDialog.getState().setOpen(true)}>
               <TerminalIcon /> Import cURL…

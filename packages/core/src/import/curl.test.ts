@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createContext } from '../template/context.ts';
 import { resolveRequest } from '../http/request.ts';
-import { CurlParseError, parseCurl, shellSplit, toCurl } from './curl.ts';
+import { CurlParseError, parseCurl, shellSplit, toCurl, toFetch } from './curl.ts';
 
 const pairs = (list: { key: string; value: string; enabled?: boolean }[]) => list.map((p) => [p.key, p.value]);
 
@@ -112,5 +112,50 @@ describe('cURL files', () => {
     expect(toCurl(form)).toBe("curl -X POST https://x.test/up \\\n  -F name=Ann \\\n  -F f=@/tmp/a.png \\\n  --form-string at=@literal");
     const bin = resolveRequest(parseCurl(`curl https://x.test/up --data-binary @/tmp/a.png`).request, ctx).request;
     expect(toCurl(bin)).toBe("curl -X POST https://x.test/up \\\n  -H 'Content-Type: image/png' \\\n  --data-binary @/tmp/a.png");
+  });
+});
+
+describe('toFetch', () => {
+  it('writes a fetch call with headers, a JSON body as an object, and a TLS note', () => {
+    const code = toFetch(
+      { method: 'POST', url: 'https://api.x/users?a=1', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer t' }, body: { content: '{"name":"ann"}', contentType: 'application/json' } },
+      { insecure: true },
+    );
+    expect(code).toBe(`// Postguy doesn't check this server's TLS certificate; fetch always does.
+const response = await fetch("https://api.x/users?a=1", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer t",
+  },
+  body: JSON.stringify({
+    "name": "ann"
+  }),
+});`);
+  });
+
+  it('keeps a plain GET short and other bodies as written', () => {
+    expect(toFetch({ method: 'GET', url: 'https://api.x/a', headers: {}, body: { content: null, contentType: null } })).toBe('const response = await fetch("https://api.x/a");');
+    expect(toFetch({ method: 'PUT', url: 'https://api.x/a', headers: { 'Content-Type': 'text/plain' }, body: { content: 'hi "there"', contentType: 'text/plain' } })).toContain('body: "hi \\"there\\"",');
+  });
+
+  it('builds FormData for multipart bodies and leaves the files to fill in', () => {
+    const code = toFetch({
+      method: 'POST',
+      url: 'https://api.x/up',
+      headers: { 'Content-Type': 'multipart/form-data; boundary=x' },
+      body: { content: '', contentType: 'multipart/form-data', multipart: { boundary: 'x', parts: [{ name: 'title', value: 'Hi' }, { name: 'f', file: '/tmp/a.png' } as never] } },
+    });
+    expect(code).toContain('form.append("title", "Hi");');
+    expect(code).toContain('form.append("f", /* the file /tmp/a.png, e.g. */ new Blob([]), "a.png");');
+    expect(code).not.toContain('Content-Type');
+  });
+
+  it('produces code that runs', async () => {
+    const code = toFetch({ method: 'POST', url: 'https://api.x/u', headers: { 'Content-Type': 'application/json' }, body: { content: '{"a":[1,2]}', contentType: 'application/json' } });
+    const calls: unknown[] = [];
+    const fake = async (url: string, init: unknown) => (calls.push([url, init]), { ok: true });
+    await new Function('fetch', `return (async () => { ${code}; return response; })()`)(fake);
+    expect(calls).toEqual([['https://api.x/u', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"a":[1,2]}' }]]);
   });
 });

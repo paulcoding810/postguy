@@ -125,16 +125,52 @@ const __sendRequest = (req, callback) => {
   const headers = __sendHeaders(r.header || r.headers);
   if (r.body && r.body.mode === 'urlencoded' && !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/x-www-form-urlencoded';
   if (r.body && r.body.mode === 'graphql' && !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json';
+  return __queueSend({ method: String(r.method || 'GET').toUpperCase(), url, headers, body: __bodyText(r.body) }, 'pm.sendRequest', { callback: typeof callback === 'function' ? callback : null });
+};
+/** Hands a request to the host; it is sent once the script yields, and settled with __settleSend. */
+const __queueSend = (req, via, opts) => {
   const id = ++__sendSeq;
-  const done = new Promise((resolve, reject) => __sends.set(id, { resolve, reject, callback: typeof callback === 'function' ? callback : null }));
-  __call('send', id, { method: String(r.method || 'GET').toUpperCase(), url, headers, body: __bodyText(r.body) });
+  const done = new Promise((resolve, reject) => __sends.set(id, { resolve, reject, callback: opts.callback || null, raw: !!opts.raw }));
+  __call('send', id, req, via);
   return done;
+};
+const __fetchResponse = (r, url) => {
+  const text = typeof r.body === 'string' ? r.body : JSON.stringify(r.body);
+  const lower = Object.fromEntries(Object.entries(r.headers || {}).map(([k, v]) => [k.toLowerCase(), v]));
+  const unsupported = (what) => () => Promise.reject(new TypeError(what + ' is not available in Postguy scripts; use text() or json()'));
+  return {
+    ok: r.status >= 200 && r.status < 300,
+    status: r.status,
+    statusText: r.statusText || '',
+    url,
+    redirected: false,
+    headers: { get: (n) => lower[String(n).toLowerCase()] ?? null, has: (n) => String(n).toLowerCase() in lower, forEach: (fn) => Object.entries(lower).forEach(([k, v]) => fn(v, k)), entries: () => Object.entries(lower)[Symbol.iterator]() },
+    text: () => Promise.resolve(text),
+    json: () => Promise.resolve(typeof r.body === 'string' ? JSON.parse(r.body) : r.body),
+    blob: unsupported('blob()'),
+    arrayBuffer: unsupported('arrayBuffer()'),
+    formData: unsupported('formData()'),
+  };
+};
+/** The common part of the browser fetch: url, method, headers and a string body; resolves even for error statuses. */
+const fetch = (input, init) => {
+  const opts = init || {};
+  if (opts.signal) return Promise.reject(new TypeError('AbortController is not available in Postguy scripts'));
+  const url = typeof input === 'string' ? input : input && typeof input.url === 'string' ? input.url : String(input);
+  const h = opts.headers || {};
+  const headers = Array.isArray(h) ? Object.fromEntries(h.map(([k, v]) => [String(k), String(v)])) : Object.fromEntries(Object.entries(h).map(([k, v]) => [k, String(v)]));
+  if (opts.body != null && typeof opts.body !== 'string') return Promise.reject(new TypeError('fetch in Postguy scripts takes a string body; use JSON.stringify(...)'));
+  return __queueSend({ method: String(opts.method || 'GET').toUpperCase(), url, headers, body: opts.body == null ? null : opts.body }, 'fetch', { raw: true }).then(
+    (r) => __fetchResponse(r, url),
+    (e) => { throw new TypeError('Failed to fetch: ' + e.message); },
+  );
 };
 /** Called by the host when a request sent with pm.sendRequest finishes. */
 globalThis.__settleSend = (id, error, res) => {
   const s = __sends.get(id);
   if (!s) return;
   __sends.delete(id);
+  if (s.raw) return error ? s.reject(new Error(error)) : s.resolve(res);
   const response = res ? __makeResponse(res) : null;
   if (s.callback) {
     try { s.callback(error ? new Error(error) : null, response); } catch (e) { __failures.push(e); }

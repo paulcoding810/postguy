@@ -324,3 +324,44 @@ export function toCurl(req: ResolvedRequest, opts: { insecure?: boolean } = {}):
   if (opts.insecure) groups.push('-k');
   return groups.join(' \\\n  ');
 }
+
+/** The request as a JavaScript fetch call, for browsers and Node 18+. */
+export function toFetch(req: ResolvedRequest, opts: { insecure?: boolean } = {}): string {
+  const lit = (v: string) => JSON.stringify(v);
+  const { multipart, file } = req.body;
+  const headers = Object.entries(req.headers).filter(([k]) => !(multipart && k.toLowerCase() === 'content-type'));
+  const pre: string[] = [];
+  const init: string[] = [];
+  if (req.method !== 'GET') init.push(`method: ${lit(req.method)},`);
+  if (headers.length) init.push('headers: {', ...headers.map(([k, v]) => `  ${lit(k)}: ${lit(v)},`), '},');
+  if (multipart) {
+    pre.push('const form = new FormData();');
+    for (const p of multipart.parts)
+      pre.push('file' in p ? `form.append(${lit(p.name)}, /* the file ${p.file}, e.g. */ new Blob([]), ${lit(p.file.split(/[\\/]/).pop() ?? p.file)});` : `form.append(${lit(p.name)}, ${lit(p.value)});`);
+    init.push('body: form,');
+  } else if (file) {
+    init.push(`body: /* the contents of ${file} */ null,`);
+  } else if (req.body.content !== null && req.body.content !== '') {
+    const type = Object.entries(req.headers).find(([k]) => k.toLowerCase() === 'content-type')?.[1] ?? req.body.contentType ?? '';
+    let json: unknown;
+    let isJson = false;
+    if (/json/i.test(type)) {
+      try {
+        json = JSON.parse(req.body.content);
+        isJson = typeof json === 'object' && json !== null;
+      } catch {
+        /* send as written */
+      }
+    }
+    if (isJson) {
+      const [first, ...rest] = JSON.stringify(json, null, 2).split('\n');
+      init.push(`body: JSON.stringify(${first}`, ...rest.slice(0, -1), `${rest.at(-1) ?? ''}),`);
+    } else init.push(`body: ${lit(req.body.content)},`);
+  }
+  const call = init.length ? `fetch(${lit(req.url)}, {\n${init.map((l) => `  ${l}`).join('\n')}\n})` : `fetch(${lit(req.url)})`;
+  return [
+    ...(opts.insecure ? ["// Postguy doesn't check this server's TLS certificate; fetch always does."] : []),
+    ...pre,
+    `const response = await ${call};`,
+  ].join('\n');
+}

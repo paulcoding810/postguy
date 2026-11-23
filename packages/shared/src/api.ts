@@ -469,6 +469,7 @@ export interface ApiRoutes {
   'GET /oauth/authorize/:state': { response: OAuthSignInStatus };
   'POST /import/curl': { body: z.input<typeof CurlImportInput>; response: CurlImportResult };
   'POST /export/curl': { body: CurlExportInput; response: CurlExportResult };
+  'POST /export/fetch': { body: CurlExportInput; response: CurlExportResult };
   'POST /resolve-preview': { body: ResolvePreviewInput; response: ResolvedPreview[] };
   'GET /context-variables': { query: { collectionId?: string; requestId?: string; flowId?: string }; response: ContextVariable[] };
 

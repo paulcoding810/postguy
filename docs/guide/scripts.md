@@ -74,11 +74,13 @@ const res = await pm.sendRequest({
 pm.environment.set('token', res.json().access_token);
 ```
 
-The callback form works too: `pm.sendRequest(req, (err, res) => { … })`. `req` is a URL or `{ url, method, header, body }`, with raw, URL-encoded or GraphQL bodies. `res` has `code`, `status`, `headers`, `json()` and `text()`, like `pm.response`.
+`fetch` works too, for the usual case: `fetch(url, { method, headers, body })` with a string body, and a response with `ok`, `status`, `headers.get()`, `json()` and `text()`. Streams, `blob()`, `FormData` and `AbortController` aren't available. Like the browser's, it rejects only on network errors; check `res.ok` for error statuses.
+
+The callback form of `pm.sendRequest` works too: `pm.sendRequest(req, (err, res) => { … })`. `req` is a URL or `{ url, method, header, body }`, with raw, URL-encoded or GraphQL bodies. `res` has `code`, `status`, `headers`, `json()` and `text()`, like `pm.response`.
 
 - `{{variables}}` are filled in, the cookie jar is used, and the default timeout and TLS settings from **Settings → Requests** apply.
 - Each call appears in the script's log and in **History**, labelled *script*.
-- A script may send up to 10 requests, in at most 30 seconds in all. Waiting for them doesn't count towards the 2-second limit.
+- A script may send up to 10 requests, with `pm.sendRequest` and `fetch` together, in at most 30 seconds in all. Waiting for them doesn't count towards the 2-second limit.
 - When a collection is imported, its notes list the hosts its scripts send to. Check them: a script can send your variables anywhere.
 - When Claude sends the request, script requests follow the same [host lock](/guide/claude#secrets-only-go-where-they-already-go): secrets only go to hosts your saved requests use.
 

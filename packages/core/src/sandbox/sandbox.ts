@@ -119,7 +119,7 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
   };
   const vm: QuickJSContext = runtime.newContext();
   let error: string | null = null;
-  const pending: { id: number; request: ScriptRequest }[] = [];
+  const pending: { id: number; request: ScriptRequest; via: string }[] = [];
   let sent = 0;
 
   try {
@@ -171,7 +171,7 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
           if (request && args[0] && typeof args[0] === 'object') request = args[0] as ScriptRequest;
           break;
         case 'send':
-          pending.push({ id: Number(args[0]), request: normalizeScriptRequest(args[1] as ScriptRequest) });
+          pending.push({ id: Number(args[0]), request: normalizeScriptRequest(args[1] as ScriptRequest), via: String(args[2] ?? 'pm.sendRequest') });
           break;
       }
       return out === undefined ? vm.undefined : vm.newString(JSON.stringify(out));
@@ -206,14 +206,14 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
       const batch = pending.splice(0);
       const results = await Promise.all(
         batch.map(async ({ id, request: req }) => {
-          if (!input.host.sendRequest) return { id, failure: 'pm.sendRequest is not available here', res: null };
-          if (++sent > SEND_LIMITS.count) return { id, failure: `pm.sendRequest can be called at most ${SEND_LIMITS.count} times per script`, res: null };
+          if (!input.host.sendRequest) return { id, failure: 'Sending requests from a script is not available here', res: null };
+          if (++sent > SEND_LIMITS.count) return { id, failure: `A script can send at most ${SEND_LIMITS.count} requests (pm.sendRequest or fetch)`, res: null };
           const left = sendDeadline - Date.now();
-          if (left <= 0) return { id, failure: `pm.sendRequest calls took longer than ${SEND_LIMITS.totalMs / 1000} s in total`, res: null };
+          if (left <= 0) return { id, failure: `The script's requests took longer than ${SEND_LIMITS.totalMs / 1000} s in total`, res: null };
           try {
             const res = await Promise.race([
               input.host.sendRequest(req),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`pm.sendRequest timed out: the script's ${SEND_LIMITS.totalMs / 1000} s for requests ran out`)), left)),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`timed out: the script's ${SEND_LIMITS.totalMs / 1000} s for requests ran out`)), left)),
             ]);
             return { id, failure: null, res };
           } catch (e) {
@@ -222,9 +222,9 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
         }),
       );
       for (const r of results) {
-        const req = batch.find((b) => b.id === r.id)!.request;
+        const { request: req, via } = batch.find((b) => b.id === r.id)!;
         const line = r.res ? `${r.res.status}${r.res.timeMs !== undefined ? ` in ${r.res.timeMs} ms` : ''}` : `failed: ${r.failure}`;
-        if (logs.length < 500) logs.push({ at: Date.now(), level: r.res ? 'info' : 'warn', message: `pm.sendRequest ${req.method} ${req.url} → ${line}` });
+        if (logs.length < 500) logs.push({ at: Date.now(), level: r.res ? 'info' : 'warn', message: `${via} ${req.method} ${req.url} → ${line}` });
         settle(r.id, r.failure, r.res);
       }
     }

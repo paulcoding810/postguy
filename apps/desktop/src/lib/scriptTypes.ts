@@ -93,6 +93,8 @@ interface PmSendRequest { url: string; method?: string; header?: Record<string, 
 interface PmSendResponse { code: number; status: string; responseTime: number; json(): any; text(): string; headers: { get(name: string): string | undefined; has(name: string): boolean } }
 interface PmScope { get(key: string): any; set(key: string, value: unknown): void; unset(key: string): void; has(key: string): boolean; replaceIn(text: string): string }
 declare const tests: Record<string, boolean>;
+/** The common part of fetch: url, method, headers and a string body. Counts towards the script's 10 requests */
+declare function fetch(input: string | { url: string }, init?: { method?: string; headers?: Record<string, string> | [string, string][]; body?: string | null }): Promise<{ ok: boolean; status: number; statusText: string; url: string; headers: { get(name: string): string | null; has(name: string): boolean }; json(): Promise<any>; text(): Promise<string> }>;
 declare const console: { log(...v: unknown[]): void; info(...v: unknown[]): void; warn(...v: unknown[]): void; error(...v: unknown[]): void };
 ${input.phase === 'pre' ? '/** The outgoing request; edit it to change what is sent */\ndeclare const request: PgRequest;' : '/** The response of this request */\ndeclare const response: ' + selfType + ';'}
 `;

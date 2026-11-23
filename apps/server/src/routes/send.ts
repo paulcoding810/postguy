@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { CurlParseError, parseCurl, swapInVariables, resolveRequest, resolveTemplate, redactText, toCurl, MASK, type RefResolution } from '@postguy/core';
+import { CurlParseError, parseCurl, swapInVariables, toFetch, type ResolvedRequest, resolveRequest, resolveTemplate, redactText, toCurl, MASK, type RefResolution } from '@postguy/core';
 import { CurlExportInput, CurlImportInput, OAuthTokenInput, ResolvePreviewInput, SendInput, type ContextVariable, type ResolvedPreview } from '@postguy/shared';
 import { HttpError } from '../lib/errors.ts';
 import { needsTokenExchange } from '../services/oauth.ts';
@@ -52,9 +52,9 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
     }
   });
 
-  /** The request as a cURL command with variables and auth resolved, so it runs outside Postguy. */
-  app.post('/export/curl', async (req) => {
-    const input = parse(CurlExportInput, req.body);
+  /** The request with variables and auth resolved, as a cURL command or a fetch call, so it runs outside Postguy. */
+  const exportAs = async (body: unknown, format: (r: ResolvedRequest, opts: { insecure?: boolean }) => string) => {
+    const input = parse(CurlExportInput, body);
     const saved = input.requestId ? getRequest(db, input.requestId) : null;
     const collectionId = input.collectionId ?? saved?.collectionId ?? null;
     const { ctx } = buildContext(db, { collectionId, requestId: saved?.id ?? null });
@@ -67,8 +67,10 @@ export function sendRoutes(app: FastifyInstance, db: Db) {
       }
     }
     const r = resolveRequest(input.request, ctx, auth);
-    return { command: toCurl(r.request, { insecure: effectiveSettings(db, input.request.settings).rejectUnauthorized === false }), containsSecrets: r.secrets.length > 0, unresolved: r.unresolved };
-  });
+    return { command: format(r.request, { insecure: effectiveSettings(db, input.request.settings).rejectUnauthorized === false }), containsSecrets: r.secrets.length > 0, unresolved: r.unresolved };
+  };
+  app.post('/export/curl', async (req) => exportAs(req.body, toCurl));
+  app.post('/export/fetch', async (req) => exportAs(req.body, toFetch));
 
   app.post('/oauth/authorize', async (req) => {
     const input = parse(OAuthTokenInput, req.body);

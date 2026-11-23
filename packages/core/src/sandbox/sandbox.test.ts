@@ -67,7 +67,7 @@ describe('runScript', () => {
     expect(mem.error).toMatch(/memory/i);
   });
 
-  it('has no access to the host process, filesystem or network', async () => {
+  it('has no access to the host process or filesystem, and no network except through the host', async () => {
     const r = await runScript({
       phase: 'post',
       host: host(),
@@ -77,7 +77,9 @@ describe('runScript', () => {
     });
     expect(r.error).toMatch(/SyntaxError/);
     const ok = await runScript({ phase: 'post', host: host(), source: `flow.log(typeof process, typeof fetch, typeof require)` });
-    expect(ok.logs[0]!.message).toBe('undefined undefined function');
+    expect(ok.logs[0]!.message).toBe('undefined function function');
+    // fetch only reaches the network through the host's sendRequest.
+    expect((await runScript({ phase: 'post', host: host(), source: `await fetch('http://x')` })).error).toMatch(/not available here/);
     expect((await runScript({ phase: 'post', host: host(), source: `require('fs')` })).error).toMatch(/not available/);
     const esc = await runScript({ phase: 'post', host: host(), source: `flow.log(String(this.constructor.constructor("return typeof process")()))` });
     expect(esc.logs[0]?.message ?? esc.error).toMatch(/undefined|TypeError/);
@@ -182,7 +184,7 @@ describe('Postman compatibility', () => {
 
   it('explains pm.sendRequest where the host can’t send', async () => {
     const r = await runScript({ phase: 'post', host: host(), response: login, source: 'await pm.sendRequest("http://x")' });
-    expect(r.error).toMatch(/pm.sendRequest is not available here/);
+    expect(r.error).toMatch(/Sending requests from a script is not available here/);
   });
 });
 
@@ -235,9 +237,28 @@ describe('pm.sendRequest', () => {
 
   it('limits the number of calls, and waiting doesn’t count against the CPU time limit', async () => {
     const many = await pre(`for (let i = 0; i < 11; i++) await pm.sendRequest('http://api/' + i);`);
-    expect(many.error).toMatch(/at most 10 times/);
+    expect(many.error).toMatch(/at most 10 requests/);
     const slow = await pre(`await pm.sendRequest('http://api/slow');`, sender({ sendRequest: () => new Promise((r) => setTimeout(() => r({ status: 204, headers: {}, body: '' }), 1300)) }));
     expect(slow.error).toBeNull();
+  });
+
+  it('offers the usual parts of fetch, sharing the same limits', async () => {
+    sent.length = 0;
+    const r = await pre(`const res = await fetch('http://auth/login', { method: 'post', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ u: 1 }) });
+      const data = await res.json();
+      pm.request.headers.upsert({ key: 'Authorization', value: 'Bearer ' + data.token });
+      console.log(res.ok, res.status, res.headers.get('Content-Type'), (await res.text()).length > 0);`);
+    expect(r.error).toBeNull();
+    expect(sent[0]).toEqual({ method: 'POST', url: 'http://auth/login', headers: { 'Content-Type': 'application/json' }, body: '{"u":1}' });
+    expect(r.request?.headers.Authorization).toBe('Bearer tok-9');
+    expect(r.logs.map((l) => l.message)).toEqual([expect.stringMatching(/^fetch POST http:\/\/auth\/login → 200/), 'true 200 application/json true']);
+
+    const down = await pre(`try { await fetch('http://down/x'); } catch (e) { console.log(e.name, e.message); }`);
+    expect(down.logs.at(-1)!.message).toBe('TypeError Failed to fetch: connect ECONNREFUSED');
+    const blob = await pre(`await (await fetch('http://api/x')).blob();`);
+    expect(blob.error).toMatch(/blob\(\) is not available/);
+    const mixed = await pre(`for (let i = 0; i < 6; i++) { await fetch('http://api/' + i); await pm.sendRequest('http://api/' + i); }`);
+    expect(mixed.error).toMatch(/at most 10 requests/);
   });
 
   it('reports errors thrown in a callback', async () => {

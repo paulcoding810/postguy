@@ -53,13 +53,14 @@ export async function openCurlInNewTab(command: string): Promise<boolean> {
   }
 }
 
-export async function copyAsCurl(tab: RequestTab) {
+export async function copyAsCurl(tab: RequestTab, as: 'curl' | 'fetch' = 'curl') {
+  const what = as === 'curl' ? 'cURL' : 'fetch';
   try {
-    const r = await api('POST /export/curl', { body: { request: tab.draft, collectionId: tab.collectionId, requestId: tab.requestId } });
+    const r = await api(as === 'curl' ? 'POST /export/curl' : 'POST /export/fetch', { body: { request: tab.draft, collectionId: tab.collectionId, requestId: tab.requestId } });
     await navigator.clipboard.writeText(r.command);
     if (r.unresolved.length) toast.warning('Copied, but some references are unresolved', { description: r.unresolved.map((u) => `{{${u}}}`).join(', ') });
-    else if (r.containsSecrets) toast.warning('Copied as cURL', { description: 'It contains secret values such as tokens or passwords. Share it with care.' });
-    else toast.success('Copied as cURL');
+    else if (r.containsSecrets) toast.warning(`Copied as ${what}`, { description: 'It contains secret values such as tokens or passwords. Share it with care.' });
+    else toast.success(`Copied as ${what}`);
   } catch (e) {
     toast.error(errorMessage(e));
   }

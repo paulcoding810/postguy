@@ -34,7 +34,7 @@ Hover over a `{{variable}}` in any field, the body or a script to see its value 
 ## Sending and saving
 
 - <kbd>⌘↵</kbd> sends, <kbd>⌘S</kbd> saves, <kbd>⌘⇧S</kbd> saves a copy.
-- **Copy as cURL** (next to Save) copies the request with variables and auth resolved, and warns when it contains a secret.
+- **Copy as cURL** and **Copy as fetch** (in the menu next to Save) copy the request with variables and auth resolved, as a shell command or JavaScript, and warn when it contains a secret.
 
 ## The response
 

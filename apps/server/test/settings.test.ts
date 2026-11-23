@@ -51,5 +51,7 @@ describe('Copy as cURL', () => {
     await h.call('PATCH', '/settings/requests', { rejectUnauthorized: false });
     expect(await curl()).toContain('-k');
     expect(await curl({ rejectUnauthorized: true })).not.toContain('-k');
+    const asFetch = (await h.call('POST', '/export/fetch', { request: { name: 'R', method: 'GET', url: 'https://self-signed.test/', settings: {} } })).body.command;
+    expect(asFetch).toBe(`// Postguy doesn't check this server's TLS certificate; fetch always does.\nconst response = await fetch("https://self-signed.test/");`);
   });
 });

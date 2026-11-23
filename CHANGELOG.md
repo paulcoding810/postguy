@@ -21,13 +21,13 @@ The first release of Postguy, a local-first API workspace.
 
 ### Automation
 - **Flows** chain requests on a canvas, with mapped inputs, conditions, breakpoints, undo and run reports.
-- Pre-request and post-response **scripts** in a sandbox, with Postman's `pm.*` API, including `pm.sendRequest`, so imported scripts keep working.
+- Pre-request and post-response **scripts** in a sandbox, with Postman's `pm.*` API, including `pm.sendRequest`, so imported scripts keep working; `fetch` works in scripts too.
 - **Claude (MCP)**: let Claude Code find, send, edit, organise and delete requests and folders. Off by default, with secrets masked and only sent to hosts you use yourself; anything Claude deletes can be brought back.
 
 ### Bringing work in and out
 - Import Postman collections and environments, OpenAPI 2.0/3.0/3.1, HAR recordings and cURL commands. Pasted cURL uses your variables in place of matching values.
 - Sync collections with new versions of an OpenAPI spec without losing your edits.
-- Export collections, OpenAPI specs, Postman environments and cURL; secrets are never included.
+- Export collections, OpenAPI specs and Postman environments, and copy any request as cURL or JavaScript `fetch`; secrets are never included in exports.
 
 ### Safety
 - Change history for every collection: see what changed and who changed it, restore earlier versions and bring back deleted requests, folders and collections.
