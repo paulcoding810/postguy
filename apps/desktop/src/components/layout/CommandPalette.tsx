@@ -104,7 +104,7 @@ export function CommandPalette() {
         icon: <DownloadIcon className="size-3.5" />,
         run: () => setAutoUpdate(!autoUpdate),
       },
-      { id: 'a:history', group: 'Actions', label: 'Show history', icon: <HistoryIcon className="size-3.5" />, run: () => useUi.getState().setSidebar('history') },
+      { id: 'a:history', group: 'Actions', label: 'Show activity (requests sent, changes, flow runs)', icon: <HistoryIcon className="size-3.5" />, run: () => useUi.getState().setSidebar('history') },
       {
         id: 'a:theme',
         group: 'Actions',

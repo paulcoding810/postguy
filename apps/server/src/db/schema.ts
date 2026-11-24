@@ -287,6 +287,8 @@ export const flowExecutions = sqliteTable(
     runtime: json<Record<string, unknown>>('runtime_json').notNull().default({}),
     pausedStepId: text('paused_step_id'),
     error: text('error'),
+    /** 'mcp' when Claude ran it. */
+    source: text('source').$type<'mcp'>(),
     startedAt: integer('started_at').notNull(),
     finishedAt: integer('finished_at'),
   },
@@ -365,7 +367,7 @@ export const changeLog = sqliteTable(
     id: id(),
     /** The top-level collection; kept as plain text so entries outlive a deleted collection. */
     rootId: text('root_id').notNull(),
-    entityType: text('entity_type').$type<'request' | 'collection' | 'variables'>().notNull(),
+    entityType: text('entity_type').$type<'request' | 'collection' | 'variables' | 'environment' | 'active-environment'>().notNull(),
     entityId: text('entity_id').notNull(),
     label: text('label').notNull(),
     action: text('action').$type<'create' | 'update' | 'delete'>().notNull(),

@@ -31,7 +31,8 @@ The first release of Postguy, a local-first API workspace.
 - Export collections, OpenAPI specs and Postman environments, and copy any request as cURL or JavaScript `fetch`; secrets are never included in exports.
 
 ### Safety
-- Change history for every collection: see what changed and who changed it, restore earlier versions and bring back deleted requests, folders and collections.
+- **Activity**: one timeline of requests sent, changes and flow runs, saying who did each (you, Claude, a script…), with filters, diffs and undo.
+- Change history for every collection: see what changed and who changed it, restore earlier versions and bring back deleted requests, folders and collections. Environment variables and switching environment are recorded too.
 - Secret variables and credentials are masked everywhere.
 - Signed in-app updates, with a backup of your data before an update changes it.
 

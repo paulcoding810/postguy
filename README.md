@@ -131,7 +131,7 @@ Claude Code can use Postguy through the Model Context Protocol: find and send re
 - **Secrets stay hidden.** Secret values are masked in everything Claude reads, including response bodies that echo them; `decode_jwt` returns a token's claims but never the token. Claude writes `{{name}}` and Postguy fills it in when sending.
 - **Secrets only go where they already go.** A request carrying a secret is refused unless its host is one your saved requests already use, so a prompt injection in a response cannot send your token elsewhere.
 - **Per environment**, in the environment manager: keep an environment away from Claude entirely, or let it see that environment's secret values (for a throwaway local one).
-- Everything Claude sends is labelled **MCP** in History.
+- Everything Claude sends or changes is labelled **Claude** in **Activity**; pick *Claude* there to review a session.
 
 ## Packaging
 

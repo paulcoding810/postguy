@@ -94,9 +94,12 @@ export function collectionSnapshot(db: Db, id: string, subtree = false): Collect
   };
 }
 
-export function variablesSnapshot(db: Db, collectionId: string): Vars {
-  return vars(db, 'collection', collectionId);
+export function variablesSnapshot(db: Db, ownerId: string, scope: 'collection' | 'environment' | 'global' = 'collection'): Vars {
+  return vars(db, scope as 'collection', ownerId);
 }
+
+/** Change-log root for environment changes, so they are kept and pruned apart from any collection. */
+export const ENVIRONMENTS_ROOT = 'environments';
 
 /** The top-level collection a collection or folder belongs to (itself when it is one). */
 export function rootIdOf(db: Db, collectionId: string): string {
@@ -115,7 +118,7 @@ function comparable(value: unknown): string {
 
 export interface ChangeInput {
   rootId: string;
-  entityType: 'request' | 'collection' | 'variables';
+  entityType: 'request' | 'collection' | 'variables' | 'environment' | 'active-environment';
   entityId: string;
   label: string;
   action: 'create' | 'update' | 'delete';

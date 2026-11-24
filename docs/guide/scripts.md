@@ -79,7 +79,7 @@ pm.environment.set('token', res.json().access_token);
 The callback form of `pm.sendRequest` works too: `pm.sendRequest(req, (err, res) => { … })`. `req` is a URL or `{ url, method, header, body }`, with raw, URL-encoded or GraphQL bodies. `res` has `code`, `status`, `headers`, `json()` and `text()`, like `pm.response`.
 
 - `{{variables}}` are filled in, the cookie jar is used, and the default timeout and TLS settings from **Settings → Requests** apply.
-- Each call appears in the script's log and in **History**, labelled *script*.
+- Each call appears in the script's log and in **Activity**, labelled *script*.
 - A script may send up to 10 requests, with `pm.sendRequest` and `fetch` together, in at most 30 seconds in all. Waiting for them doesn't count towards the 2-second limit.
 - When a collection is imported, its notes list the hosts its scripts send to. Check them: a script can send your variables anywhere.
 - When Claude sends the request, script requests follow the same [host lock](/guide/claude#secrets-only-go-where-they-already-go): secrets only go to hosts your saved requests use.

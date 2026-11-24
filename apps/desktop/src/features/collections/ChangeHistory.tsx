@@ -26,10 +26,11 @@ const SOURCE: Record<ChangeEntry['source'], { label: string; tone: string }> = {
   import: { label: 'Import', tone: 'bg-muted text-muted-foreground' },
 };
 
-const KIND: Record<ChangeEntry['entityType'], string> = { request: 'request', collection: 'folder', variables: 'variables of' };
+const KIND: Record<ChangeEntry['entityType'], string> = { request: 'request', collection: 'folder', variables: 'variables of', environment: 'variables of', 'active-environment': 'environment' };
 
-function summary(c: ChangeEntry): string {
-  if (c.entityType === 'variables') return `Changed variables of “${c.label}”`;
+export function summary(c: ChangeEntry): string {
+  if (c.entityType === 'variables' || c.entityType === 'environment') return `Changed variables of “${c.label}”`;
+  if (c.entityType === 'active-environment') return c.after ? `Switched to environment “${c.label}”` : 'Switched to no environment';
   const kind = c.entityType === 'collection' && c.entityId === c.rootId ? 'collection' : KIND[c.entityType];
   if (c.action === 'create') return c.source === 'import' ? `Imported “${c.label}”` : `Created ${kind} “${c.label}”`;
   if (c.action === 'delete') return `Deleted ${kind} “${c.label}”`;

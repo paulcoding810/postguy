@@ -520,7 +520,7 @@ export function runFlow(
   if ([...runs.values()].some((r) => r.flowId === flowId)) throw new HttpError(409, 'This flow is already running', 'busy');
   const envId = environmentId === undefined ? (activeEnvironment(db)?.id ?? null) : environmentId;
   const executionId = newId();
-  db.insert(flowExecutions).values({ id: executionId, flowId, environmentId: envId, status: 'running', trigger: 'run', startedAt: Date.now() }).run();
+  db.insert(flowExecutions).values({ id: executionId, flowId, environmentId: envId, status: 'running', trigger: 'run', source: sendOptions?.source ?? null, startedAt: Date.now() }).run();
 
   return startRun(db, executionId, flowId, async (run, emit) => {
     emit({ type: 'execution', execution: executionRow(db, executionId) });

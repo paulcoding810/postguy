@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { ActivityQuery } from '@postguy/shared';
+import { listActivity } from '../services/activity.ts';
 import type { Db } from '../db/client.ts';
 import { parse } from '../lib/errors.ts';
 import { deletedCollections, listChanges, rootIdOf } from '../services/changelog.ts';
@@ -18,4 +20,5 @@ export function changeRoutes(app: FastifyInstance, db: Db) {
   });
   app.get('/changes/deleted', async () => deletedCollections(db).map(toEntry));
   app.post('/changes/:id/restore', async (req) => restoreChange(db, parse(IdParams, req.params).id));
+  app.get('/activity', async (req) => listActivity(db, parse(ActivityQuery, req.query)));
 }

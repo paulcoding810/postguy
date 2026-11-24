@@ -25,7 +25,7 @@ MCP is off by default. Once it's on, Claude may only read until you also allow *
 | Edit | `create_request`, `update_request`, `create_folder`, `rename_folder`, `move`, `import_curl`, `import_collection`, `set_variable`, `set_active_environment`, `restore_change` |
 | Delete | `delete_request`, `delete_folder` (a folder or collection with up to 50 requests) |
 
-Everything Claude sends is labelled **MCP** in History. Changes it makes show as **Claude** in [change history](/guide/history), so you can undo them.
+Everything Claude sends, changes or runs is labelled **Claude** in [Activity](/guide/history#activity). Choose *Claude* there to review what it did, and undo any change from the same place. Batch actions, like moving 20 requests, show as one row you can expand.
 
 `move` takes up to 50 requests and folders at once and moves all of them or none; items already in that place are left alone; `restore_change` takes a list of change ids to put a whole batch back. Moving a request into another collection can change the auth and variables it uses; `move` tells Claude when the auth type or the resolved host changes, or a `{{variable}}` is no longer defined, so it can tell you.
 

@@ -141,11 +141,14 @@ export interface AppInfo {
   backups: { name: string; path: string; size: number; createdAt: number }[];
 }
 
-/** One recorded change to a collection, folder, request or collection variables. Secrets are masked. */
+/**
+ * One recorded change to a collection, folder, request or collection variables; or to an
+ * environment's variables ('environment') or which environment is active ('active-environment'). Secrets are masked.
+ */
 export interface ChangeEntry {
   id: string;
   rootId: string;
-  entityType: 'request' | 'collection' | 'variables';
+  entityType: 'request' | 'collection' | 'variables' | 'environment' | 'active-environment';
   entityId: string;
   label: string;
   action: 'create' | 'update' | 'delete';
@@ -157,6 +160,25 @@ export interface ChangeEntry {
   updatedAt: number;
   restorable: boolean;
 }
+
+/** Who did something, as the activity log groups it. */
+export type ActivityActor = 'you' | 'claude' | 'script' | 'api' | 'sync' | 'import';
+export type ActivityKind = 'send' | 'change' | 'flow';
+
+/** One line of the activity log: a request sent, a change made, or a flow run. */
+export type ActivityItem =
+  | { kind: 'send'; id: string; at: number; who: ActivityActor; method: string; url: string; status: number | null; error: string | null; requestId: string | null; timeMs: number | null }
+  | { kind: 'change'; id: string; at: number; who: ActivityActor; change: ChangeEntry; collection: string | null }
+  | { kind: 'flow'; id: string; at: number; who: ActivityActor; flowId: string; flow: string; status: string; passed: number; failed: number; total: number };
+
+export const ActivityQuery = z.object({
+  /** Items before this time, for the next page. */
+  before: z.coerce.number().optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  kinds: z.string().optional().describe('Comma-separated: send, change, flow'),
+  who: z.enum(['you', 'claude', 'script', 'other']).optional(),
+  q: z.string().optional(),
+});
 
 export interface McpSetup {
   /** The command Claude Code runs to talk to this Postguy, e.g. for `claude mcp add`. */
@@ -462,6 +484,7 @@ export interface ApiRoutes {
   'GET /settings/requests': { response: RequestDefaults };
   'PATCH /settings/requests': { body: z.input<typeof UpdateRequestDefaults>; response: RequestDefaults };
   'GET /settings/app': { response: AppInfo };
+  'GET /activity': { query: z.input<typeof ActivityQuery>; response: { items: ActivityItem[]; next: number | null } };
   'GET /settings/preferences': { response: Preferences };
   'PATCH /settings/preferences': { body: z.input<typeof UpdatePreferences>; response: Preferences };
   'GET /settings/mcp/setup': { response: McpSetup };

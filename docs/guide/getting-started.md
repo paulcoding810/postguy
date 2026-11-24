@@ -57,7 +57,7 @@ The installed app keeps its database, logs (`server.log`) and settings in your o
 
 ## Find your way around
 
-- The left rail switches between **Collections**, **Flows**, **OpenAPI**, **Environments** and **History**.
+- The left rail switches between **Collections**, **Flows**, **OpenAPI**, **Environments** and **Activity**.
 - <kbd>⌘K</kbd> searches requests, flows and environments, and runs actions such as switching environment or theme.
 - <kbd>⌘J</kbd> opens the **Smart Data** panel, which lists remembered responses whose values you can insert.
 

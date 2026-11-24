@@ -5,6 +5,7 @@ import type { Db } from '../db/client.ts';
 import { cookies, environments, variables } from '../db/schema.ts';
 import { badRequest, notFound } from '../lib/errors.ts';
 import { listVariables, replaceVariables } from './variables.ts';
+import { ENVIRONMENTS_ROOT, recordChange } from './changelog.ts';
 
 export function listEnvironments(db: Db): Environment[] {
   return db.select().from(environments).orderBy(asc(environments.sortOrder), asc(environments.createdAt)).all();
@@ -72,10 +73,14 @@ export function activateEnvironment(db: Db, id: string | null): void {
     const env = getEnvironment(db, id);
     if (env.kind === 'global') throw badRequest('The global environment is always active');
   }
+  const was = db.select({ id: environments.id, name: environments.name }).from(environments).where(and(eq(environments.kind, 'environment'), eq(environments.isActive, true))).get() ?? null;
   db.transaction((tx) => {
     tx.update(environments).set({ isActive: false }).where(eq(environments.kind, 'environment')).run();
     if (id) tx.update(environments).set({ isActive: true }).where(eq(environments.id, id)).run();
   });
+  const now = id ? (db.select({ id: environments.id, name: environments.name }).from(environments).where(eq(environments.id, id)).get() ?? null) : null;
+  if ((was?.id ?? null) !== (now?.id ?? null))
+    recordChange(db, { rootId: ENVIRONMENTS_ROOT, entityType: 'active-environment', entityId: 'active', label: now?.name ?? 'No environment', action: 'update', before: was, after: now });
 }
 
 /** Imports a Postman environment, or Postman globals into the global environment. */

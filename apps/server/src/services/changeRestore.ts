@@ -2,7 +2,7 @@ import { and, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { redactAuth } from '@postguy/core';
 import type { Auth, ChangeEntry, RequestDefinition } from '@postguy/shared';
 import type { Db } from '../db/client.ts';
-import { changeLog, collections, flows, flowSteps, requests } from '../db/schema.ts';
+import { changeLog, collections, environments, flows, flowSteps, requests } from '../db/schema.ts';
 import { HttpError, notFound } from '../lib/errors.ts';
 import {
   collectionSnapshot,
@@ -16,6 +16,7 @@ import {
 } from './changelog.ts';
 import { createCollection, updateCollection } from './collections.ts';
 import { createRequest, updateRequest } from './requests.ts';
+import { activateEnvironment } from './environments.ts';
 import { copyExamples, examplesOf } from './examples.ts';
 import { replaceVariables } from './variables.ts';
 
@@ -37,8 +38,13 @@ export function maskSnapshot(value: unknown): unknown {
   return out;
 }
 
+const maskVars = (v: unknown) => (Array.isArray(v) ? v.map((x) => (x?.isSecret ? { ...x, value: MASK } : x)) : v);
+
 export function toEntry(row: NonNullable<ReturnType<typeof getChange>>): ChangeEntry {
-  return { ...row, before: maskSnapshot(row.before), after: maskSnapshot(row.after), restorable: row.action !== 'create' };
+  // Variable entries are bare lists of variables, so their secrets are masked here rather than by key.
+  const isList = row.entityType === 'variables' || row.entityType === 'environment';
+  const mask = isList ? maskVars : maskSnapshot;
+  return { ...row, before: mask(row.before), after: mask(row.after), restorable: row.action !== 'create' };
 }
 
 function definition(snap: RequestSnapshot): RequestDefinition & { description: string | null } {
@@ -132,6 +138,19 @@ export function restoreChange(db: Db, id: string): { message: string } {
       parentId: snap.collection.parentId,
     });
     return { message: `Restored the earlier settings of "${snap.collection.name}".` };
+  }
+  if (change.entityType === 'environment') {
+    const env = db.select({ kind: environments.kind }).from(environments).where(eq(environments.id, change.entityId)).get();
+    if (!env) throw new HttpError(409, `The environment "${change.label}" no longer exists.`, 'gone');
+    replaceVariables(db, env.kind === 'global' ? 'global' : 'environment', change.entityId, before as CollectionSnapshot['variables']);
+    return { message: `Restored the earlier variables of "${change.label}".` };
+  }
+  if (change.entityType === 'active-environment') {
+    const was = before as { id: string; name: string } | null;
+    if (was && !db.select({ id: environments.id }).from(environments).where(eq(environments.id, was.id)).get())
+      throw new HttpError(409, `The environment "${was.name}" no longer exists.`, 'gone');
+    activateEnvironment(db, was?.id ?? null);
+    return { message: was ? `Switched back to "${was.name}".` : 'Switched back to no environment.' };
   }
   if (!exists(db, collections, change.entityId)) throw new HttpError(409, `"${change.label}" was deleted; restore it from its deletion first.`, 'gone');
   replaceVariables(db, 'collection', change.entityId, before as CollectionSnapshot['variables']);

@@ -21,7 +21,7 @@ import { RecentlyDeleted } from '@/features/collections/RecentlyDeleted';
 import { pickFile } from '@/features/collections/transfer';
 import { EnvironmentList } from '@/features/environments/EnvironmentList';
 import { importEnvironmentData, looksLikePostmanEnvironment } from '@/features/environments/exchange';
-import { HistoryList } from '@/features/history/HistoryList';
+import { ActivityList } from '@/features/history/ActivityList';
 import { ApiSpecList } from '@/features/openapi/ApiSpecList';
 import { useImportDialog } from '@/features/openapi/ImportDialog';
 import { useCurlDialog } from '@/features/request/curl';
@@ -31,7 +31,7 @@ const SECTIONS: { id: SidebarSection; label: string; icon: React.ElementType }[]
   { id: 'flows', label: 'Flows', icon: WorkflowIcon },
   { id: 'apis', label: 'OpenAPI', icon: FileCode2Icon },
   { id: 'environments', label: 'Environments', icon: LayersIcon },
-  { id: 'history', label: 'History', icon: HistoryIcon },
+  { id: 'history', label: 'Activity', icon: HistoryIcon },
 ];
 
 export function SidebarRail() {
@@ -124,7 +124,7 @@ export function SidebarPanel() {
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder={sidebar === 'history' ? 'Filter history' : sidebar === 'flows' ? 'Filter flows' : 'Filter requests'}
+            placeholder={sidebar === 'history' ? 'Filter activity' : sidebar === 'flows' ? 'Filter flows' : 'Filter requests'}
             aria-label="Filter"
             className="h-7 w-full rounded-md bg-muted/60 pr-2 pl-7 text-xs outline-none focus:ring-1 focus:ring-ring"
           />
@@ -162,7 +162,7 @@ export function SidebarPanel() {
         {sidebar === 'flows' && <FlowList filter={filter} />}
         {sidebar === 'apis' && <ApiSpecList />}
         {sidebar === 'environments' && <EnvironmentList />}
-        {sidebar === 'history' && <HistoryList filter={filter} />}
+        {sidebar === 'history' && <ActivityList filter={filter} />}
       </div>
     </div>
   );

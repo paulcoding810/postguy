@@ -61,6 +61,6 @@ Hover over a row for its actions:
 - **Copy value** and **Copy reference** copy the value, or a `{{Login.data.user.id}}` reference to it.
 - **Insert reference** puts that reference into the field you last clicked. Double-clicking the row does the same.
 
-## History
+## Activity
 
-Every request you send is in **History** in the sidebar, with its status and time. Requests sent by a flow, by Claude or through the API are labelled.
+Every request you send is in **Activity** in the sidebar, with its status and time, alongside changes and flow runs. Requests sent by Claude or a script are labelled. See [History and undo](/guide/history).

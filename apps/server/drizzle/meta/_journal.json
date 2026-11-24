@@ -64,6 +64,13 @@
       "when": 1795404449160,
       "tag": "0008_graphql_schemas",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795484676968,
+      "tag": "0009_activity",
+      "breakpoints": true
     }
   ]
 }

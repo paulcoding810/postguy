@@ -28,7 +28,8 @@ const variables = (list: Obj[] | undefined) =>
 export function changeText(entry: ChangeEntry, side: 'before' | 'after'): string {
   const snap = entry[side] as Obj | null;
   if (!snap) return '';
-  if (entry.entityType === 'variables') return variables(snap as Obj[]).join('\n') || '(no variables)';
+  if (entry.entityType === 'variables' || entry.entityType === 'environment') return variables(snap as Obj[]).join('\n') || '(no variables)';
+  if (entry.entityType === 'active-environment') return `Active environment: ${(snap as Obj).name}`;
   if (entry.entityType === 'request') {
     const r = snap.request as Obj;
     const body = r.body as Obj | undefined;
