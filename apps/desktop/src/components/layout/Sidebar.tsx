@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { FileCode2Icon, FolderTreeIcon, HistoryIcon, LayersIcon, PlusIcon, SearchIcon, UploadIcon, WorkflowIcon } from 'lucide-react';
+import { FileCode2Icon, FolderTreeIcon, HistoryIcon, LayersIcon, PlusIcon, SearchIcon, UploadIcon, WorkflowIcon, XIcon } from 'lucide-react';
 import { FlowList, useCreateFlow } from '@/features/flows/FlowList';
 import * as React from 'react';
 import { toast } from 'sonner';
@@ -124,10 +124,26 @@ export function SidebarPanel() {
           <input
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape' && filter) {
+                e.preventDefault();
+                setFilter('');
+              }
+            }}
             placeholder={sidebar === 'history' ? 'Filter activity' : sidebar === 'flows' ? 'Filter flows' : 'Filter requests'}
             aria-label="Filter"
-            className="h-7 w-full rounded-md bg-muted/60 pr-2 pl-7 text-xs outline-none focus:ring-1 focus:ring-ring"
+            className="h-7 w-full rounded-md bg-muted/60 pr-7 pl-7 text-xs outline-none focus:ring-1 focus:ring-ring"
           />
+          {filter && (
+            <button
+              type="button"
+              aria-label="Clear filter"
+              onClick={() => setFilter('')}
+              className="absolute top-1/2 right-3.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <XIcon className="size-3.5" />
+            </button>
+          )}
         </div>
       )}
       <div className="min-h-0 flex-1 overflow-auto">
