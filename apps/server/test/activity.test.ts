@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { requestHistory } from '../src/db/schema.ts';
 import { createHarness, TOKEN, type Harness } from './harness.ts';
 
 let h: Harness;
@@ -44,11 +45,10 @@ describe('activity log', () => {
     const col = await app('POST', '/collections', { name: 'Shop', parentId: null });
     for (let i = 0; i < 5; i++) await app('POST', '/requests', { collectionId: col.id, name: `R${i}`, method: 'GET', url: 'http://x' });
     const first = await activity('?limit=3');
-    expect(first.items).toHaveLength(3);
+    expect(first.items.length).toBeGreaterThanOrEqual(3);
     const second = await activity(`?limit=3&before=${first.next}`);
     const names = [...first.items, ...second.items].map((i) => i.change.label);
-    expect(new Set(names).size).toBe(names.length);
-    expect(names).toEqual(expect.arrayContaining(['R0', 'R4', 'Shop']));
+    expect(names.sort()).toEqual(['R0', 'R1', 'R2', 'R3', 'R4', 'Shop']);
   });
 
   it('records environment variable changes and switches, with secrets masked, and can undo them', async () => {
@@ -71,5 +71,26 @@ describe('activity log', () => {
     await h.call('PUT', `/variables/collection/${col.id}`, { variables: [{ key: 'token', value: 'col-s3cret', isSecret: true }, { key: 'b', value: '1' }] });
     const changes = (await h.call('GET', `/collections/${col.id}/changes`)).body;
     expect(JSON.stringify(changes)).not.toContain('col-s3cret');
+  });
+
+  it('pages without skipping entries that share a millisecond', async () => {
+    const at = Date.now() - 1000;
+    const rows = Array.from({ length: 7 }, (_, i) => ({
+      id: `h${i}`,
+      method: 'GET',
+      url: `http://x.test/${i}`,
+      request: { headers: {}, body: null },
+      timing: { totalMs: 1 },
+      createdAt: i < 3 ? at : i < 6 ? at - 1 : at - 2,
+    }));
+    h.db.insert(requestHistory).values(rows).run();
+    const seen: string[] = [];
+    let next: number | null | undefined;
+    for (let pages = 0; pages < 10 && next !== null; pages++) {
+      const page = await activity(`?kinds=send&limit=2${next ? `&before=${next}` : ''}`);
+      seen.push(...page.items.map((i) => i.id));
+      next = page.next;
+    }
+    expect(seen.sort()).toEqual(rows.map((r) => r.id).sort());
   });
 });

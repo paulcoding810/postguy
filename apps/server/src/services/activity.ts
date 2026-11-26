@@ -12,9 +12,24 @@ const CHANGE_WHO: Record<string, ActivityActor> = { app: 'you', api: 'api', mcp:
  * merged by time. Each source is read up to `limit` rows before the cursor, so pages stay exact.
  */
 export function listActivity(db: Db, query: z.output<typeof ActivityQuery>): { items: ActivityItem[]; next: number | null } {
-  const kinds = new Set<ActivityKind>((query.kinds?.split(',').map((k) => k.trim()) as ActivityKind[] | undefined) ?? ['send', 'change', 'flow']);
-  const before = query.before ?? Number.MAX_SAFE_INTEGER;
   const limit = query.limit;
+  const items = collect(db, query, { before: query.before ?? Number.MAX_SAFE_INTEGER, limit });
+  items.sort((a, b) => b.at - a.at);
+  let page = items.slice(0, limit);
+  const more = items.length > limit || page.length === limit;
+  const lastAt = page.at(-1)?.at;
+  // The next page starts strictly before the cursor, so a page never ends partway through a millisecond.
+  if (more && lastAt !== undefined) {
+    const same = collect(db, query, { at: lastAt }).sort((a, b) => b.at - a.at);
+    page = [...page.filter((i) => i.at > lastAt), ...same];
+  }
+  return { items: page, next: more ? (lastAt ?? null) : null };
+}
+
+function collect(db: Db, query: z.output<typeof ActivityQuery>, window: { before: number; limit: number } | { at: number }): ActivityItem[] {
+  const time = (col: Parameters<typeof lt>[0]) => ('at' in window ? eq(col, window.at) : lt(col, window.before));
+  const limit = 'at' in window ? -1 : window.limit;
+  const kinds = new Set<ActivityKind>((query.kinds?.split(',').map((k) => k.trim()) as ActivityKind[] | undefined) ?? ['send', 'change', 'flow']);
   const q = query.q?.trim() ? `%${query.q.trim().replace(/[%_]/g, (c) => `\\${c}`)}%` : null;
   const items: ActivityItem[] = [];
 
@@ -24,7 +39,7 @@ export function listActivity(db: Db, query: z.output<typeof ActivityQuery>): { i
     const rows = db
       .select()
       .from(requestHistory)
-      .where(and(lt(requestHistory.createdAt, before), who, q ? sql`${requestHistory.url} LIKE ${q} ESCAPE '\\'` : undefined))
+      .where(and(time(requestHistory.createdAt), who, q ? sql`${requestHistory.url} LIKE ${q} ESCAPE '\\'` : undefined))
       .orderBy(desc(requestHistory.createdAt))
       .limit(limit)
       .all();
@@ -49,7 +64,7 @@ export function listActivity(db: Db, query: z.output<typeof ActivityQuery>): { i
     const rows = db
       .select()
       .from(changeLog)
-      .where(and(lt(changeLog.updatedAt, before), sources ? inArray(changeLog.source, sources) : undefined, q ? like(changeLog.label, q) : undefined))
+      .where(and(time(changeLog.updatedAt), sources ? inArray(changeLog.source, sources) : undefined, q ? like(changeLog.label, q) : undefined))
       .orderBy(desc(changeLog.updatedAt))
       .limit(limit)
       .all();
@@ -65,7 +80,7 @@ export function listActivity(db: Db, query: z.output<typeof ActivityQuery>): { i
       .select({ id: flowExecutions.id, flowId: flowExecutions.flowId, flow: flows.name, status: flowExecutions.status, source: flowExecutions.source, startedAt: flowExecutions.startedAt })
       .from(flowExecutions)
       .innerJoin(flows, eq(flows.id, flowExecutions.flowId))
-      .where(and(lt(flowExecutions.startedAt, before), who, q ? like(flows.name, q) : undefined))
+      .where(and(time(flowExecutions.startedAt), who, q ? like(flows.name, q) : undefined))
       .orderBy(desc(flowExecutions.startedAt))
       .limit(limit)
       .all();
@@ -94,7 +109,5 @@ export function listActivity(db: Db, query: z.output<typeof ActivityQuery>): { i
       items.push({ kind: 'flow', id: r.id, at: r.startedAt, who: r.source === 'mcp' ? 'claude' : 'you', flowId: r.flowId, flow: r.flow, status: r.status, ...(counts.get(r.id) ?? { passed: 0, failed: 0, total: 0 }) });
   }
 
-  items.sort((a, b) => b.at - a.at);
-  const page = items.slice(0, limit);
-  return { items: page, next: items.length > limit || page.length === limit ? (page.at(-1)?.at ?? null) : null };
+  return items;
 }
