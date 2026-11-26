@@ -238,6 +238,14 @@ describe('pm.sendRequest', () => {
     expect(sent[2]!.headers).toEqual({ 'content-type': 'text/x' });
   });
 
+  it('sends from a timer and runs its callback', async () => {
+    sent.length = 0;
+    const r = await pre(`setTimeout(() => pm.sendRequest('http://api/later', (err, res) => pm.test('cb ran ' + res.code, () => {})), 0);`);
+    expect(r.error).toBeNull();
+    expect(sent.map((x) => x.url)).toEqual(['http://api/later']);
+    expect(r.assertions).toEqual([{ ok: true, message: 'cb ran 200' }]);
+  });
+
   it('passes network errors to the callback, and fails the script when an awaited send fails', async () => {
     const cb = await pre(`pm.sendRequest('http://down/x', (err, res) => { console.log(err.message, res === null); });`);
     expect(cb.error).toBeNull();
@@ -365,9 +373,20 @@ describe('more Postman script support', () => {
     expect(r.assertions[1]!.ok).toBe(false);
     expect(r.assertions[1]!.message).toMatch(/missing required property "email"/);
   });
-  it('runs setTimeout callbacks after the script, without waiting', async () => {
-    const r = await run(`setTimeout(() => flow.log('later', 2), 1000); const t = setTimeout(() => flow.log('never'), 5); clearTimeout(t); flow.log('first');`);
-    expect(r.logs.map((l) => l.message)).toEqual(['first', 'later 2']);
+  it('runs setTimeout callbacks in due order after their delay', async () => {
+    const t0 = Date.now();
+    const r = await run(`setTimeout(() => flow.log('later', 2), 60); setTimeout(() => flow.log('sooner'), 10); const t = setTimeout(() => flow.log('never'), 5); clearTimeout(t); flow.log('first');`);
+    expect(r.logs.map((l) => l.message)).toEqual(['first', 'sooner', 'later 2']);
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(55);
     expect((await run(`setInterval(() => {}, 10)`)).error).toMatch(/setInterval is not available/);
+  });
+
+  it('lets a script await a timer, and send or chain promises from one', async () => {
+    const delayed = await run(`await new Promise((r) => setTimeout(r, 20)); pm.test('after', () => {});`);
+    expect(delayed.error).toBeNull();
+    expect(delayed.assertions).toEqual([{ ok: true, message: 'after' }]);
+    const chained = await run(`setTimeout(() => Promise.resolve().then(() => pm.test('then ran', () => {})), 0);`);
+    expect(chained.assertions).toEqual([{ ok: true, message: 'then ran' }]);
+    expect((await run(`setTimeout(() => { throw new Error('boom'); }, 0);`)).error).toMatch(/boom/);
   });
 });

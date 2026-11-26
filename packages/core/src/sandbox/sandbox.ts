@@ -51,8 +51,11 @@ const env = Object.freeze({
 });
 const console = Object.freeze({ log: __log('info'), info: __log('info'), warn: __log('warn'), error: __log('error'), debug: __log('info') });
 const __timers = [];
-const setTimeout = (fn, _ms, ...args) => { __timers.push(() => fn(...args)); return __timers.length; };
-const clearTimeout = (id) => { __timers[id - 1] = null; };
+let __timerSeq = 0;
+const setTimeout = (fn, ms, ...args) => { const id = ++__timerSeq; __timers.push({ id, at: Date.now() + Math.max(0, Number(ms) || 0), fn: () => fn(...args) }); return id; };
+const clearTimeout = (id) => { const i = __timers.findIndex((t) => t.id === id); if (i >= 0) __timers.splice(i, 1); };
+const __nextTimer = () => (__timers.length ? Math.min(...__timers.map((t) => t.at)) : -1);
+const __runTimer = () => { let i = 0; for (let j = 1; j < __timers.length; j++) if (__timers[j].at < __timers[i].at) i = j; __timers.splice(i, 1)[0].fn(); };
 const setInterval = () => { throw new Error('setInterval is not available in Postguy scripts'); };
 const request = __call('request');
 if (request) {
@@ -202,7 +205,34 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
         jobs.error.dispose();
         break;
       }
-      if (!pending.length) break;
+      if (!pending.length) {
+        // Timers run in due order once nothing else is waiting; their delays share the requests' time budget.
+        const next = inVm(() => vm.evalCode('__nextTimer()', 'timer.js'));
+        if (next.error) {
+          error = errorText(vm.dump(next.error), timedOut, timeoutMs);
+          next.error.dispose();
+          break;
+        }
+        const at = vm.getNumber(next.value);
+        next.value.dispose();
+        if (at < 0) break;
+        const wait = at - Date.now();
+        if (wait > 0) {
+          if (Date.now() + wait > sendDeadline) {
+            error = `The script waited longer than ${SEND_LIMITS.totalMs / 1000} s in total`;
+            break;
+          }
+          await new Promise((r) => setTimeout(r, wait));
+        }
+        const ran = inVm(() => vm.evalCode('__runTimer()', 'script.js'));
+        if (ran.error) {
+          error = errorText(vm.dump(ran.error), timedOut, timeoutMs);
+          ran.error.dispose();
+          break;
+        }
+        ran.value.dispose();
+        continue;
+      }
       const batch = pending.splice(0);
       const results = await Promise.all(
         batch.map(async ({ id, request: req }) => {
@@ -235,7 +265,6 @@ export async function runScript(input: ScriptInput): Promise<ScriptRun> {
           `if (!globalThis.__mainDone) throw new Error('The script was still waiting when it ended; await pm.sendRequest or give it a callback');
 if (globalThis.__mainError) throw globalThis.__mainError;
 if (__failures.length) throw __failures[0];
-for (let i = 0; i < __timers.length; i++) { const t = __timers[i]; __timers[i] = null; if (t) t(); }
 if (request) __call('result', request);`,
           'script.js',
         ),
