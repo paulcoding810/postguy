@@ -50,6 +50,26 @@ describe('Postman environments', () => {
     expect(Object.fromEntries(vars.map((v: any) => [v.key, v.value]))).toEqual({ keep: '1', over: 'new' });
   });
 
+  it('keeps a global secret when its exported file is imported back', async () => {
+    const global = (await h.call('GET', '/environments')).body.find((e: any) => e.kind === 'global');
+    await h.call('PUT', `/variables/global/${global.id}`, {
+      variables: [
+        { key: 'apiKey', value: 'SECRET123', isSecret: true },
+        { key: 'host', value: 'h1' },
+      ],
+    });
+    const file = (await h.call('GET', `/environments/${global.id}/export`)).body;
+    expect(file.values.find((v: any) => v.key === 'apiKey').value).toBe('');
+    const res = (await h.call('POST', '/environments/import', { data: file })).body;
+    const vars = (await h.call('GET', `/variables/global/${global.id}?reveal=1`)).body;
+    expect(vars.map((v: any) => [v.key, v.value, v.isSecret])).toEqual([
+      ['apiKey', 'SECRET123', true],
+      ['host', 'h1', false],
+    ]);
+    expect(res.warnings).toContain('Secret values were empty in the file, so your current values were kept: apiKey.');
+    expect(res.warnings.join(' ')).not.toMatch(/fill them in/);
+  });
+
   it('rejects other files', async () => {
     expect((await h.call('POST', '/environments/import', { data: { info: {}, item: [] } })).status).toBe(400);
   });

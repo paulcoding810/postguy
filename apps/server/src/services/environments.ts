@@ -91,11 +91,22 @@ export function importEnvironment(db: Db, data: unknown): { environment: Environ
   return db.transaction(() => {
     const target = env.scope === 'globals' ? globalEnvironment(db) : createEnvironment(db, uniqueName(db, env.name));
     const imported = new Set(env.variables.map((v) => v.key));
-    const kept = env.scope === 'globals' ? listVariables(db, 'global', target.id, true).filter((v) => !imported.has(v.key)) : [];
+    const existing = env.scope === 'globals' ? listVariables(db, 'global', target.id, true) : [];
+    const kept = existing.filter((v) => !imported.has(v.key));
+    const current = new Map(existing.map((v) => [v.key, v]));
+    // Exports leave secrets blank, so a blank secret in the file keeps the value already here.
+    const keptSecrets: string[] = [];
+    const incoming = env.variables.map((v) => {
+      const had = current.get(v.key);
+      if (!v.isSecret || v.value || !had?.value) return v;
+      keptSecrets.push(v.key);
+      return { ...v, value: had.value };
+    });
     const ownerScope = env.scope === 'globals' ? 'global' : 'environment';
-    replaceVariables(db, ownerScope, target.id, [...kept.map((v) => ({ key: v.key, value: v.value, isSecret: v.isSecret, enabled: v.enabled })), ...env.variables]);
-    const blankSecrets = env.variables.filter((v) => v.isSecret && !v.value).map((v) => v.key);
+    replaceVariables(db, ownerScope, target.id, [...kept.map((v) => ({ key: v.key, value: v.value, isSecret: v.isSecret, enabled: v.enabled })), ...incoming]);
+    const blankSecrets = incoming.filter((v) => v.isSecret && !v.value).map((v) => v.key);
     if (blankSecrets.length) warnings.push(`Secret values were empty in the file; fill them in: ${blankSecrets.join(', ')}.`);
+    if (keptSecrets.length) warnings.push(`Secret values were empty in the file, so your current values were kept: ${keptSecrets.join(', ')}.`);
     if (env.scope === 'globals') warnings.push(`Postman globals were merged into Postguy's globals (${env.variables.length} variables).`);
     return { environment: target, warnings };
   });

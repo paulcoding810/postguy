@@ -7,6 +7,7 @@ What changed in each Postguy release, newest first. Add to **Unreleased** as you
 ### Fixed
 - Claude can no longer get a secret past the host lock: an edit that failed after saving, an OAuth 2.0 token request, or a script reading the secret and sending it somewhere else. Scripts run by Claude now see secrets as ••••••.
 - Secrets are masked in history and in what Claude reads even when they were URL-encoded, form-encoded or escaped in JSON.
+- Importing an exported globals file no longer empties your global secrets; the values you have are kept.
 
 ## 0.1.0
 
