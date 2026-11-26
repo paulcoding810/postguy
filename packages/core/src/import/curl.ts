@@ -335,11 +335,24 @@ export function toCurl(req: ResolvedRequest, opts: { insecure?: boolean } = {}):
   }
   if (multipart)
     for (const p of multipart.parts)
-      groups.push('file' in p ? `-F ${quote(`${p.name}=@${p.file}`)}` : `${/^[@<]/.test(p.value) ? '--form-string' : '-F'} ${quote(`${p.name}=${p.value}`)}`);
+      // --form-string sends text as is; -F would read ;type=… or @file out of it.
+      groups.push('file' in p ? `-F ${quote(`${p.name}=@${formPath(p.file)}`)}` : `--form-string ${quote(`${p.name}=${p.value}`)}`);
   else if (file) groups.push(`--data-binary ${quote(`@${file}`)}`);
   else if (req.body.content !== null && req.body.content !== '') groups.push(`--data-raw ${quote(req.body.content)}`);
   if (opts.insecure) groups.push('-k');
   return groups.join(' \\\n  ');
+}
+
+/** A file path for curl -F, quoted when ; , or " would otherwise end it. */
+function formPath(path: string): string {
+  return /[;,"]/.test(path) ? `"${path.replace(/[\\"]/g, '\\$&')}"` : path;
+}
+
+/** True when JSON.parse changed a number, e.g. an integer too big for JavaScript. */
+function losesPrecision(v: unknown): boolean {
+  if (typeof v === 'number') return Number.isInteger(v) && !Number.isSafeInteger(v);
+  if (Array.isArray(v)) return v.some(losesPrecision);
+  return !!v && typeof v === 'object' && Object.values(v).some(losesPrecision);
 }
 
 /** The request as a JavaScript fetch call, for browsers and Node 18+. */
@@ -365,7 +378,7 @@ export function toFetch(req: ResolvedRequest, opts: { insecure?: boolean } = {})
     if (/json/i.test(type)) {
       try {
         json = JSON.parse(req.body.content);
-        isJson = typeof json === 'object' && json !== null;
+        isJson = typeof json === 'object' && json !== null && !losesPrecision(json);
       } catch {
         /* send as written */
       }

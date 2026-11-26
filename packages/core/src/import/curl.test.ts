@@ -109,7 +109,9 @@ describe('cURL files', () => {
   it('copies file bodies as -F and --data-binary', () => {
     const ctx = createContext({});
     const form = resolveRequest(parseCurl(`curl https://x.test/up -F name=Ann -F 'f=@/tmp/a.png' --form-string 'at=@literal'`).request, ctx).request;
-    expect(toCurl(form)).toBe("curl -X POST https://x.test/up \\\n  -F name=Ann \\\n  -F f=@/tmp/a.png \\\n  --form-string at=@literal");
+    expect(toCurl(form)).toBe("curl -X POST https://x.test/up \\\n  --form-string name=Ann \\\n  -F f=@/tmp/a.png \\\n  --form-string at=@literal");
+    const odd = resolveRequest(parseCurl(`curl https://x.test/up --form-string 'note=x;type=text/html' -F 'f=@"/tmp/my;file.txt"'`).request, ctx).request;
+    expect(toCurl(odd)).toBe(`curl -X POST https://x.test/up \\\n  -F 'f=@"/tmp/my;file.txt"' \\\n  --form-string 'note=x;type=text/html'`);
     const bin = resolveRequest(parseCurl(`curl https://x.test/up --data-binary @/tmp/a.png`).request, ctx).request;
     expect(toCurl(bin)).toBe("curl -X POST https://x.test/up \\\n  -H 'Content-Type: image/png' \\\n  --data-binary @/tmp/a.png");
   });
@@ -137,6 +139,11 @@ const response = await fetch("https://api.x/users?a=1", {
   it('keeps a plain GET short and other bodies as written', () => {
     expect(toFetch({ method: 'GET', url: 'https://api.x/a', headers: {}, body: { content: null, contentType: null } })).toBe('const response = await fetch("https://api.x/a");');
     expect(toFetch({ method: 'PUT', url: 'https://api.x/a', headers: { 'Content-Type': 'text/plain' }, body: { content: 'hi "there"', contentType: 'text/plain' } })).toContain('body: "hi \\"there\\"",');
+  });
+
+  it('keeps a JSON body as written when its numbers are too big for JavaScript', () => {
+    const code = toFetch({ method: 'POST', url: 'https://api.x/a', headers: { 'Content-Type': 'application/json' }, body: { content: '{"id": 12345678901234567890}', contentType: 'application/json' } });
+    expect(code).toContain('body: "{\\"id\\": 12345678901234567890}",');
   });
 
   it('builds FormData for multipart bodies and leaves the files to fill in', () => {
