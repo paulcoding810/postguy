@@ -69,15 +69,16 @@ function restoreRequest(db: Db, snap: RequestSnapshot) {
   const id = snap.request.id;
   if (!exists(db, collections, snap.request.collectionId))
     throw new HttpError(409, `The folder that "${snap.request.name}" was in no longer exists; restore that folder first.`, 'parent_missing');
-  if (exists(db, requests, id)) updateRequest(db, id, { ...definition(snap), collectionId: snap.request.collectionId });
+  const existed = exists(db, requests, id);
+  if (existed) updateRequest(db, id, { ...definition(snap), collectionId: snap.request.collectionId });
   else
     createRequest(
       db,
       { ...definition(snap), collectionId: snap.request.collectionId },
       { id, openapiOperationId: (snap.request.openapiOperationId as string | null) ?? null, openapiFingerprint: (snap.request.openapiFingerprint as string | null) ?? null },
     );
-  // An edit's snapshot doesn't hold examples or flow links; a deletion's does.
-  const kept = snap.examples || snap.flowSteps ? snap : lastDeletion(db, id);
+  // An edit's snapshot doesn't hold examples or flow links; recreating a deleted request takes them from its deletion.
+  const kept = snap.examples || snap.flowSteps ? snap : existed ? null : lastDeletion(db, id);
   const have = new Set(examplesOf(db, id).map((e) => e.id));
   copyExamples(db, (kept?.examples ?? []).filter((e) => !have.has(e.id)), id, true);
   const steps = kept?.flowSteps ?? [];

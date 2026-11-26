@@ -77,6 +77,23 @@ describe('collection change history', () => {
     expect((await h.call('GET', `/flows/${flow.id}`)).body.steps[0].requestId).toBe(req.id);
   });
 
+  it('restoring an edit leaves examples and flow links as they are now, even after an undelete', async () => {
+    const { col, req } = await setup();
+    const ex = (await h.call('POST', `/requests/${req.id}/examples`, { name: '200 OK', status: 200, headers: {}, body: '{}' })).body;
+    const flow = (await h.call('POST', '/flows', { name: 'F' })).body;
+    await h.call('PUT', `/flows/${flow.id}/graph`, { steps: [{ id: 's1', name: 'Login', kind: 'request', requestId: req.id }], connections: [] });
+    await app('DELETE', `/requests/${req.id}`);
+    await h.call('POST', `/changes/${(await changes(col.id))[0].id}/restore`, {});
+    await h.call('DELETE', `/examples/${ex.id}`);
+    await h.call('PUT', `/flows/${flow.id}/graph`, { steps: [{ id: 's1', name: 'Login', kind: 'request', requestId: null }], connections: [] });
+    await app('PATCH', `/requests/${req.id}`, { url: '{{baseUrl}}/login2' });
+    const edit = (await changes(col.id, req.id)).find((c) => c.action === 'update');
+    await h.call('POST', `/changes/${edit.id}/restore`, {});
+    expect((await h.call('GET', `/requests/${req.id}`)).body.url).toBe('{{baseUrl}}/login');
+    expect((await h.call('GET', `/requests/${req.id}/examples`)).body).toEqual([]);
+    expect((await h.call('GET', `/flows/${flow.id}`)).body.steps[0].requestId).toBeNull();
+  });
+
   it('brings back a deleted folder and a deleted collection with everything in them', async () => {
     const { col, folder, req } = await setup();
     await app('DELETE', `/collections/${folder.id}`);
