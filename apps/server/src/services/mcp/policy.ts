@@ -31,6 +31,16 @@ export function environmentFor(db: Db, ref?: string | null): Environment | null 
   return env;
 }
 
+/**
+ * The environment a send or an environment write uses. With "Claude must name an environment" on,
+ * leaving it out is an error instead of quietly taking whichever environment is active right now.
+ */
+export function environmentForAction(db: Db, ref?: string | null): Environment | null {
+  if (!ref && getMcpSettings(db).requireEnvironment)
+    throw new HttpError(400, 'Name the environment to use (environment: "<name>"); Postguy is set to never fall back to the active one for Claude.', 'mcp_environment_required');
+  return environmentFor(db, ref);
+}
+
 const MIN_LITERAL = 4;
 
 /**

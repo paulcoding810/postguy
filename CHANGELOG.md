@@ -5,6 +5,7 @@ What changed in each Postguy release, newest first. Add to **Unreleased** as you
 ## Unreleased
 
 ### Added
+- Settings → Claude → **Must name the environment** (on by default): Claude's sends and environment writes have to name the environment, so switching the active one never redirects it.
 - Claude can create environments, with variables, and clone one into a new environment (`create_environment`, `clone_environment`). Cloned secret values are left for you to fill in.
 
 ### Fixed

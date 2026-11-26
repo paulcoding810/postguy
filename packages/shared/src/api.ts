@@ -103,6 +103,10 @@ export const McpSettings = z.object({
   edit: z.boolean().default(false),
   /** Delete requests and folders; needs edit too. Deletions can be undone from Change history. */
   delete: z.boolean().default(false),
+  /** Sends and environment writes must name an environment, so switching the active one never redirects Claude. */
+  requireEnvironment: z.boolean().default(true),
+  /** The only folder Claude may upload files from in form-data and binary bodies; null: no uploads. */
+  uploadFolder: z.string().nullable().default(null),
 });
 export type McpSettings = z.output<typeof McpSettings>;
 export const UpdateMcpSettings = z.object({
@@ -111,6 +115,8 @@ export const UpdateMcpSettings = z.object({
   send: z.boolean().optional(),
   edit: z.boolean().optional(),
   delete: z.boolean().optional(),
+  requireEnvironment: z.boolean().optional(),
+  uploadFolder: z.string().min(1).nullable().optional(),
 });
 
 /** How requests behave unless a request sets its own value. */

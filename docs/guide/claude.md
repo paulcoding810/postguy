@@ -44,6 +44,10 @@ Claude can only delete what can be brought back: requests, folders and collectio
 
 A request that would carry a secret is refused unless its host is one your saved requests already use. So a prompt injection hidden in a response can't make Claude send your token somewhere else. This covers requests a script sends and OAuth 2.0 token requests too. A host Claude adds, by saving a request or variable that points at it, stays untrusted until you send there yourself.
 
+## Which environment Claude uses
+
+**Must name the environment** is on by default: `send_request`, `run_flow` and `set_variable` on an environment only work when Claude names the environment. Switching the active environment in Postguy then never redirects a Claude session that's already working. Turn it off to let Claude fall back to the active environment.
+
 ## Per environment
 
 In the environment manager, each environment has two **Claude** switches:

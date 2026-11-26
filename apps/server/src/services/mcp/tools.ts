@@ -21,7 +21,7 @@ import { notifyChange } from '../changes.ts';
 import { send } from '../send.ts';
 import { listVariables, replaceVariables, setVariable } from '../variables.ts';
 import { markUntrusted } from '../settings.ts';
-import { allKnownHosts, environmentFor, hiddenSecrets, mask, requirePermission, secretHostGuard, type Permission } from './policy.ts';
+import { allKnownHosts, environmentFor, environmentForAction, hiddenSecrets, mask, requirePermission, secretHostGuard, type Permission } from './policy.ts';
 
 const BODY_LIMIT = 20_000;
 
@@ -202,9 +202,9 @@ export function createMcpServer(db: Db): McpServer {
     'send_request',
     'send',
     'Sends a saved request (optionally with changes) or a new one, and returns the response. Uses the given or active environment.',
-    { requestId: z.string().optional(), ...RequestFields, environment: z.string().optional().describe('Name or id; defaults to the active one') },
+    { requestId: z.string().optional(), ...RequestFields, environment: z.string().optional().describe('Name or id. Defaults to the active one unless the user requires it to be named') },
     async ({ requestId, environment, ...patch }) => {
-      const env = environmentFor(db, environment);
+      const env = environmentForAction(db, environment);
       const saved = requestId ? getRequest(db, requestId) : null;
       if (!saved && !patch.url) throw new HttpError(400, 'Give a requestId, or a url for a new request', 'bad_request');
       const base = saved ?? { name: patch.name ?? 'Claude request', method: 'GET', url: '', collectionId: null };
@@ -240,7 +240,7 @@ export function createMcpServer(db: Db): McpServer {
     'Runs a flow and waits for it to finish (up to 2 minutes), then returns the run report.',
     { flowId: z.string(), environment: z.string().optional() },
     async ({ flowId, environment }) => {
-      const env = environmentFor(db, environment);
+      const env = environmentForAction(db, environment);
       const exec = runFlow(db, flowId, env?.id ?? null, false, { source: 'mcp', guard: secretHostGuard(db, env?.id ?? null), hideFromScripts: hiddenSecrets(db, env) });
       await Promise.race([waitForExecution(exec.id), new Promise((r) => setTimeout(r, 120_000))]);
       const done = getExecution(db, exec.id);
@@ -503,7 +503,7 @@ export function createMcpServer(db: Db): McpServer {
       let ownerId: string;
       if (scope === 'global') ownerId = listEnvironments(db).find((e) => e.kind === 'global')!.id;
       else if (scope === 'environment') {
-        const env = environmentFor(db, owner ?? null);
+        const env = environmentForAction(db, owner ?? null);
         if (!env) throw new HttpError(400, 'No environment given and none is active', 'bad_request');
         ownerId = env.id;
       } else if (!owner) throw new HttpError(400, `Give the ${scope} id as owner`, 'bad_request');

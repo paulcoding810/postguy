@@ -43,6 +43,15 @@ export function McpSettingsPanel() {
             <div className="ml-3 flex flex-col border-l pl-3">
               <Row title="Read" detail="Requests, variables (secrets masked), history and flow runs." checked={s.read} disabled={!s.enabled} onChange={(v) => set({ read: v })} />
               <Row title="Send requests" detail="Send requests and run flows; labelled “MCP” in your history." checked={s.send} disabled={!s.enabled} onChange={(v) => set({ send: v })} />
+              <div className="ml-3 border-l pl-3">
+                <Row
+                  title="Must name the environment"
+                  detail="Claude has to say which environment to send with or write to, so switching the active one here never redirects it."
+                  checked={s.requireEnvironment}
+                  disabled={!s.enabled}
+                  onChange={(v) => set({ requireEnvironment: v })}
+                />
+              </div>
               <Row title="Edit" detail="Create and change requests, set variables, switch environment, import." checked={s.edit} disabled={!s.enabled} onChange={(v) => set({ edit: v })} />
               <div className="ml-3 border-l pl-3">
                 <Row

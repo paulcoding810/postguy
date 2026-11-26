@@ -34,7 +34,8 @@ async function tool(name: string, args: Record<string, unknown> = {}) {
   return { error: res.isError ? text : null, value };
 }
 
-const allow = (patch: Record<string, boolean>) => h.call('PATCH', '/settings/mcp', patch);
+/** Most tests send without naming an environment; the requirement has its own test. */
+const allow = (patch: Record<string, boolean>) => h.call('PATCH', '/settings/mcp', { requireEnvironment: false, ...patch });
 
 beforeEach(async () => {
   h = await createHarness();
@@ -69,7 +70,7 @@ describe('Claude (MCP) access', () => {
     const { tools } = await client.listTools();
     expect(tools.map((t) => t.name)).toEqual(expect.arrayContaining(['list_requests', 'send_request', 'get_variables', 'decode_jwt', 'create_request', 'run_flow']));
     expect((await tool('list_requests')).error).toMatch(/turned off in Postguy/);
-    expect((await h.call('GET', '/settings/mcp')).body).toEqual({ enabled: false, read: true, send: false, edit: false, delete: false });
+    expect((await h.call('GET', '/settings/mcp')).body).toEqual({ enabled: false, read: true, send: false, edit: false, delete: false, requireEnvironment: true, uploadFolder: null });
   });
 
   it('gives a Claude Code setup command that runs the bridge', async () => {
@@ -451,6 +452,19 @@ describe('Claude (MCP) move edge cases', () => {
 });
 
 describe('Claude (MCP) environments', () => {
+  it('must name the environment for sends and environment writes, unless the user allows the active one', async () => {
+    await allow({ enabled: true, read: true, send: true, edit: true, requireEnvironment: true });
+    for (const [name, args] of [
+      ['send_request', { requestId: ids.echo }],
+      ['set_variable', { scope: 'environment', key: 'k', value: 'v' }],
+    ] as const)
+      expect((await tool(name, args)).error).toMatch(/Name the environment/);
+    expect((await tool('send_request', { requestId: ids.echo, environment: 'Local' })).value.status).toBe(200);
+    expect((await tool('get_variables', { requestId: ids.echo })).error).toBeNull();
+    await allow({ enabled: true, send: true, requireEnvironment: false });
+    expect((await tool('send_request', { requestId: ids.echo })).value.status).toBe(200);
+  });
+
   it('creates an environment with variables, keeping secrets hidden, and only with Edit', async () => {
     await allow({ enabled: true, read: true });
     expect((await tool('create_environment', { name: 'Staging' })).error).toMatch(/does not allow Claude to change/);
