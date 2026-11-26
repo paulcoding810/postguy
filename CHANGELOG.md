@@ -12,6 +12,17 @@ What changed in each Postguy release, newest first. Add to **Unreleased** as you
 - Secrets are masked in history and in what Claude reads even when they were URL-encoded, form-encoded or escaped in JSON.
 - Importing an exported globals file no longer empties your global secrets; the values you have are kept.
 - The variable popup no longer calls a variable "not defined" when its value points at a missing one; it shows where it's defined and lets you edit the value, instead of offering an Add that overwrote it.
+- ⌘-clicking a `{{variable}}` inside a URL in the body editor opens only the variable popup, not the link.
+- GraphQL variables with a bare reference, like `{"id": {{userId}}}`, are sent as an object.
+- `pm.sendRequest` parses GraphQL variables given as a string, and sets the Content-Type from `options.raw.language`.
+- `setTimeout` in scripts waits its delay, and its callback can await, send requests and chain promises.
+- Fetching a GraphQL schema no longer runs collection or folder post-response scripts.
+- OpenAPI sync keeps a request on its path when only its operationId moved elsewhere, creates the new endpoint, and keeps path values typed into a moved URL.
+- Pasting a GraphQL cURL command keeps variables given as a string, and a body with `extensions` stays JSON instead of losing them.
+- Restoring an edit from change history no longer brings back examples or flow links you removed since.
+- Activity's Load older no longer skips entries that happened in the same millisecond.
+- Copy as cURL keeps `;` in form values and file paths; Copy as fetch keeps integers too big for JavaScript.
+- Release notes keep `##` lines inside code blocks.
 
 ## 0.1.0
 

@@ -2,7 +2,7 @@ import Editor, { type OnMount } from '@monaco-editor/react';
 import * as React from 'react';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/misc';
 import { useResolvedTheme } from '@/hooks/useTheme';
-import { monaco } from '@/lib/monaco';
+import { monaco, skipNextLinkOpen } from '@/lib/monaco';
 import { modKey } from '@/lib/utils';
 import { clearInsertTarget, useInsertTarget, useTemplateCtx } from '@/features/template/TemplateContext';
 import { VariableRow } from '@/features/template/VariableEditor';
@@ -131,6 +131,7 @@ export function CodeEditor({
         const hit = refUnder(e);
         if (!hit) return;
         e.event.preventDefault();
+        skipNextLinkOpen();
         clearTimer();
         setPopup({ name: hit.name, anchor: anchorAt(hit.start), focus: true });
       });

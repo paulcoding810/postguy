@@ -39,8 +39,18 @@ monaco.typescript.javascriptDefaults.setCompilerOptions({
 monaco.typescript.javascriptDefaults.setDiagnosticsOptions({ noSemanticValidation: false, noSyntaxValidation: false, diagnosticCodesToIgnore: [1108, 2304] });
 monaco.typescript.javascriptDefaults.setEagerModelSync(true);
 
+let skipLinksUntil = 0;
+/** Keeps Monaco from opening a link under the pointer, for a ⌘-click that opened the variable popup instead. */
+export function skipNextLinkOpen() {
+  skipLinksUntil = Date.now() + 1000;
+}
+
 monaco.editor.registerLinkOpener({
   open(uri) {
+    if (Date.now() < skipLinksUntil) {
+      skipLinksUntil = 0;
+      return true;
+    }
     if (!['http', 'https', 'mailto'].includes(uri.scheme)) return false;
     void openExternal(uri.toString(true));
     return true;
