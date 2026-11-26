@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { parseCurl, resolveTemplate } from '@postguy/core';
-import { HTTP_METHODS, newId, RequestDefinition, type CollectionTreeNode, type KeyValue } from '@postguy/shared';
+import { HTTP_METHODS, looksLikeCredential, newId, RequestDefinition, type CollectionTreeNode, type KeyValue } from '@postguy/shared';
 import { and, desc, eq, gte, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Db } from '../../db/client.ts';
@@ -68,6 +68,12 @@ function toPatch(p: RequestPatch) {
     ...(p.params && { params: kvs(p.params) }),
     ...(p.body && { body: { mode: p.body.mode, ...(p.body.raw !== undefined && { raw: p.body.raw }), ...(p.body.form && { form: kvs(p.body.form) }) } }),
   };
+}
+
+/** A note for Claude when it stored something that looks like a credential as plain text. */
+function plainCredentialNote(vars: { key: string; value: string; secret?: boolean }[]) {
+  const keys = vars.filter((v) => !v.secret && looksLikeCredential(v.key, v.value)).map((v) => v.key);
+  return keys.length ? { warning: `${keys.join(', ')} ${keys.length > 1 ? 'look' : 'looks'} like a credential stored as plain text; set it again with secret: true so it's masked.` } : {};
 }
 
 function flatten(nodes: CollectionTreeNode[], path: string[] = []): { id: string; name: string; method: string; url: string; collectionId: string; folder: string }[] {
@@ -509,7 +515,7 @@ export function createMcpServer(db: Db): McpServer {
       } else if (!owner) throw new HttpError(400, `Give the ${scope} id as owner`, 'bad_request');
       else ownerId = owner;
       const v = setVariable(db, scope, ownerId, key, value, secret);
-      return { key: v.key, scope, secret: v.isSecret, value: v.isSecret ? '••••••' : v.value };
+      return { key: v.key, scope, secret: v.isSecret, value: v.isSecret ? '••••••' : v.value, ...plainCredentialNote([{ key: v.key, value: v.value, secret: v.isSecret }]) };
     },
   );
 
@@ -539,7 +545,13 @@ export function createMcpServer(db: Db): McpServer {
         vars.map((v) => ({ key: v.key, value: v.value, isSecret: !!v.secret, enabled: true })),
         activate,
       );
-      return { id: env.id, name: env.name, active: !!activate, variables: vars.map((v) => ({ key: v.key, secret: !!v.secret, value: v.secret ? '••••••' : v.value })) };
+      return {
+        id: env.id,
+        name: env.name,
+        active: !!activate,
+        variables: vars.map((v) => ({ key: v.key, secret: !!v.secret, value: v.secret ? '••••••' : v.value })),
+        ...plainCredentialNote(vars),
+      };
     },
   );
 

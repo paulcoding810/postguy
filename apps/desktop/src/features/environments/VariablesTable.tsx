@@ -1,7 +1,7 @@
 import { EyeIcon, EyeOffIcon, LockIcon, SaveIcon, Trash2Icon } from 'lucide-react';
 import * as React from 'react';
 import { toast } from 'sonner';
-import { newId, type VariableScope } from '@postguy/shared';
+import { looksLikeCredential, newId, type VariableScope } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
 import { inputClass } from '@/components/ui/input';
 import { Checkbox, Tooltip } from '@/components/ui/misc';
@@ -103,6 +103,17 @@ export function VariablesTable({
                   spellCheck={false}
                   onChange={(e) => edit(r.id, { key: e.target.value })}
                 />
+                {!isGhost && !r.isSecret && looksLikeCredential(r.key, r.value) && (
+                  <Tooltip content="Looks like a credential stored as plain text. Mark it secret to mask it here, in history, in exports and from Claude.">
+                    <button
+                      type="button"
+                      className="mr-1.5 shrink-0 rounded bg-warning/15 px-1 text-[10px] font-medium text-warning hover:bg-warning/25"
+                      onClick={() => edit(r.id, { isSecret: true })}
+                    >
+                      Mark secret
+                    </button>
+                  </Tooltip>
+                )}
                 {!isGhost && r.enabled && overrideNote?.(r.key) && (
                   <Tooltip content={overrideNote(r.key)}>
                     <span className="mr-1.5 shrink-0 rounded bg-warning/15 px-1 text-[10px] font-medium text-warning">overrides env</span>

@@ -510,6 +510,15 @@ describe('Claude (MCP) environments', () => {
     expect((await h.call('GET', `/variables/environment/${keys.id}?reveal=1`)).body.map((v: any) => v.value)).toEqual(['', '']);
   });
 
+  it('warns when Claude stores a credential as plain text', async () => {
+    await allow({ enabled: true, read: true, edit: true });
+    const made = await tool('create_environment', { name: 'Staging', variables: [{ key: 'host', value: 'h' }, { key: 'password', value: 'pw1' }] });
+    expect(made.value.warning).toMatch(/^password looks like a credential/);
+    const set = await tool('set_variable', { scope: 'environment', owner: 'Staging', key: 'auth_token', value: 'tok' });
+    expect(set.value.warning).toMatch(/auth_token looks like a credential/);
+    expect((await tool('set_variable', { scope: 'environment', owner: 'Staging', key: 'auth_token', value: 'tok', secret: true })).value.warning).toBeUndefined();
+  });
+
   it("won't clone an environment the user keeps from Claude", async () => {
     await allow({ enabled: true, read: true, edit: true });
     await h.call('PATCH', `/environments/${ids.env}`, { mcpBlocked: true });
