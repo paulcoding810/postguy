@@ -16,9 +16,15 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Replaces every occurrence of each secret (length ≥ 3) with a mask, longest first. */
+/** A secret as it can appear on the wire: raw, URL- or form-encoded, or escaped in JSON. */
+function spellings(s: string): string[] {
+  const url = encodeURIComponent(s);
+  return [s, url, url.replace(/%20/g, '+'), new URLSearchParams({ s }).toString().slice(2), JSON.stringify(s).slice(1, -1)];
+}
+
+/** Replaces every occurrence of each secret (length ≥ 3) with a mask, longest first, including its encoded spellings. */
 export function redactText(text: string, secrets: Iterable<string>): string {
-  const list = [...new Set(secrets)].filter((s) => s && s.length >= 3).sort((a, b) => b.length - a.length);
+  const list = [...new Set([...secrets].filter((s) => s && s.length >= 3).flatMap(spellings))].sort((a, b) => b.length - a.length);
   if (!list.length || !text) return text;
   const pattern = new RegExp(list.map(escapeRegExp).join('|'), 'g');
   return text.replace(pattern, MASK);

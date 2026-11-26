@@ -313,7 +313,7 @@ interface StepContext {
   runtime: Map<string, unknown>;
   executionId: string;
   /** Passed to every step's send, e.g. Claude's label and host check. */
-  sendOptions?: Pick<SendOptions, 'source' | 'guard'>;
+  sendOptions?: Pick<SendOptions, 'source' | 'guard' | 'hideFromScripts'>;
 }
 
 function runtimeVars(runtime: Map<string, unknown>) {
@@ -511,7 +511,7 @@ export function runFlow(
   flowId: string,
   environmentId?: string | null,
   debug = false,
-  sendOptions?: Pick<SendOptions, 'source' | 'guard'>,
+  sendOptions?: Pick<SendOptions, 'source' | 'guard' | 'hideFromScripts'>,
 ): FlowExecution {
   const flow = getFlowRow(db, flowId);
   const graph = getGraph(db, flowId);

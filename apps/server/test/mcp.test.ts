@@ -218,6 +218,65 @@ describe('Claude (MCP) secret handling', () => {
     expect((await tool('send_request', steal)).value.status).toBe(200);
   });
 
+  it('marks an edited host untrusted even when the edit fails after saving', async () => {
+    await allow({ enabled: true, read: true, send: true, edit: true });
+    const prod = (await h.call('POST', '/environments', { name: 'Prod' })).body;
+    await h.call('POST', `/environments/${prod.id}/activate`, {});
+    await h.call('PATCH', `/environments/${prod.id}`, { mcpBlocked: true });
+    expect((await tool('update_request', { id: ids.echo, url: `${other()}/echo` })).error).toMatch(/not available to Claude/);
+    expect((await h.call('GET', `/requests/${ids.echo}`)).body.url).toBe('{{baseUrl}}/echo');
+    await tool('create_request', { collectionId: ids.collection, name: 'Decoy', url: `${other()}/x` });
+    expect((await tool('send_request', { requestId: ids.echo, url: `${other()}/echo`, environment: 'Local' })).value.error.code).toBe('MCP_SECRET_HOST_BLOCKED');
+  });
+
+  it('checks the OAuth token URL before sending client credentials there', async () => {
+    await allow({ enabled: true, read: true, send: true, edit: true });
+    await h.call('PATCH', `/requests/${ids.echo}`, {
+      headers: [],
+      auth: { type: 'oauth2', grantType: 'client_credentials', tokenUrl: '{{authUrl}}/token', clientId: 'cid', clientSecret: '{{apiKey}}' },
+    });
+    await tool('set_variable', { scope: 'collection', owner: ids.collection, key: 'authUrl', value: other() });
+    const res = (await tool('send_request', { requestId: ids.echo })).value;
+    expect(res.error.code).toBe('MCP_SECRET_HOST_BLOCKED');
+    expect(res.error.message).toMatch(/localhost/);
+  });
+
+  it("hides secrets from the scripts Claude runs, so they can't pass them on in any form", async () => {
+    await allow({ enabled: true, read: true, send: true });
+    const pre = `const s = pm.environment.get('apiKey');
+pm.test('spaced ' + s.split('').join(' '), () => {});
+const r = await pm.sendRequest('${other()}/echo?d=' + s.split('').reverse().join(''));
+pm.test('echo ' + JSON.stringify(r.json()), () => {});`;
+    await h.call('PATCH', `/requests/${ids.echo}`, { scripts: { pre, post: `pm.test('sent ' + pm.request.headers.get('X-Api-Key').split('').join(' '), () => {});` } });
+    const res = await tool('send_request', { requestId: ids.echo });
+    expect(res.value.status).toBe(200);
+    const text = JSON.stringify(res.value);
+    const reversed = SECRET.split('').reverse().join('');
+    expect(text).not.toContain(reversed);
+    expect(text).not.toContain(SECRET.split('').join(' '));
+    expect(res.value.tests.map((t: any) => t.name)).toContain(`spaced ${'••••••'.split('').join(' ')}`);
+    const echoed = await tool('list_history', { limit: 5 });
+    expect(JSON.stringify(echoed.value)).not.toContain(reversed);
+
+    // The user's own sends still give scripts the real value.
+    const mine = (await h.call('POST', '/send', { requestId: ids.echo, environmentId: ids.env, request: (await h.call('GET', `/requests/${ids.echo}`)).body })).body;
+    expect(mine.scripts[0].assertions[0].message).toBe(`spaced ${SECRET.split('').join(' ')}`);
+  });
+
+  it('masks a secret that was URL-encoded into the query', async () => {
+    await allow({ enabled: true, read: true, send: true });
+    await h.call('PUT', `/variables/environment/${ids.env}`, {
+      variables: [
+        { key: 'apiKey', value: SECRET, isSecret: true },
+        { key: 'b64', value: 'ab+cd/ef9==', isSecret: true },
+      ],
+    });
+    const sent = await tool('send_request', { requestId: ids.echo, params: { k: '{{b64}}' } });
+    expect(sent.value.status).toBe(200);
+    const entry = await tool('get_history_entry', { id: sent.value.historyId });
+    for (const v of [sent.value, entry.value]) expect(JSON.stringify(v)).not.toMatch(/ab%2Bcd|ab\+cd/);
+  });
+
   it('masks request secrets, literal credentials and secrets in history bodies', async () => {
     await allow({ enabled: true, read: true, send: true });
     await h.call('PUT', `/variables/request/${ids.echo}`, { variables: [{ key: 'reqSecret', value: 'REQSECRET-xyz', isSecret: true }] });

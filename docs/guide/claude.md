@@ -36,10 +36,11 @@ Claude can only delete what can be brought back: requests, folders and collectio
 - Secret values are masked in everything Claude reads, including response bodies that echo them back.
 - `decode_jwt` returns a token's claims, never the token itself.
 - Claude writes `{{name}}`, and Postguy fills in the value when sending.
+- Scripts that run when Claude sends see secret values as `••••••`, so a script can't hand a secret on in another form. A script that signs requests with a secret only works when you send it yourself.
 
 ## Secrets only go where they already go
 
-A request that would carry a secret is refused unless its host is one your saved requests already use. So a prompt injection hidden in a response can't make Claude send your token somewhere else.
+A request that would carry a secret is refused unless its host is one your saved requests already use. So a prompt injection hidden in a response can't make Claude send your token somewhere else. This covers requests a script sends and OAuth 2.0 token requests too. A host Claude adds, by saving a request or variable that points at it, stays untrusted until you send there yourself.
 
 ## Per environment
 

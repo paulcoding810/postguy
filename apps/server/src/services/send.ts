@@ -65,8 +65,10 @@ export interface SendOptions {
   source?: 'mcp';
   /** false: don't keep the response as the request's remembered response (e.g. a schema fetch). */
   remember?: boolean;
-  /** Last check before sending; returning an error stops the request (e.g. a secret going to an unknown host). */
-  guard?: (request: ResolvedRequest, usedSecrets: string[]) => { code: string; message: string } | null;
+  /** Last check before anything goes out, scripts' sends and token requests included; an error stops it (e.g. a secret going to an unknown host). */
+  guard?: (url: string, carriesSecret: boolean) => { code: string; message: string } | null;
+  /** Values scripts see as •••••• (secrets Claude may not see), so a script can't pass them on. */
+  hideFromScripts?: string[];
 }
 
 function queryString(params: KeyValue[]): string {
@@ -212,6 +214,8 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
   let current: ScriptResponse | undefined;
   let answeredUrl: string | null = null;
   const selfName = (opts.selfName ?? input.request.name).toLowerCase();
+  const hidden = opts.hideFromScripts ?? [];
+  const hide = <T,>(v: T): T => (hidden.length && typeof v === 'string' ? (redactText(v, hidden) as T) : v);
   const host = (ctx: ResolutionContext): ScriptHost => ({
     response: (name) => {
       if (current && name.toLowerCase() === selfName) return current;
@@ -219,9 +223,9 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
       return r ? { status: r.status, headers: r.headers, body: r.body } : undefined;
     },
     get: (key) => {
-      if (runtime.has(key)) return runtime.get(key);
+      if (runtime.has(key)) return hide(runtime.get(key));
       const v = ctx.variables.get(key);
-      return v ? resolveValue(`{{${key}}}`, ctx).value : undefined;
+      return v ? hide(resolveValue(`{{${key}}}`, ctx).value) : undefined;
     },
     set: (key, value) => {
       if (value === null) runtime.delete(key);
@@ -231,7 +235,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
       if (def.settings.cookies === false) return [];
       return cookiesFor(db, context().environmentId, answeredUrl ?? resolveTemplate(def.url, ctx).value);
     },
-    envGet: (key) => (ctx.variables.has(key) ? resolveValue(`{{${key}}}`, ctx).value : undefined),
+    envGet: (key) => (ctx.variables.has(key) ? hide(resolveValue(`{{${key}}}`, ctx).value) : undefined),
     envSet: (key, value, scope) => {
       const root = scope === 'collection' ? rootOf(db, collectionId) : null;
       const t = root
@@ -267,7 +271,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     };
     const { ctx, environmentId } = context();
     const resolution = resolveRequest(sdef, ctx, sdef.auth);
-    const refused = opts.guard?.(resolution.request, resolution.secrets);
+    const refused = opts.guard?.(resolution.request.url, resolution.secrets.length > 0);
     if (refused) throw new Error(refused.message);
     const jar = cookieJarFor(db, environmentId, sdef, resolution.request);
     const secrets = [...resolution.secrets, ...secretValues(ctx), ...jar.sent];
@@ -328,6 +332,8 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
   const { ctx, environmentId } = context();
   let auth = effectiveAuth(db, collectionId, def.auth);
   if (needsTokenExchange(auth, ctx)) {
+    const refused = opts.guard?.(resolveTemplate(auth.tokenUrl, ctx).value, true);
+    if (refused) return failure(def, refused, [], scripts);
     try {
       const t = await exchangeToken(auth, ctx, { signal: opts.signal });
       auth = { ...auth, accessToken: t.token };
@@ -353,7 +359,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
       redactedRequest,
     );
   }
-  const refused = opts.guard?.(resolution.request, resolution.secrets);
+  const refused = opts.guard?.(resolution.request.url, resolution.secrets.length > 0);
   if (refused) return failure(def, refused, resolution.unresolved, scripts, redactedRequest);
   const loaded = loadBodyFiles(resolution.request.body);
   if ('error' in loaded) return failure(def, loaded.error, [], scripts, redactedRequest);
@@ -403,9 +409,9 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
   /** The request as sent, for `pm.request` in post-response scripts; edits there are ignored. */
   const sentRequest: ScriptRequest = {
     method: resolution.request.method,
-    url: resolution.request.url,
-    headers: { ...resolution.request.headers },
-    body: resolution.request.body.content,
+    url: hide(resolution.request.url),
+    headers: Object.fromEntries(Object.entries(resolution.request.headers).map(([k, v]) => [k, hide(v)])),
+    body: hide(resolution.request.body.content),
   };
   if (raw.status !== null) {
     const response: ScriptResponse = {

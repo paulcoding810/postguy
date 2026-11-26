@@ -28,7 +28,7 @@ const BODY_LIMIT = 20_000;
 const INSTRUCTIONS = `Postguy is the user's API client. Requests live in collections and folders and use {{variable}} references
 (environment, collection, request and global variables) and {{RequestName.path}} references to remembered responses.
 Secret values are always shown as •••••• unless the user allowed it for that environment; write {{name}} in a request and
-Postguy fills it in when sending. Requests carrying a secret are only sent to hosts the user's saved requests already use.
+Postguy fills it in when sending. Scripts you run see those secrets as •••••• too. Requests carrying a secret are only sent to hosts the user's saved requests already use.
 Use list_requests to find requests, then send_request by id. Everything you send is labelled "MCP" in the user's history.
 Deleting is a separate permission. Every deletion can be undone with restore_change and the changeId it returns;
 tell the user what you deleted.`;
@@ -93,16 +93,18 @@ export function createMcpServer(db: Db): McpServer {
       { description, inputSchema, annotations: { readOnlyHint: need === 'read', destructiveHint: need === 'delete', openWorldHint: need === 'send' } },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (async (args: any) => {
+        let hostsBefore: Set<string> | null = null;
         try {
           requirePermission(db, need);
           // A restore only brings back what the user had, so its hosts stay trusted.
-          const hostsBefore = need === 'edit' && name !== 'restore_change' ? allKnownHosts(db) : null;
-          const result = json(await withSource('mcp', () => handler(args)));
-          if (hostsBefore) markUntrusted(db, [...allKnownHosts(db)].filter((h) => !hostsBefore.has(h)));
-          if (need !== 'read') notifyChange({ origin: null, what: `mcp:${name}` });
-          return result;
+          hostsBefore = need === 'edit' && name !== 'restore_change' ? allKnownHosts(db) : null;
+          return json(await withSource('mcp', () => handler(args)));
         } catch (e) {
           return { isError: true, content: [{ type: 'text', text: (e as Error).message }] } satisfies Result;
+        } finally {
+          // Also after an error: a tool may have saved something before it failed.
+          if (hostsBefore) markUntrusted(db, [...allKnownHosts(db)].filter((h) => !hostsBefore!.has(h)));
+          if (need !== 'read') notifyChange({ origin: null, what: `mcp:${name}` });
         }
       }) as never,
     );
@@ -210,7 +212,7 @@ export function createMcpServer(db: Db): McpServer {
       const res = await send(
         db,
         { requestId: saved?.id, collectionId: saved?.collectionId ?? null, environmentId: env?.id ?? null, request: def },
-        { source: 'mcp', guard: secretHostGuard(db, env?.id ?? null) },
+        { source: 'mcp', guard: secretHostGuard(db, env?.id ?? null), hideFromScripts: hiddenSecrets(db, env) },
       );
       const hidden = hiddenSecrets(db, env);
       return mask(
@@ -239,7 +241,7 @@ export function createMcpServer(db: Db): McpServer {
     { flowId: z.string(), environment: z.string().optional() },
     async ({ flowId, environment }) => {
       const env = environmentFor(db, environment);
-      const exec = runFlow(db, flowId, env?.id ?? null, false, { source: 'mcp', guard: secretHostGuard(db, env?.id ?? null) });
+      const exec = runFlow(db, flowId, env?.id ?? null, false, { source: 'mcp', guard: secretHostGuard(db, env?.id ?? null), hideFromScripts: hiddenSecrets(db, env) });
       await Promise.race([waitForExecution(exec.id), new Promise((r) => setTimeout(r, 120_000))]);
       const done = getExecution(db, exec.id);
       if (done.status === 'running' || done.status === 'paused') return { executionId: exec.id, status: done.status, note: 'Still running; check get_flow_run later.' };
@@ -254,14 +256,16 @@ export function createMcpServer(db: Db): McpServer {
     'Saves a new request in a collection or folder.',
     { collectionId: z.string(), ...RequestFields, name: z.string().min(1), url: z.string() },
     ({ collectionId, ...patch }) => {
+      const env = environmentFor(db);
       const def = RequestDefinition.parse({ method: 'GET', ...toPatch(patch) });
-      return mask(createRequest(db, { ...def, collectionId }), hiddenSecrets(db, environmentFor(db)));
+      return mask(createRequest(db, { ...def, collectionId }), hiddenSecrets(db, env));
     },
   );
 
   tool('update_request', 'edit', 'Changes a saved request. Only the given fields change; headers and params replace the existing ones.', { id: z.string(), ...RequestFields }, ({ id, ...patch }) => {
+    const env = environmentFor(db);
     const r = updateRequest(db, id, toPatch(patch));
-    return mask(r, hiddenSecrets(db, environmentFor(db)));
+    return mask(r, hiddenSecrets(db, env));
   });
 
   tool(
@@ -270,9 +274,10 @@ export function createMcpServer(db: Db): McpServer {
     'Saves a cURL command as a new request in a collection or folder.',
     { collectionId: z.string(), command: z.string(), name: z.string().optional() },
     ({ collectionId, command, name }) => {
+      const env = environmentFor(db);
       const parsed = parseCurl(command);
       const r = createRequest(db, { ...parsed.request, ...(name && { name }), collectionId });
-      return { request: mask(r, hiddenSecrets(db, environmentFor(db))), warnings: parsed.warnings };
+      return { request: mask(r, hiddenSecrets(db, env)), warnings: parsed.warnings };
     },
   );
 

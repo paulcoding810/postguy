@@ -1,4 +1,4 @@
-import { authSecretValues, MASK, redactAuth, redactText, resolveTemplate, type ResolvedRequest } from '@postguy/core';
+import { authSecretValues, MASK, redactAuth, redactText, resolveTemplate } from '@postguy/core';
 import type { Auth, Environment } from '@postguy/shared';
 import { eq } from 'drizzle-orm';
 import { collections, requests, variables } from '../../db/schema.ts';
@@ -105,10 +105,10 @@ export function allKnownHosts(db: Db): Set<string> {
 /** The send guard for Claude: secrets only travel to hosts the user already sends them to. */
 export function secretHostGuard(db: Db, environmentId: string | null) {
   let known: Set<string> | null = null;
-  return (request: ResolvedRequest, usedSecrets: string[]) => {
-    if (!usedSecrets.length) return null;
+  return (url: string, carriesSecret: boolean) => {
+    if (!carriesSecret) return null;
     known ??= knownHosts(db, environmentId);
-    const host = hostOf(request.url);
+    const host = hostOf(url);
     if (host && known.has(host) && !untrustedHosts(db).has(host)) return null;
     return {
       code: 'MCP_SECRET_HOST_BLOCKED',

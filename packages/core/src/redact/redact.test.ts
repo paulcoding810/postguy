@@ -6,6 +6,13 @@ describe('redact', () => {
     expect(redactText('token=abcdef and abc and ab', ['abc', 'abcdef', 'ab'])).toBe(`token=${MASK} and ${MASK} and ab`);
   });
 
+  it('masks a secret once it has been URL-encoded, form-encoded or escaped in JSON', () => {
+    const s = 'ab+cd/ef9==';
+    expect(redactText(`/echo?k=${encodeURIComponent(s)}`, [s])).toBe(`/echo?k=${MASK}`);
+    expect(redactText(`k=hello+world%26x`, ['hello world&x'])).toBe(`k=${MASK}`);
+    expect(redactText(JSON.stringify({ k: 'a"b\\c' }), ['a"b\\c'])).toBe(`{"k":"${MASK}"}`);
+  });
+
   it('masks sensitive headers and keeps the scheme', () => {
     expect(redactHeaders({ Authorization: 'Bearer xyz', 'X-Other': 'has-secret-1', Accept: '*/*' }, ['secret-1'])).toEqual({
       Authorization: `Bearer ${MASK}`,
