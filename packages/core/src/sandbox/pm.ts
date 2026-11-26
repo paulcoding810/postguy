@@ -104,12 +104,17 @@ const __makeResponse = (r) => {
 const __pmResponse = response ? __makeResponse(response) : undefined;
 const __sends = new Map();
 let __sendSeq = 0;
+const __rawTypes = { json: 'application/json', xml: 'application/xml', html: 'text/html', text: 'text/plain', javascript: 'application/javascript' };
+const __gqlVariables = (v) => {
+  if (typeof v !== 'string') return v;
+  try { return JSON.parse(v || '{}'); } catch (e) { throw new Error('graphql variables are not valid JSON'); }
+};
 const __bodyText = (b) => {
   if (b == null) return null;
   if (typeof b === 'string') return b;
   if (b.mode === 'raw') return b.raw == null ? null : typeof b.raw === 'string' ? b.raw : JSON.stringify(b.raw);
   if (b.mode === 'urlencoded') return __formEncode((Array.isArray(b.urlencoded) ? b.urlencoded : Object.entries(b.urlencoded || {}).map(([key, value]) => ({ key, value }))).map(__formItem));
-  if (b.mode === 'graphql') return JSON.stringify({ query: b.graphql && b.graphql.query, variables: b.graphql && b.graphql.variables });
+  if (b.mode === 'graphql') return JSON.stringify({ query: b.graphql && b.graphql.query, variables: b.graphql && __gqlVariables(b.graphql.variables) });
   throw new Error('pm.sendRequest supports raw, urlencoded and graphql bodies');
 };
 const __sendHeaders = (h) => {
@@ -125,6 +130,8 @@ const __sendRequest = (req, callback) => {
   const headers = __sendHeaders(r.header || r.headers);
   if (r.body && r.body.mode === 'urlencoded' && !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/x-www-form-urlencoded';
   if (r.body && r.body.mode === 'graphql' && !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type')) headers['Content-Type'] = 'application/json';
+  const lang = r.body && r.body.mode === 'raw' && r.body.options && r.body.options.raw && r.body.options.raw.language;
+  if (lang && __rawTypes[lang] && !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type')) headers['Content-Type'] = __rawTypes[lang];
   return __queueSend({ method: String(r.method || 'GET').toUpperCase(), url, headers, body: __bodyText(r.body) }, 'pm.sendRequest', { callback: typeof callback === 'function' ? callback : null });
 };
 /** Hands a request to the host; it is sent once the script yields, and settled with __settleSend. */
@@ -235,8 +242,7 @@ const __pmRequest = request ? {
       if (mode === 'raw') {
         request.body = o.raw == null ? '' : typeof o.raw === 'string' ? o.raw : JSON.stringify(o.raw);
         const lang = o.options && o.options.raw && o.options.raw.language;
-        const types = { json: 'application/json', xml: 'application/xml', html: 'text/html', text: 'text/plain', javascript: 'application/javascript' };
-        if (lang && types[lang]) contentType(types[lang]);
+        if (lang && __rawTypes[lang]) contentType(__rawTypes[lang]);
         return;
       }
       if (mode === 'urlencoded') {
@@ -251,8 +257,8 @@ const __pmRequest = request ? {
       }
       if (mode === 'graphql') {
         const g = o.graphql || {};
-        let variables = g.variables || {};
-        if (typeof variables === 'string') { try { variables = JSON.parse(variables || '{}'); } catch (e) { throw new Error('pm.request.body.update: graphql variables are not valid JSON'); } }
+        let variables;
+        try { variables = __gqlVariables(g.variables || {}); } catch (e) { throw new Error('pm.request.body.update: ' + e.message); }
         request.body = JSON.stringify({ query: g.query || '', variables });
         contentType('application/json');
         return;

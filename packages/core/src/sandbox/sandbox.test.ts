@@ -227,6 +227,17 @@ describe('pm.sendRequest', () => {
     ]);
   });
 
+  it('sends GraphQL variables written as a string as an object, and sets Content-Type from raw.language', async () => {
+    sent.length = 0;
+    const r = await pre(`await pm.sendRequest({ url: 'http://api/graphql', method: 'POST', body: { mode: 'graphql', graphql: { query: '{ a }', variables: '{"id":"1"}' } } });
+      await pm.sendRequest({ url: 'http://api/echo', method: 'POST', body: { mode: 'raw', raw: '{"x":1}', options: { raw: { language: 'json' } } } });
+      await pm.sendRequest({ url: 'http://api/echo', method: 'POST', header: { 'content-type': 'text/x' }, body: { mode: 'raw', raw: 'a', options: { raw: { language: 'json' } } } });`);
+    expect(r.error).toBeNull();
+    expect(JSON.parse(sent[0]!.body!)).toEqual({ query: '{ a }', variables: { id: '1' } });
+    expect(sent[1]!.headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(sent[2]!.headers).toEqual({ 'content-type': 'text/x' });
+  });
+
   it('passes network errors to the callback, and fails the script when an awaited send fails', async () => {
     const cb = await pre(`pm.sendRequest('http://down/x', (err, res) => { console.log(err.message, res === null); });`);
     expect(cb.error).toBeNull();
