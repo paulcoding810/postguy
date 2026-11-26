@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -533,6 +534,67 @@ describe('Claude (MCP) environments', () => {
     await tool('create_environment', { name: 'Evil', variables: [{ key: 'mirror', value: other }] });
     const res = await tool('send_request', { requestId: ids.echo, url: `${other}/echo`, environment: 'Evil' });
     expect(res.value.error?.code).toBe('MCP_SECRET_HOST_BLOCKED');
+  });
+});
+
+describe('Claude (MCP) file uploads', () => {
+  let dir: string;
+  let outside: string;
+  let sink: http.Server;
+  let sinkUrl = '';
+  let last: string | null = null;
+  beforeEach(async () => {
+    dir = mkdtempSync(join(tmpdir(), 'postguy-up-'));
+    outside = mkdtempSync(join(tmpdir(), 'postguy-out-'));
+    writeFileSync(join(dir, 'users.csv'), 'email\nann@x.test\n');
+    writeFileSync(join(outside, 'private.txt'), 'do not send');
+    symlinkSync(join(outside, 'private.txt'), join(dir, 'link.txt'));
+    sink = http.createServer((req, res) => {
+      let b = '';
+      req.on('data', (c) => (b += c));
+      req.on('end', () => {
+        last = b;
+        res.end('ok');
+      });
+    });
+    await new Promise<void>((r) => sink.listen(0, '127.0.0.1', () => r()));
+    const addr = sink.address();
+    sinkUrl = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}/import`;
+    last = null;
+  });
+  afterEach(async () => {
+    await new Promise((r) => sink.close(r));
+    rmSync(dir, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  });
+  const upload = (files: Record<string, string>) => tool('send_request', { url: sinkUrl, method: 'POST', body: { mode: 'form', form: { note: 'hi' }, files } });
+
+  it('uploads form-data files only from the folder the user allowed', async () => {
+    await allow({ enabled: true, read: true, send: true });
+    expect((await upload({ file: join(dir, 'users.csv') })).value.error.message).toMatch(/may not upload files/);
+    expect(last).toBeNull();
+
+    await h.call('PATCH', '/settings/mcp', { uploadFolder: dir });
+    const ok = await upload({ file: 'users.csv' });
+    expect(ok.value.status).toBe(200);
+    expect(last).toContain('name="note"');
+    expect(last).toContain('filename="users.csv"');
+    expect(last).toContain('ann@x.test');
+
+    last = null;
+    for (const path of [join(outside, 'private.txt'), '../' + outside.split('/').pop() + '/private.txt', 'link.txt']) {
+      const res = await upload({ file: path });
+      expect(res.value.error.code, path).toBe('FILE_NOT_ALLOWED');
+    }
+    expect(last).toBeNull();
+  });
+
+  it('sends a binary body from the upload folder', async () => {
+    await allow({ enabled: true, read: true, send: true });
+    await h.call('PATCH', '/settings/mcp', { uploadFolder: dir });
+    const res = await tool('send_request', { url: sinkUrl, method: 'POST', body: { mode: 'binary', file: 'users.csv' } });
+    expect(res.value.status).toBe(200);
+    expect(last).toBe('email\nann@x.test\n');
   });
 });
 

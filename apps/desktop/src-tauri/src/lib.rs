@@ -128,6 +128,16 @@ async fn pick_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
+/// Asks the user for a folder and returns its path; None when cancelled.
+#[tauri::command]
+async fn pick_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let Some(path) = app.dialog().file().blocking_pick_folder() else {
+        return Ok(None);
+    };
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 /// Adds "Check for Updates…" and "Settings…" under the app menu; the window handles both.
 #[cfg(target_os = "macos")]
 fn add_update_menu_item(app: &mut tauri::App) -> tauri::Result<()> {
@@ -183,7 +193,7 @@ pub fn run() {
                 Ok(())
             }
         })
-        .invoke_handler(tauri::generate_handler![server_info, save_text_file, pick_file, update_support])
+        .invoke_handler(tauri::generate_handler![server_info, save_text_file, pick_file, pick_folder, update_support])
         .build(tauri::generate_context!())
         .expect("error while building Postguy");
     app.run(move |_, event| {

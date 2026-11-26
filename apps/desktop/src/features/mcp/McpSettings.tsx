@@ -1,11 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CopyIcon, ShieldCheckIcon } from 'lucide-react';
+import { CopyIcon, FolderOpenIcon, ShieldCheckIcon, XIcon } from 'lucide-react';
+import * as React from 'react';
 import { toast } from 'sonner';
 import type { McpSettings as Settings } from '@postguy/shared';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/misc';
 import { api, errorMessage } from '@/lib/api';
 import { useUi } from '@/stores/ui';
+import { pickFolderPath } from '@/features/request/FilePathField';
 
 const KEY = ['settings', 'mcp'] as const;
 
@@ -18,6 +20,52 @@ export function Row({ title, detail, checked, disabled, onChange }: { title: str
       </span>
       <Switch checked={checked} disabled={disabled} onCheckedChange={onChange} aria-label={title} />
     </label>
+  );
+}
+
+/** The one folder Claude may upload files from; none means Claude can't upload. */
+function UploadFolder({ folder, disabled, onChange }: { folder: string | null; disabled: boolean; onChange: (folder: string | null) => void }) {
+  const [typed, setTyped] = React.useState('');
+  return (
+    <div className="flex flex-col gap-1.5 py-2">
+      <span className="flex flex-col gap-0.5">
+        <span className="text-sm font-medium">Upload folder</span>
+        <span className="text-xs text-muted-foreground">Claude may send files in form-data and binary bodies only from this folder. None: Claude can't upload.</span>
+      </span>
+      <div className="flex items-center gap-1">
+        {folder ? (
+          <code className="min-w-0 flex-1 truncate rounded-md border bg-muted/40 px-2 py-1 font-mono text-[11px]" title={folder}>
+            {folder}
+          </code>
+        ) : (
+          <input
+            aria-label="Upload folder path"
+            className="h-7 min-w-0 flex-1 rounded-md border bg-background px-2 font-mono text-[11px]"
+            placeholder="None"
+            value={typed}
+            disabled={disabled}
+            onChange={(e) => setTyped(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && typed.trim() && onChange(typed.trim())}
+          />
+        )}
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={disabled}
+          onClick={async () => {
+            const path = await pickFolderPath();
+            if (path) onChange(path);
+          }}
+        >
+          <FolderOpenIcon /> Choose…
+        </Button>
+        {folder && (
+          <Button size="icon-xs" variant="ghost" aria-label="No upload folder" disabled={disabled} onClick={() => onChange(null)}>
+            <XIcon />
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -51,6 +99,9 @@ export function McpSettingsPanel() {
                   disabled={!s.enabled}
                   onChange={(v) => set({ requireEnvironment: v })}
                 />
+              </div>
+              <div className="ml-3 border-l pl-3">
+                <UploadFolder folder={s.uploadFolder} disabled={!s.enabled || !s.send} onChange={(uploadFolder) => set({ uploadFolder })} />
               </div>
               <Row title="Edit" detail="Create and change requests, set variables, switch environment, import." checked={s.edit} disabled={!s.enabled} onChange={(v) => set({ edit: v })} />
               <div className="ml-3 border-l pl-3">

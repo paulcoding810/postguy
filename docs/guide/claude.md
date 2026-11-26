@@ -48,6 +48,10 @@ A request that would carry a secret is refused unless its host is one your saved
 
 **Must name the environment** is on by default: `send_request`, `run_flow` and `set_variable` on an environment only work when Claude names the environment. Switching the active environment in Postguy then never redirects a Claude session that's already working. Turn it off to let Claude fall back to the active environment.
 
+## Uploading files
+
+`send_request` can send form-data bodies with file fields (`files`) and binary bodies (`file`), but only files inside the **Upload folder** you choose in **Settings → Claude**. Paths are checked after symlinks are followed, and relative paths are read from that folder. With no folder chosen, Claude can't upload anything.
+
 ## Per environment
 
 In the environment manager, each environment has two **Claude** switches:

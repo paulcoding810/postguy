@@ -1,3 +1,5 @@
+import { realpathSync } from 'node:fs';
+import { resolve, sep } from 'node:path';
 import { authSecretValues, MASK, redactAuth, redactText, resolveTemplate } from '@postguy/core';
 import type { Auth, Environment } from '@postguy/shared';
 import { eq } from 'drizzle-orm';
@@ -39,6 +41,30 @@ export function environmentForAction(db: Db, ref?: string | null): Environment |
   if (!ref && getMcpSettings(db).requireEnvironment)
     throw new HttpError(400, 'Name the environment to use (environment: "<name>"); Postguy is set to never fall back to the active one for Claude.', 'mcp_environment_required');
   return environmentFor(db, ref);
+}
+
+/**
+ * The files Claude may upload: only those inside the folder the user picked in Settings → Claude,
+ * checked after symlinks are followed, so a request can't read anything else off the disk.
+ */
+export function uploadGuard(db: Db) {
+  const folder = getMcpSettings(db).uploadFolder;
+  return (path: string): string | null => {
+    if (!folder) return 'Claude may not upload files. Allow a folder in Postguy (Settings → Claude → Upload folder).';
+    let root: string;
+    try {
+      root = realpathSync(folder);
+    } catch {
+      return `The upload folder ${folder} doesn't exist.`;
+    }
+    let file: string;
+    try {
+      file = realpathSync(resolve(root, path));
+    } catch {
+      return `File not found: ${path}`;
+    }
+    return file.startsWith(root + sep) ? null : `${path} is outside the upload folder ${folder}; Claude may only upload files from there.`;
+  };
 }
 
 const MIN_LITERAL = 4;

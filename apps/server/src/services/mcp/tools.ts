@@ -1,3 +1,4 @@
+import { isAbsolute, resolve } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { parseCurl, resolveTemplate } from '@postguy/core';
 import { HTTP_METHODS, looksLikeCredential, newId, RequestDefinition, type CollectionTreeNode, type KeyValue } from '@postguy/shared';
@@ -20,8 +21,8 @@ import { restoreChange } from '../changeRestore.ts';
 import { notifyChange } from '../changes.ts';
 import { send } from '../send.ts';
 import { listVariables, replaceVariables, setVariable } from '../variables.ts';
-import { markUntrusted } from '../settings.ts';
-import { allKnownHosts, environmentFor, environmentForAction, hiddenSecrets, mask, requirePermission, secretHostGuard, type Permission } from './policy.ts';
+import { getMcpSettings, markUntrusted } from '../settings.ts';
+import { allKnownHosts, environmentFor, environmentForAction, hiddenSecrets, uploadGuard, mask, requirePermission, secretHostGuard, type Permission } from './policy.ts';
 
 const BODY_LIMIT = 20_000;
 
@@ -29,7 +30,7 @@ const INSTRUCTIONS = `Postguy is the user's API client. Requests live in collect
 (environment, collection, request and global variables) and {{RequestName.path}} references to remembered responses.
 Secret values are always shown as •••••• unless the user allowed it for that environment; write {{name}} in a request and
 Postguy fills it in when sending. Scripts you run see those secrets as •••••• too. Requests carrying a secret are only sent to hosts the user's saved requests already use.
-Use list_requests to find requests, then send_request by id. Everything you send is labelled "MCP" in the user's history.
+Use list_requests to find requests, then send_request by id. Files can only be uploaded from the folder the user allowed. Everything you send is labelled "MCP" in the user's history.
 Deleting is a separate permission. Every deletion can be undone with restore_change and the changeId it returns;
 tell the user what you deleted.`;
 
@@ -54,19 +55,45 @@ const RequestFields = {
   headers: z.record(z.string(), z.string()).optional().describe('Replaces all headers'),
   params: z.record(z.string(), z.string()).optional().describe('Query parameters; replaces all'),
   body: z
-    .object({ mode: z.enum(['none', 'json', 'text', 'urlencoded']), raw: z.string().optional(), form: z.record(z.string(), z.string()).optional() })
+    .object({
+      mode: z.enum(['none', 'json', 'text', 'urlencoded', 'form', 'binary']),
+      raw: z.string().optional(),
+      form: z.record(z.string(), z.string()).optional().describe('Text fields (urlencoded or form)'),
+      files: z.record(z.string(), z.string()).optional().describe('Form mode: field name → file path inside the upload folder the user allowed'),
+      file: z.string().optional().describe('Binary mode: path of the file to send, inside the upload folder'),
+    })
     .optional(),
 };
-type RequestPatch = { name?: string; method?: (typeof HTTP_METHODS)[number]; url?: string; headers?: Record<string, string>; params?: Record<string, string>; body?: { mode: 'none' | 'json' | 'text' | 'urlencoded'; raw?: string; form?: Record<string, string> } };
+type BodyMode = 'none' | 'json' | 'text' | 'urlencoded' | 'form' | 'binary';
+type RequestPatch = {
+  name?: string;
+  method?: (typeof HTTP_METHODS)[number];
+  url?: string;
+  headers?: Record<string, string>;
+  params?: Record<string, string>;
+  body?: { mode: BodyMode; raw?: string; form?: Record<string, string>; files?: Record<string, string>; file?: string };
+};
 
-function toPatch(p: RequestPatch) {
+/** A file path as Claude gave it, made absolute against the upload folder when relative. */
+const inFolder = (path: string, folder: string | null) => (folder && !isAbsolute(path) ? resolve(folder, path) : path);
+
+function toPatch(p: RequestPatch, folder: string | null = null) {
+  const b = p.body;
+  const form = b && [...(kvs(b.form) ?? []), ...Object.entries(b.files ?? {}).map(([key, path]) => ({ id: newId(8), key, value: '', enabled: true, type: 'file' as const, src: inFolder(path, folder) }))];
   return {
     ...(p.name !== undefined && { name: p.name }),
     ...(p.method !== undefined && { method: p.method }),
     ...(p.url !== undefined && { url: p.url }),
     ...(p.headers && { headers: kvs(p.headers) }),
     ...(p.params && { params: kvs(p.params) }),
-    ...(p.body && { body: { mode: p.body.mode, ...(p.body.raw !== undefined && { raw: p.body.raw }), ...(p.body.form && { form: kvs(p.body.form) }) } }),
+    ...(b && {
+      body: {
+        mode: b.mode,
+        ...(b.raw !== undefined && { raw: b.raw }),
+        ...(form?.length && { form }),
+        ...(b.file !== undefined && { src: inFolder(b.file, folder) }),
+      },
+    }),
   };
 }
 
@@ -214,11 +241,11 @@ export function createMcpServer(db: Db): McpServer {
       const saved = requestId ? getRequest(db, requestId) : null;
       if (!saved && !patch.url) throw new HttpError(400, 'Give a requestId, or a url for a new request', 'bad_request');
       const base = saved ?? { name: patch.name ?? 'Claude request', method: 'GET', url: '', collectionId: null };
-      const def = RequestDefinition.parse({ ...base, ...toPatch(patch) });
+      const def = RequestDefinition.parse({ ...base, ...toPatch(patch, getMcpSettings(db).uploadFolder) });
       const res = await send(
         db,
         { requestId: saved?.id, collectionId: saved?.collectionId ?? null, environmentId: env?.id ?? null, request: def },
-        { source: 'mcp', guard: secretHostGuard(db, env?.id ?? null), hideFromScripts: hiddenSecrets(db, env) },
+        { source: 'mcp', guard: secretHostGuard(db, env?.id ?? null), hideFromScripts: hiddenSecrets(db, env), fileGuard: uploadGuard(db) },
       );
       const hidden = hiddenSecrets(db, env);
       return mask(
@@ -247,7 +274,7 @@ export function createMcpServer(db: Db): McpServer {
     { flowId: z.string(), environment: z.string().optional() },
     async ({ flowId, environment }) => {
       const env = environmentForAction(db, environment);
-      const exec = runFlow(db, flowId, env?.id ?? null, false, { source: 'mcp', guard: secretHostGuard(db, env?.id ?? null), hideFromScripts: hiddenSecrets(db, env) });
+      const exec = runFlow(db, flowId, env?.id ?? null, false, { source: 'mcp', guard: secretHostGuard(db, env?.id ?? null), hideFromScripts: hiddenSecrets(db, env), fileGuard: uploadGuard(db) });
       await Promise.race([waitForExecution(exec.id), new Promise((r) => setTimeout(r, 120_000))]);
       const done = getExecution(db, exec.id);
       if (done.status === 'running' || done.status === 'paused') return { executionId: exec.id, status: done.status, note: 'Still running; check get_flow_run later.' };
@@ -263,14 +290,14 @@ export function createMcpServer(db: Db): McpServer {
     { collectionId: z.string(), ...RequestFields, name: z.string().min(1), url: z.string() },
     ({ collectionId, ...patch }) => {
       const env = environmentFor(db);
-      const def = RequestDefinition.parse({ method: 'GET', ...toPatch(patch) });
+      const def = RequestDefinition.parse({ method: 'GET', ...toPatch(patch, getMcpSettings(db).uploadFolder) });
       return mask(createRequest(db, { ...def, collectionId }), hiddenSecrets(db, env));
     },
   );
 
   tool('update_request', 'edit', 'Changes a saved request. Only the given fields change; headers and params replace the existing ones.', { id: z.string(), ...RequestFields }, ({ id, ...patch }) => {
     const env = environmentFor(db);
-    const r = updateRequest(db, id, toPatch(patch));
+    const r = updateRequest(db, id, toPatch(patch, getMcpSettings(db).uploadFolder));
     return mask(r, hiddenSecrets(db, env));
   });
 

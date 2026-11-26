@@ -1,4 +1,5 @@
 import {
+  bodyFiles,
   cookieHeader,
   parseSetCookies,
   redactHeaders,
@@ -69,6 +70,8 @@ export interface SendOptions {
   postScripts?: boolean;
   /** Last check before anything goes out, scripts' sends and token requests included; an error stops it (e.g. a secret going to an unknown host). */
   guard?: (url: string, carriesSecret: boolean) => { code: string; message: string } | null;
+  /** Checks each file a body would upload; a message stops the request (e.g. a file outside Claude's upload folder). */
+  fileGuard?: (path: string) => string | null;
   /** Values scripts see as •••••• (secrets Claude may not see), so a script can't pass them on. */
   hideFromScripts?: string[];
 }
@@ -363,6 +366,10 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
   }
   const refused = opts.guard?.(resolution.request.url, resolution.secrets.length > 0);
   if (refused) return failure(def, refused, resolution.unresolved, scripts, redactedRequest);
+  for (const path of opts.fileGuard ? bodyFiles(resolution.request.body) : []) {
+    const why = opts.fileGuard!(path);
+    if (why) return failure(def, { code: 'FILE_NOT_ALLOWED', message: why }, [], scripts, redactedRequest);
+  }
   const loaded = loadBodyFiles(resolution.request.body);
   if ('error' in loaded) return failure(def, loaded.error, [], scripts, redactedRequest);
   resolution.request.body = loaded.body;

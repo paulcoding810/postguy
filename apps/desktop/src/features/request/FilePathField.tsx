@@ -19,6 +19,20 @@ export async function pickFilePath(): Promise<string | null> {
   }
 }
 
+/** Opens the native folder dialog and returns the chosen path, or null when cancelled. */
+export async function pickFolderPath(): Promise<string | null> {
+  if (!isTauri) {
+    toast.message('Type or paste the full path of the folder', { description: 'The browser build cannot read folder paths; the desktop app has a folder picker.' });
+    return null;
+  }
+  try {
+    return await invoke<string | null>('pick_folder');
+  } catch (e) {
+    toast.error(String(e));
+    return null;
+  }
+}
+
 /** A file path the server reads when the request is sent; typed, pasted or picked. */
 export function FilePathField({ value, onChange, label, borderless }: { value: string; onChange: (path: string) => void; label: string; borderless?: boolean }) {
   return (
