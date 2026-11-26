@@ -3,13 +3,18 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-/** The text under `## <version>` up to the next `## ` heading, or null when there is none or it's empty. */
+/** The text under `## <version>` up to the next `## ` heading outside a code block, or null when there is none or it's empty. */
 export function notesFor(changelog, version) {
   const v = version.replace(/^v/, '').replace(/[.+]/g, (c) => `\\${c}`);
   const lines = changelog.split(/\r?\n/);
   const start = lines.findIndex((l) => new RegExp(`^##\\s+\\[?v?${v}\\]?(\\s|$)`).test(l));
   if (start === -1) return null;
-  const end = lines.findIndex((l, i) => i > start && /^##\s/.test(l));
+  let fenced = false;
+  const end = lines.findIndex((l, i) => {
+    if (i <= start) return false;
+    if (/^\s*(```|~~~)/.test(l)) fenced = !fenced;
+    return !fenced && /^##\s/.test(l);
+  });
   const body = lines.slice(start + 1, end === -1 ? undefined : end).join('\n').trim();
   return body || null;
 }
