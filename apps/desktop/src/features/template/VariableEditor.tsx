@@ -193,7 +193,9 @@ function AddValue({ name, focus, onDone }: { name: string } & EditProps) {
 
 /** One `{{name}}` in the variable popup: its value, where it comes from, and a way to change it. */
 export function VariableRow({ name, preview, focus, onDone }: { name: string; preview: PreviewRef | undefined } & EditProps) {
-  const editable = !!preview?.resolved && EDITABLE.includes(preview.source ?? '') && !!preview.ownerId;
+  // Defined but not resolving (e.g. it points at a missing variable) is still editable, never "not defined".
+  const defined = !!preview?.source;
+  const editable = defined && EDITABLE.includes(preview.source ?? '') && !!preview.ownerId;
   const builtIn = name.startsWith('$') && !name.startsWith('$res');
   return (
     <div className="flex flex-col gap-1">
@@ -202,20 +204,23 @@ export function VariableRow({ name, preview, focus, onDone }: { name: string; pr
         <span
           className={cn(
             'rounded px-1 text-[10px]',
-            preview?.resolved ? 'bg-muted text-muted-foreground' : 'bg-destructive/15 text-destructive',
+            preview?.resolved || defined ? 'bg-muted text-muted-foreground' : 'bg-destructive/15 text-destructive',
           )}
         >
-          {!preview ? '…' : preview.resolved ? scopeLabel(preview.source) : 'not defined'}
+          {!preview ? '…' : preview.resolved || defined ? scopeLabel(preview.source) : 'not defined'}
         </span>
         {preview?.resolved && preview.preview === '' && <span className="rounded bg-warning/15 px-1 text-[10px] text-warning">empty</span>}
       </div>
       {editable ? (
-        <EditValue name={name} scope={preview.source as VariableScope} ownerId={preview.ownerId!} focus={focus} onDone={onDone} />
+        <>
+          <EditValue name={name} scope={preview.source as VariableScope} ownerId={preview.ownerId!} focus={focus} onDone={onDone} />
+          {!preview.resolved && preview.preview && <div className="text-[11px] text-destructive">{preview.preview}</div>}
+        </>
       ) : preview?.resolved ? (
         <div className="truncate font-mono text-[11.5px] text-muted-foreground" title={preview.preview ?? ''}>
           {preview.preview}
         </div>
-      ) : preview && !builtIn && !/[.[]/.test(name) ? (
+      ) : preview && !defined && !builtIn && !/[.[]/.test(name) ? (
         <AddValue name={name} focus={focus} onDone={onDone} />
       ) : preview?.preview ? (
         <div className="text-[11px] text-destructive">{preview.preview}</div>
