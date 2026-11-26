@@ -172,6 +172,16 @@ describe('GraphQL in pasted cURL', () => {
     const { request } = parseCurl(`curl https://api.x/graphql -H 'content-type: application/json' --data-raw '{"operationName":"Me","query":"query Me { me { id } }","variables":{"a":1}}'`);
     expect(request.body).toEqual({ mode: 'graphql', raw: 'query Me { me { id } }', variables: '{\n  "a": 1\n}', operationName: 'Me' });
   });
+  it('reads variables given as a JSON string', () => {
+    const { request } = parseCurl(`curl https://api.x/graphql --data-raw '{"query":"query Q($id: ID!) { user(id: $id) { name } }","variables":"{\\"id\\":\\"1\\"}"}'`);
+    expect(request.body).toEqual({ mode: 'graphql', raw: 'query Q($id: ID!) { user(id: $id) { name } }', variables: '{\n  "id": "1"\n}' });
+  });
+  it('keeps a body with extensions, or unreadable variables, as JSON so nothing is dropped', () => {
+    const persisted = parseCurl(`curl https://api.x/graphql --data-raw '{"query":"query Q { a }","extensions":{"persistedQuery":{"version":1,"sha256Hash":"abc"}}}'`).request.body;
+    expect(persisted.mode).toBe('json');
+    expect(JSON.parse(persisted.raw!).extensions.persistedQuery.sha256Hash).toBe('abc');
+    expect(parseCurl(`curl https://api.x/graphql --data-raw '{"query":"query Q { a }","variables":"not json"}'`).request.body.mode).toBe('json');
+  });
   it('keeps other JSON with a "query" field as JSON', () => {
     expect(parseCurl(`curl https://api.x/search --data-raw '{"query":"shoes","page":2}'`).request.body.mode).toBe('json');
   });

@@ -305,16 +305,28 @@ export function parseCurl(command: string): CurlParseResult {
   };
 }
 
-/** A JSON body of the form { query, variables?, operationName? } is a GraphQL request. */
+/**
+ * A JSON body of the form { query, variables?, operationName? } is a GraphQL request. Anything the
+ * GraphQL mode can't hold, like extensions or unreadable variables, keeps it a JSON body.
+ */
 function graphqlPayload(v: unknown): Body | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
-  if (typeof o.query !== 'string' || !Object.keys(o).every((k) => ['query', 'variables', 'operationName', 'extensions'].includes(k))) return null;
+  if (typeof o.query !== 'string' || !Object.keys(o).every((k) => ['query', 'variables', 'operationName'].includes(k))) return null;
   if (!/^\s*(?:query|mutation|subscription|fragment|\{)/.test(o.query)) return null;
+  let vars = o.variables;
+  if (typeof vars === 'string') {
+    try {
+      vars = vars.trim() ? JSON.parse(vars) : null;
+    } catch {
+      return null;
+    }
+  }
+  if (vars != null && (typeof vars !== 'object' || Array.isArray(vars))) return null;
   return {
     mode: 'graphql',
     raw: o.query,
-    ...(o.variables && typeof o.variables === 'object' && Object.keys(o.variables as object).length > 0 ? { variables: JSON.stringify(o.variables, null, 2) } : {}),
+    ...(vars && Object.keys(vars as object).length > 0 ? { variables: JSON.stringify(vars, null, 2) } : {}),
     ...(typeof o.operationName === 'string' && o.operationName && { operationName: o.operationName }),
   };
 }
