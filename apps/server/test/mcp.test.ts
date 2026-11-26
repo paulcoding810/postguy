@@ -450,6 +450,69 @@ describe('Claude (MCP) move edge cases', () => {
   });
 });
 
+describe('Claude (MCP) environments', () => {
+  it('creates an environment with variables, keeping secrets hidden, and only with Edit', async () => {
+    await allow({ enabled: true, read: true });
+    expect((await tool('create_environment', { name: 'Staging' })).error).toMatch(/does not allow Claude to change/);
+    await allow({ enabled: true, read: true, edit: true });
+    const res = await tool('create_environment', {
+      name: 'Staging',
+      variables: [
+        { key: 'host', value: 'https://staging.example.com' },
+        { key: 'password', value: 'pw-STAGING-1', secret: true },
+      ],
+      activate: true,
+    });
+    expect(res.error).toBeNull();
+    expect(JSON.stringify(res.value)).not.toContain('pw-STAGING-1');
+    const env = (await h.call('GET', '/environments')).body.find((e: any) => e.name === 'Staging');
+    expect(env.isActive).toBe(true);
+    const vars = (await h.call('GET', `/variables/environment/${env.id}?reveal=1`)).body;
+    expect(vars.map((v: any) => [v.key, v.value, v.isSecret])).toEqual([
+      ['host', 'https://staging.example.com', false],
+      ['password', 'pw-STAGING-1', true],
+    ]);
+    expect((await tool('create_environment', { name: 'staging' })).error).toMatch(/already exists/);
+  });
+
+  it('clones an environment with its keys, leaving secret values empty', async () => {
+    await allow({ enabled: true, read: true, edit: true });
+    await h.call('PUT', `/variables/environment/${ids.env}`, {
+      variables: [
+        { key: 'apiKey', value: SECRET, isSecret: true },
+        { key: 'host', value: 'https://preprod.example.com' },
+      ],
+    });
+    const res = await tool('clone_environment', { from: 'Local', name: 'Staging' });
+    expect(res.value.note).toMatch(/apiKey/);
+    const env = (await h.call('GET', '/environments')).body.find((e: any) => e.name === 'Staging');
+    const vars = (await h.call('GET', `/variables/environment/${env.id}?reveal=1`)).body;
+    expect(vars.map((v: any) => [v.key, v.value, v.isSecret])).toEqual([
+      ['apiKey', '', true],
+      ['host', 'https://preprod.example.com', false],
+    ]);
+    await tool('clone_environment', { from: 'Local', name: 'Keys only', values: false });
+    const keys = (await h.call('GET', '/environments')).body.find((e: any) => e.name === 'Keys only');
+    expect((await h.call('GET', `/variables/environment/${keys.id}?reveal=1`)).body.map((v: any) => v.value)).toEqual(['', '']);
+  });
+
+  it("won't clone an environment the user keeps from Claude", async () => {
+    await allow({ enabled: true, read: true, edit: true });
+    await h.call('PATCH', `/environments/${ids.env}`, { mcpBlocked: true });
+    expect((await tool('clone_environment', { from: 'Local', name: 'Copy' })).error).toMatch(/not available to Claude/);
+  });
+
+  it('treats a host in a new environment as untrusted for secrets', async () => {
+    await allow({ enabled: true, read: true, send: true, edit: true });
+    const other = h.mockUrl.replace('127.0.0.1', 'localhost');
+    const global = (await h.call('GET', '/environments')).body.find((e: any) => e.kind === 'global');
+    await h.call('PUT', `/variables/global/${global.id}`, { variables: [{ key: 'apiKey', value: SECRET, isSecret: true }] });
+    await tool('create_environment', { name: 'Evil', variables: [{ key: 'mirror', value: other }] });
+    const res = await tool('send_request', { requestId: ids.echo, url: `${other}/echo`, environment: 'Evil' });
+    expect(res.value.error?.code).toBe('MCP_SECRET_HOST_BLOCKED');
+  });
+});
+
 describe('Claude (MCP) and pm.sendRequest', () => {
   it('applies the secret host lock to requests a script sends', async () => {
     await allow({ enabled: true, read: true, send: true });

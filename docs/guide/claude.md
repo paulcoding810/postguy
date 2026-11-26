@@ -22,12 +22,14 @@ MCP is off by default. Once it's on, Claude may only read until you also allow *
 | --- | --- |
 | Read | `list_requests`, `list_folders`, `get_request`, `list_environments`, `get_variables`, `list_history`, `get_history_entry`, `list_flows`, `get_flow`, `get_flow_run`, `decode_jwt` |
 | Send requests | `send_request`, `run_flow` |
-| Edit | `create_request`, `update_request`, `create_folder`, `rename_folder`, `move`, `import_curl`, `import_collection`, `set_variable`, `set_active_environment`, `restore_change` |
+| Edit | `create_request`, `update_request`, `create_folder`, `rename_folder`, `move`, `import_curl`, `import_collection`, `set_variable`, `create_environment`, `clone_environment`, `set_active_environment`, `restore_change` |
 | Delete | `delete_request`, `delete_folder` (a folder or collection with up to 50 requests) |
 
 Everything Claude sends, changes or runs is labelled **Claude** in [Activity](/guide/history#activity). Choose *Claude* there to review what it did, and undo any change from the same place. Batch actions, like moving 20 requests, show as one row you can expand.
 
 `move` takes up to 50 requests and folders at once and moves all of them or none; items already in that place are left alone; `restore_change` takes a list of change ids to put a whole batch back. Moving a request into another collection can change the auth and variables it uses; `move` tells Claude when the auth type or the resolved host changes, or a `{{variable}}` is no longer defined, so it can tell you.
+
+`create_environment` makes a new environment, optionally with variables (secret ones included) and made active. `clone_environment` copies another environment's variables into a new one, for example "like Preprod but another host". Non-secret values are copied, unless Claude asks for keys only. Secret values are left empty for you to fill in, since Claude never sees them.
 
 Claude can only delete what can be brought back: requests, folders and collections. Each deletion returns a change id that `restore_change` undoes, and you can bring it back yourself from Change history or **Recently deleted**. Environments, flows and history can't be deleted by Claude.
 

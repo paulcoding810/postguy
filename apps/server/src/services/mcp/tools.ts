@@ -9,7 +9,7 @@ import { HttpError } from '../../lib/errors.ts';
 import { VERSION } from '../../lib/version.ts';
 import { ancestry, createCollection, deleteCollection, effectiveAuth, getCollection, getTree, subtreeIds, updateCollection } from '../collections.ts';
 import { buildContext } from '../context.ts';
-import { activateEnvironment, listEnvironments } from '../environments.ts';
+import { activateEnvironment, createEnvironment, listEnvironments } from '../environments.ts';
 import { getExecution, getFlow, listFlows, runFlow, waitForExecution } from '../flows.ts';
 import { getHistoryEntry, listHistory } from '../history.ts';
 import { importOpenApi } from '../openapi.ts';
@@ -19,7 +19,7 @@ import { getChange, separately, withSource } from '../changelog.ts';
 import { restoreChange } from '../changeRestore.ts';
 import { notifyChange } from '../changes.ts';
 import { send } from '../send.ts';
-import { setVariable } from '../variables.ts';
+import { listVariables, replaceVariables, setVariable } from '../variables.ts';
 import { markUntrusted } from '../settings.ts';
 import { allKnownHosts, environmentFor, hiddenSecrets, mask, requirePermission, secretHostGuard, type Permission } from './policy.ts';
 
@@ -510,6 +510,56 @@ export function createMcpServer(db: Db): McpServer {
       else ownerId = owner;
       const v = setVariable(db, scope, ownerId, key, value, secret);
       return { key: v.key, scope, secret: v.isSecret, value: v.isSecret ? '••••••' : v.value };
+    },
+  );
+
+  const newEnvironment = (name: string, vars: { key: string; value: string; isSecret: boolean; enabled: boolean }[], activate?: boolean) => {
+    if (listEnvironments(db).some((e) => e.name.toLowerCase() === name.toLowerCase())) throw new HttpError(409, `An environment called "${name}" already exists`, 'conflict');
+    const env = db.transaction(() => {
+      const created = createEnvironment(db, name);
+      if (vars.length) replaceVariables(db, 'environment', created.id, vars);
+      return created;
+    });
+    if (activate) activateEnvironment(db, env.id);
+    return env;
+  };
+
+  tool(
+    'create_environment',
+    'edit',
+    'Creates an environment, optionally with variables, and can make it active. Secret values can be written but are never shown back.',
+    {
+      name: z.string().min(1),
+      variables: z.array(z.object({ key: z.string().min(1), value: z.string(), secret: z.boolean().optional() })).optional(),
+      activate: z.boolean().optional(),
+    },
+    ({ name, variables: vars = [], activate }) => {
+      const env = newEnvironment(
+        name,
+        vars.map((v) => ({ key: v.key, value: v.value, isSecret: !!v.secret, enabled: true })),
+        activate,
+      );
+      return { id: env.id, name: env.name, active: !!activate, variables: vars.map((v) => ({ key: v.key, secret: !!v.secret, value: v.secret ? '••••••' : v.value })) };
+    },
+  );
+
+  tool(
+    'clone_environment',
+    'edit',
+    "Copies an environment's variables into a new one. Non-secret values are copied unless values is false; secret values are left empty for the user to fill in.",
+    { from: z.string().describe('Environment name or id'), name: z.string().min(1), values: z.boolean().default(true), activate: z.boolean().optional() },
+    ({ from, name, values, activate }) => {
+      const source = environmentFor(db, from)!;
+      const vars = listVariables(db, source.kind === 'global' ? 'global' : 'environment', source.id, true).map((v) => ({ key: v.key, value: values && !v.isSecret ? v.value : '', isSecret: v.isSecret, enabled: v.enabled }));
+      const env = newEnvironment(name, vars, activate);
+      const blank = vars.filter((v) => v.isSecret).map((v) => v.key);
+      return {
+        id: env.id,
+        name: env.name,
+        active: !!activate,
+        variables: vars.map((v) => ({ key: v.key, secret: v.isSecret, value: v.isSecret ? '' : v.value })),
+        ...(blank.length && { note: `Secret values were left empty; ask the user to fill them in Postguy: ${blank.join(', ')}.` }),
+      };
     },
   );
 
