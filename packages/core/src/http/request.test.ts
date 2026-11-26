@@ -169,4 +169,9 @@ describe('GraphQL bodies', () => {
     const bad = resolveRequest(def({ method: 'POST', url: 'http://x', body: { mode: 'graphql', raw: '{ me { id } }', variables: '{ id: 1 }' } }), ctx);
     expect(JSON.parse(bad.request.body.content!).variables).toBe('{ id: 1 }');
   });
+
+  it('sends variables with a bare reference as an object once the reference is filled in', () => {
+    const r = resolveRequest(def({ method: 'POST', url: 'http://x', body: { mode: 'graphql', raw: 'query($id: ID!) { user(id: $id) { name } }', variables: '{"id": {{Login.data.user.id}}}' } }), ctx);
+    expect(JSON.parse(r.request.body.content!).variables).toEqual({ id: 1001 });
+  });
 });

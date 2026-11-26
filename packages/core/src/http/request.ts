@@ -265,8 +265,13 @@ function resolveBody(
           track(r);
           payload.variables = r.value;
         } catch {
-          // Not valid JSON: sent as written, so the server explains what's wrong.
-          payload.variables = str(vars);
+          // Bare refs like {"id": {{n}}} only parse once filled in; anything still invalid is sent as written.
+          const filled = str(vars);
+          try {
+            payload.variables = JSON.parse(filled);
+          } catch {
+            payload.variables = filled;
+          }
         }
       }
       if (b.operationName?.trim()) payload.operationName = b.operationName.trim();
