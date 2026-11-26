@@ -85,6 +85,47 @@ describe('OpenAPI sync with edited and moved requests', () => {
     expect(again.upToDate).toBe(true);
   });
 
+  it('keeps a path value typed into the URL when following a moved path', async () => {
+    const { imp, id, get } = await setup();
+    const detailId = await id('Get Order Details');
+    await h.call('PATCH', `/requests/${detailId}`, { url: '{{baseUrl}}/orders/ord_42', pathParams: [] });
+    await h.call('POST', `/openapi/${imp.spec.id}/sync`, { sourceType: 'paste', content: v2 });
+    const moved = await get(detailId);
+    expect(moved.url).toBe('{{baseUrl}}/v2/orders/:orderId');
+    expect(moved.pathParams.map((p: any) => [p.key, p.value])).toEqual([['orderId', 'ord_42']]);
+  });
+
+  it('keeps a request on its path when the operationId moves to a new path but the old path stays', async () => {
+    const one = `openapi: 3.0.0
+info: { title: T, version: '1' }
+paths:
+  /v1/users:
+    get: { operationId: listUsers, summary: List users, responses: { '200': { description: ok } } }
+`;
+    const two = `openapi: 3.0.0
+info: { title: T, version: '2' }
+paths:
+  /v1/users:
+    get: { operationId: listUsersV1, summary: List users, deprecated: true, responses: { '200': { description: ok } } }
+  /v2/users:
+    get: { operationId: listUsers, summary: List users v2, responses: { '200': { description: ok } } }
+`;
+    const imp = (await h.call('POST', '/openapi/import', { sourceType: 'paste', content: one })).body;
+    const preview = (await h.call('POST', `/openapi/${imp.spec.id}/sync/preview`, { sourceType: 'paste', content: two })).body;
+    expect(preview.requests.map((r: any) => [r.operation, r.action])).toEqual([
+      ['GET /v1/users', 'update'],
+      ['GET /v2/users', 'create'],
+    ]);
+    await h.call('POST', `/openapi/${imp.spec.id}/sync`, { sourceType: 'paste', content: two });
+    const root = (await h.call('GET', '/collections/tree')).body.find((c: any) => c.id === imp.collectionId);
+    const reqs = [root, ...root.children].flatMap((c: any) => c.requests);
+    const full = await Promise.all(reqs.map(async (r: any) => (await h.call('GET', `/requests/${r.id}`)).body));
+    expect(full.map((r: any) => [r.url, r.openapiOperationId]).sort()).toEqual([
+      ['{{baseUrl}}/v1/users', 'listUsersV1'],
+      ['{{baseUrl}}/v2/users', 'listUsers'],
+    ]);
+  });
+
   it('still regenerates unedited requests, including moved ones', async () => {
     const { imp, id, get } = await setup();
     const ordersId = await id('Get User Orders');

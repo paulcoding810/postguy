@@ -45,4 +45,14 @@ describe('mergeOperation', () => {
     expect(moved.def.pathParams).toEqual(mine.pathParams);
     expect(moved.added).toEqual(['header X-Tenant', 'URL /v2/orders/:orderId']);
   });
+
+  it('keeps a path value typed straight into the URL when following a moved path', () => {
+    const gen = requestFromOperation(op, model, null);
+    const typed = { ...mine, url: '{{baseUrl}}/orders/ord_42', pathParams: [] };
+    const moved = mergeOperation(typed, op, gen, { followPath: true, fromPath: '/orders/{orderId}' });
+    expect(moved.def.url).toBe('{{baseUrl}}/v2/orders/:orderId');
+    expect(moved.def.pathParams.map((p) => [p.key, p.value])).toEqual([['orderId', 'ord_42']]);
+    const placeholder = mergeOperation({ ...typed, url: '{{baseUrl}}/orders/:orderId' }, op, gen, { followPath: true, fromPath: '/orders/{orderId}' });
+    expect(placeholder.def.pathParams.map((p) => p.value)).not.toContain(':orderId');
+  });
 });

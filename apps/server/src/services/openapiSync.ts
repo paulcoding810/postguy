@@ -108,7 +108,8 @@ function plan(db: Db, p: Prepared): SyncPlan {
   for (const r of linked) {
     const old = oldById.get(r.openapiOperationId!);
     const oldKey = old ? operationKey(old) : null;
-    const op = old ? (newById.get(old.id) ?? newByKey.get(oldKey!)) : undefined;
+    // Same method and path first; the operationId only follows an operation whose old path is gone (as the diff does).
+    const op = old ? (newByKey.get(oldKey!) ?? newById.get(old.id)) : undefined;
     if (!op) {
       out.push({ requestId: r.id, name: r.name, operation: oldKey ?? r.openapiOperationId!, label: old ? `${old.method} ${old.path}` : r.openapiOperationId!, action: 'orphaned' });
       continue;
@@ -127,7 +128,7 @@ function plan(db: Db, p: Prepared): SyncPlan {
       out.push({ ...base, action: 'update' });
       continue;
     }
-    const merge = mergeOperation(definitionOf(r), op, requestFromOperation(op, p.next, scheme), { followPath: moved });
+    const merge = mergeOperation(definitionOf(r), op, requestFromOperation(op, p.next, scheme), { followPath: moved, fromPath: old?.path });
     out.push(merge.added.length ? { ...base, action: 'merge-edited', adds: merge.added } : { ...base, action: 'keep-edited' });
   }
   for (const op of p.next.operations) {
@@ -208,7 +209,8 @@ async function applySyncAs(db: Db, specId: string, input: z.output<typeof SyncIn
           .run();
       } else if (item.action === 'merge-edited' && item.requestId) {
         const saved = getRequest(db, item.requestId);
-        const merged = mergeOperation(definitionOf(saved), op, gen, { followPath: !!item.moved }).def;
+        const from = p.current.model.operations.find((o) => o.id === saved.openapiOperationId)?.path;
+        const merged = mergeOperation(definitionOf(saved), op, gen, { followPath: !!item.moved, fromPath: from }).def;
         db.update(requests)
           .set({
             method: merged.method,
