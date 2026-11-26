@@ -65,6 +65,8 @@ export interface SendOptions {
   source?: 'mcp';
   /** false: don't keep the response as the request's remembered response (e.g. a schema fetch). */
   remember?: boolean;
+  /** false: run no post-response scripts, not even the collection's or folder's (e.g. a schema fetch). */
+  postScripts?: boolean;
   /** Last check before anything goes out, scripts' sends and token requests included; an error stops it (e.g. a secret going to an unknown host). */
   guard?: (url: string, carriesSecret: boolean) => { code: string; message: string } | null;
   /** Values scripts see as •••••• (secrets Claude may not see), so a script can't pass them on. */
@@ -413,7 +415,7 @@ export async function send(db: Db, input: z.output<typeof SendInput>, opts: Send
     headers: Object.fromEntries(Object.entries(resolution.request.headers).map(([k, v]) => [k, hide(v)])),
     body: hide(resolution.request.body.content),
   };
-  if (raw.status !== null) {
+  if (raw.status !== null && opts.postScripts !== false) {
     const response: ScriptResponse = {
       status: raw.status,
       statusText: raw.statusText ?? undefined,

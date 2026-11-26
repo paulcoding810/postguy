@@ -45,6 +45,17 @@ describe('GraphQL requests', () => {
     expect(preview[0].value).toBe('John Carter');
   });
 
+  it('runs collection pre-request scripts for the schema fetch, but no post-response scripts', async () => {
+    const { col, req } = await setup();
+    await h.call('PATCH', `/collections/${col.id}`, {
+      scripts: { pre: `pm.collectionVariables.set('preRan', 'yes')`, post: `pm.collectionVariables.set('lastStatus', String(pm.response.code))` },
+    });
+    await h.call('POST', '/graphql/schema', { request: req, collectionId: col.id, requestId: req.id });
+    const vars = (await h.call('GET', `/variables/collection/${col.id}?reveal=1`)).body.map((v: any) => v.key);
+    expect(vars).toContain('preRan');
+    expect(vars).not.toContain('lastStatus');
+  });
+
   it('explains when the endpoint isn’t GraphQL', async () => {
     const { req } = await setup();
     const res = await h.call('POST', '/graphql/schema', { request: { ...req, url: `${h.mockUrl}/text` } });

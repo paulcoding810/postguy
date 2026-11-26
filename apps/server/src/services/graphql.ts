@@ -16,9 +16,8 @@ export async function fetchGraphqlSchema(db: Db, input: z.output<typeof GraphqlS
     ...input.request,
     method: 'POST' as const,
     body: { mode: 'graphql' as const, raw: getIntrospectionQuery({ descriptions: true, inputValueDeprecation: true }), operationName: 'IntrospectionQuery' },
-    scripts: { pre: input.request.scripts.pre, post: '' },
   };
-  const res = await send(db, { requestId: input.requestId ?? null, collectionId: input.collectionId ?? null, request: def }, { remember: false });
+  const res = await send(db, { requestId: input.requestId ?? null, collectionId: input.collectionId ?? null, request: def }, { remember: false, postScripts: false });
   if (res.error) throw new HttpError(502, `Couldn't reach the endpoint: ${res.error.message}`, 'graphql_unreachable');
   let body: { data?: { __schema?: unknown }; errors?: { message?: string }[] } = {};
   try {
